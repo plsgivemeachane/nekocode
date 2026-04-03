@@ -114,6 +114,7 @@ interface ProjectStoreAPI {
   addProject: (path: string) => Promise<void>
   removeProject: (projectId: string) => Promise<void>
   setActiveSession: (sessionId: string, projectPath: string) => void
+  createSession: (projectPath: string) => Promise<void>
   refreshSessions: (projectId: string) => Promise<void>
 }
 
@@ -200,9 +201,18 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const setActiveSession = useCallback(
     (sessionId: string, projectPath: string) => {
       dispatch({ type: 'SET_ACTIVE_SESSION', sessionId, projectPath })
-      window.nekocode.session.create(projectPath).catch((err) => {
-        console.error('[project-store] session create failed:', err)
-      })
+    },
+    [],
+  )
+
+  const createSession = useCallback(
+    async (projectPath: string) => {
+      try {
+        const result = await window.nekocode.session.create(projectPath)
+        dispatch({ type: 'SET_ACTIVE_SESSION', sessionId: result.sessionId, projectPath })
+      } catch (err) {
+        console.error('[project-store] createSession failed:', err)
+      }
     },
     [],
   )
@@ -221,6 +231,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     addProject,
     removeProject,
     setActiveSession,
+    createSession,
     refreshSessions,
   }
 

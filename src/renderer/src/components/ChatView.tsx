@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useRef, useEffect, useCallback } from 'react'
 import { useSession } from '../hooks/useSession'
 import { UserMessage } from './chat/UserMessage'
 import { AssistantMessage } from './chat/AssistantMessage'
@@ -8,20 +8,15 @@ import type { ChatMessage } from '../types/chat'
 const SCROLL_THRESHOLD_PX = 40
 const TEXTAREA_MAX_HEIGHT_PX = 200
 
-export function ChatView() {
-  const {
-    sessionId,
-    cwd,
-    isStreaming,
-    messages,
-    error,
-    createSession,
-    sendPrompt,
-    disposeSession,
-  } = useSession()
+interface ChatViewProps {
+  sessionId: string | null
+}
 
-  const [input, setInput] = useState('')
-  const [showScrollBtn, setShowScrollBtn] = useState(false)
+export function ChatView({ sessionId }: ChatViewProps) {
+  const { messages, isStreaming, error, input, setInput, sendPrompt } =
+    useSession({ sessionId })
+
+  const [showScrollBtn, setShowScrollBtn] = React.useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const isAtBottomRef = useRef(true)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -96,13 +91,6 @@ export function ChatView() {
     }
   }
 
-  const handleNewSession = async () => {
-    if (sessionId) {
-      await disposeSession()
-    }
-    await createSession()
-  }
-
   const lastMessageId = messages.length > 0 ? messages[messages.length - 1].id : null
 
   const renderMessage = (msg: ChatMessage) => {
@@ -138,23 +126,7 @@ export function ChatView() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
-      <header className="border-b border-zinc-800 px-6 py-3 flex items-center justify-between">
-        <h1 className="text-xl font-bold tracking-tight">NekoCode</h1>
-        <div className="flex items-center gap-3">
-          {cwd && (
-            <span className="text-xs text-zinc-500 font-mono truncate max-w-xs" title={cwd}>
-              {cwd}
-            </span>
-          )}
-          <button
-            onClick={handleNewSession}
-            disabled={isStreaming}
-            className="px-3 py-1.5 text-sm bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-colors"
-          >
-            New Session
-          </button>
-        </div>
-      </header>
+      {/* No header — sidebar has the title */}
 
       <main
         ref={scrollContainerRef}
@@ -163,7 +135,7 @@ export function ChatView() {
       >
         {!sessionId ? (
           <div className="flex items-center justify-center h-full">
-            <p className="text-zinc-500">Click &quot;New Session&quot; to select a project folder.</p>
+            <p className="text-zinc-500">Select a session from the sidebar</p>
           </div>
         ) : messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
@@ -204,7 +176,7 @@ export function ChatView() {
             value={input}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            placeholder={sessionId ? 'Type a prompt...' : 'Create a session first'}
+            placeholder={sessionId ? 'Type a prompt...' : 'Select a session first'}
             disabled={!sessionId || isStreaming}
             rows={1}
             className="flex-1 px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed resize-none overflow-hidden"
