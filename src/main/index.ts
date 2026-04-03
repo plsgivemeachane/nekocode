@@ -1,5 +1,7 @@
 import { app, BrowserWindow, shell } from 'electron'
-if (process.env.NODE_ENV === 'development') require('react-devtools')
+try {
+  if (process.env.NODE_ENV === 'development') require('react-devtools')
+} catch {}
 import { join } from 'path'
 import { PiSessionManager } from './session-manager'
 import { registerIpcHandlers, sendEventToRenderer } from './ipc-handlers'
