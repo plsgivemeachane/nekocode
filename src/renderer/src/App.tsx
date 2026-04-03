@@ -1,8 +1,8 @@
 import React from 'react'
-import { SessionView } from './components/SessionView'
+import { ChatView } from './components/ChatView'
 
 function App() {
-  return <SessionView />
+  return <ChatView />
 }
 
 export default App
