@@ -9,7 +9,7 @@ function AppLayout() {
   return (
     <div className="flex h-screen overflow-hidden">
       <TreeSidebar />
-      <ChatView sessionId={state.activeSessionId} />
+      <ChatView sessionId={state.activeSessionId} className="flex-1 min-w-0" />
     </div>
   )
 }

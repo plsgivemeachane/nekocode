@@ -10,9 +10,10 @@ const TEXTAREA_MAX_HEIGHT_PX = 200
 
 interface ChatViewProps {
   sessionId: string | null
+  className?: string
 }
 
-export function ChatView({ sessionId }: ChatViewProps) {
+export function ChatView({ sessionId, className }: ChatViewProps) {
   const { messages, isStreaming, error, input, setInput, sendPrompt } =
     useSession({ sessionId })
 
@@ -125,7 +126,7 @@ export function ChatView({ sessionId }: ChatViewProps) {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
+    <div className={`bg-zinc-950 text-zinc-100 flex flex-col h-full ${className ?? ""}`}>
       {/* No header — sidebar has the title */}
 
       <main
