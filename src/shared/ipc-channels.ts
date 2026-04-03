@@ -9,6 +9,10 @@ export const IPC_CHANNELS = {
   SESSION_ABORT: 'session:abort',
   SESSION_DISPOSE: 'session:dispose',
   DIALOG_OPEN_FOLDER: 'dialog:openFolder',
+  PROJECT_ADD: 'project:add',
+  PROJECT_REMOVE: 'project:remove',
+  PROJECT_LIST: 'project:list',
+  PROJECT_SESSIONS: 'project:sessions',
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]

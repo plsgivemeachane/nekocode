@@ -1,5 +1,5 @@
 /**
- * Shared IPC types for session management.
+ * Shared IPC types for session and project management.
  * These types are used by both main and renderer processes.
  */
 
@@ -41,6 +41,36 @@ export type SessionStreamEvent =
   | { type: 'error'; message: string }
   | { type: 'done' }
 
+/** Display info for a session shown in the sidebar */
+export interface SessionInfoDisplay {
+  id: string
+  firstMessage: string
+  created: string
+  messageCount: number
+}
+
+/** Info about a tracked project */
+export interface ProjectInfo {
+  id: string
+  path: string
+  sessions: SessionInfoDisplay[]
+}
+
+/** Payload for adding a project */
+export interface ProjectAddPayload {
+  path: string
+}
+
+/** Payload for removing a project */
+export interface ProjectRemovePayload {
+  id: string
+}
+
+/** Payload for refreshing project sessions */
+export interface ProjectSessionsPayload {
+  projectId: string
+}
+
 /** API exposed to the renderer via contextBridge */
 export interface NekoCodeIPC {
   session: {
@@ -48,9 +78,15 @@ export interface NekoCodeIPC {
     prompt: (sessionId: string, text: string) => Promise<void>
     abort: (sessionId: string) => Promise<void>
     dispose: (sessionId: string) => Promise<void>
-    onEvent: (callback: (event: SessionStreamEvent) => void) => () => void
+    onEvent: (callback: (payload: { sessionId: string; event: SessionStreamEvent }) => void) => () => void
   }
   dialog: {
     openFolder: () => Promise<string | null>
+  }
+  project: {
+    add: (path: string) => Promise<ProjectInfo>
+    remove: (id: string) => Promise<boolean>
+    list: () => Promise<ProjectInfo[]>
+    sessions: (projectId: string) => Promise<ProjectInfo>
   }
 }

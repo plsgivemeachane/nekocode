@@ -7,14 +7,24 @@ import type {
   SessionAbortPayload,
   SessionDisposePayload,
   SessionStreamEvent,
+  ProjectAddPayload,
+  ProjectRemovePayload,
+  ProjectSessionsPayload,
+  ProjectInfo,
 } from '../shared/ipc-types'
 import { PiSessionManager } from './session-manager'
+import type { ProjectManager } from './project-manager'
 
 /**
- * Register IPC handlers that bridge the renderer to the session manager.
+ * Register IPC handlers that bridge the renderer to the session and project managers.
  * Called once from main process startup.
  */
-export function registerIpcHandlers(sessionManager: PiSessionManager): void {
+export function registerIpcHandlers(
+  sessionManager: PiSessionManager,
+  projectManager: ProjectManager,
+): void {
+  // --- Session handlers ---
+
   ipcMain.handle(IPC_CHANNELS.SESSION_CREATE, async (_event, payload: SessionCreatePayload): Promise<SessionCreateResult> => {
     const sessionId = await sessionManager.create(payload.cwd)
     return { sessionId }
@@ -32,6 +42,8 @@ export function registerIpcHandlers(sessionManager: PiSessionManager): void {
     sessionManager.dispose(payload.sessionId)
   })
 
+  // --- Dialog handlers ---
+
   ipcMain.handle(IPC_CHANNELS.DIALOG_OPEN_FOLDER, async (): Promise<string | null> => {
     const result = await dialog.showOpenDialog({
       properties: ['openDirectory'],
@@ -41,6 +53,24 @@ export function registerIpcHandlers(sessionManager: PiSessionManager): void {
       return null
     }
     return result.filePaths[0]
+  })
+
+  // --- Project handlers ---
+
+  ipcMain.handle(IPC_CHANNELS.PROJECT_ADD, async (_event, payload: ProjectAddPayload): Promise<ProjectInfo> => {
+    return projectManager.addProject(payload.path)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PROJECT_REMOVE, async (_event, payload: ProjectRemovePayload): Promise<boolean> => {
+    return projectManager.removeProject(payload.id)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PROJECT_LIST, async (): Promise<ProjectInfo[]> => {
+    return projectManager.listProjects()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PROJECT_SESSIONS, async (_event, payload: ProjectSessionsPayload): Promise<ProjectInfo | null> => {
+    return projectManager.refreshSessions(payload.projectId)
   })
 }
 

@@ -1,12 +1,11 @@
 import { app, BrowserWindow, shell } from 'electron'
-try {
-  if (process.env.NODE_ENV === 'development') require('react-devtools')
-} catch {}
 import { join } from 'path'
 import { PiSessionManager } from './session-manager'
+import { ProjectManager } from './project-manager'
 import { registerIpcHandlers, sendEventToRenderer } from './ipc-handlers'
 
 const sessionManager = new PiSessionManager(sendEventToRenderer)
+const projectManager = new ProjectManager()
 let isQuitting = false
 
 function createWindow(): BrowserWindow {
@@ -50,7 +49,7 @@ function performShutdown(): void {
 }
 
 app.whenReady().then(() => {
-  registerIpcHandlers(sessionManager)
+  registerIpcHandlers(sessionManager, projectManager)
   createWindow()
 
   app.on('activate', () => {
