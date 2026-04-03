@@ -48,7 +48,8 @@ function performShutdown(): void {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  await projectManager.loadWorkspace()
   registerIpcHandlers(sessionManager, projectManager)
   createWindow()
 

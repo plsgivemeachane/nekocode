@@ -15,6 +15,8 @@ export const IPC_CHANNELS = {
   PROJECT_REMOVE: 'project:remove',
   PROJECT_LIST: 'project:list',
   PROJECT_SESSIONS: 'project:sessions',
+  WORKSPACE_SET_ACTIVE: 'workspace:setActive',
+  WORKSPACE_GET_ACTIVE: 'workspace:getActive',
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]

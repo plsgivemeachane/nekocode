@@ -97,6 +97,18 @@ export interface ProjectSessionsPayload {
   projectId: string
 }
 
+/** Payload for persisting the active session */
+export interface WorkspaceSetActivePayload {
+  sessionId: string
+  projectPath: string
+}
+
+/** Result of getting the persisted active session */
+export interface WorkspaceActiveResult {
+  sessionId: string | null
+  projectPath: string | null
+}
+
 /** API exposed to the renderer via contextBridge */
 export interface NekoCodeIPC {
   session: {
@@ -116,5 +128,9 @@ export interface NekoCodeIPC {
     remove: (id: string) => Promise<boolean>
     list: () => Promise<ProjectInfo[]>
     sessions: (projectId: string) => Promise<ProjectInfo>
+  }
+  workspace: {
+    setActive: (sessionId: string, projectPath: string) => Promise<void>
+    getActive: () => Promise<WorkspaceActiveResult>
   }
 }

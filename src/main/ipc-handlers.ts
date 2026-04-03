@@ -15,6 +15,8 @@ import type {
   ProjectRemovePayload,
   ProjectSessionsPayload,
   ProjectInfo,
+  WorkspaceSetActivePayload,
+  WorkspaceActiveResult,
 } from '../shared/ipc-types'
 import { PiSessionManager } from './session-manager'
 import type { ProjectManager } from './project-manager'
@@ -76,6 +78,16 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC_CHANNELS.PROJECT_REMOVE, async (_event, payload: ProjectRemovePayload): Promise<boolean> => {
     return projectManager.removeProject(payload.id)
+  })
+
+  // --- Workspace handlers ---
+
+  ipcMain.handle(IPC_CHANNELS.WORKSPACE_SET_ACTIVE, async (_event, payload: WorkspaceSetActivePayload): Promise<void> => {
+    await projectManager.setActiveSession(payload.sessionId, payload.projectPath)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.WORKSPACE_GET_ACTIVE, async (): Promise<{ sessionId: string | null; projectPath: string | null }> => {
+    return projectManager.getActiveSession()
   })
 
   ipcMain.handle(IPC_CHANNELS.PROJECT_LIST, async (): Promise<ProjectInfo[]> => {

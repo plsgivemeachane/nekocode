@@ -7,6 +7,8 @@ import type {
   SessionStreamEvent,
   ProjectInfo,
   NekoCodeIPC,
+  WorkspaceSetActivePayload,
+  WorkspaceActiveResult,
 } from '../shared/ipc-types'
 
 const sessionApi: NekoCodeIPC['session'] = {
@@ -53,10 +55,19 @@ const projectApi: NekoCodeIPC['project'] = {
     ipcRenderer.invoke(IPC_CHANNELS.PROJECT_SESSIONS, { projectId }),
 }
 
+const workspaceApi: NekoCodeIPC['workspace'] = {
+  setActive: (sessionId: string, projectPath: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_SET_ACTIVE, { sessionId, projectPath } as WorkspaceSetActivePayload),
+
+  getActive: (): Promise<WorkspaceActiveResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_GET_ACTIVE),
+}
+
 contextBridge.exposeInMainWorld('nekocode', {
   version: '0.1.0',
   session: sessionApi,
   project: projectApi,
+  workspace: workspaceApi,
   dialog: {
     openFolder: (): Promise<string | null> =>
       ipcRenderer.invoke(IPC_CHANNELS.DIALOG_OPEN_FOLDER),

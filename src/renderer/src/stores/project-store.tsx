@@ -27,6 +27,7 @@ interface ProjectState {
 }
 
 type ProjectAction =
+  | { type: 'SET_PROJECTS'; projects: ProjectInfo[] }
   | { type: 'ADD_PROJECT'; project: ProjectInfo }
   | { type: 'REMOVE_PROJECT'; projectId: string }
   | { type: 'SET_SESSIONS'; projectId: string; sessions: ProjectInfo['sessions'] }
@@ -49,6 +50,12 @@ const INITIAL_STATE: ProjectState = {
 
 function reducer(state: ProjectState, action: ProjectAction): ProjectState {
   switch (action.type) {
+    case 'SET_PROJECTS':
+      return {
+        ...state,
+        projects: action.projects,
+      }
+
     case 'ADD_PROJECT':
       return {
         ...state,
@@ -148,6 +155,43 @@ const ProjectStoreContext = createContext<ProjectStoreAPI | null>(null)
 export function ProjectProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE)
   const debounceRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  const initializedRef = useRef(false)
+
+  // Load persisted workspace on first mount
+  useEffect(() => {
+    if (initializedRef.current) return
+    initializedRef.current = true
+
+    ;(async () => {
+      try {
+        const projects = await window.nekocode.project.list()
+        if (projects.length > 0) {
+          dispatch({ type: 'SET_PROJECTS', projects })
+
+          // Restore last active session
+          const { sessionId, projectPath } = await window.nekocode.workspace.getActive()
+          if (sessionId && projectPath) {
+            // Verify the session still exists in the restored projects
+            const project = projects.find(p => p.path === projectPath)
+            if (project && project.sessions.some(s => s.id === sessionId)) {
+              dispatch({ type: 'SET_ACTIVE_SESSION', sessionId, projectPath })
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[project-store] failed to load workspace:', err)
+      }
+    })()
+  }, [])
+
+  // Persist active session changes to workspace
+  useEffect(() => {
+    if (!initializedRef.current) return
+    if (state.activeSessionId && state.activeProjectPath) {
+      window.nekocode.workspace.setActive(state.activeSessionId, state.activeProjectPath)
+        .catch(err => console.error('[project-store] failed to persist active session:', err))
+    }
+  }, [state.activeSessionId, state.activeProjectPath])
 
   // Global event listener — runs once for ALL sessions
   useEffect(() => {
