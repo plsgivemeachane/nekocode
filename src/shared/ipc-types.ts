@@ -44,10 +44,13 @@ export type SessionStreamEvent =
 /** API exposed to the renderer via contextBridge */
 export interface NekoCodeIPC {
   session: {
-n    create: (cwd: string) => Promise<SessionCreateResult>
+    create: (cwd: string) => Promise<SessionCreateResult>
     prompt: (sessionId: string, text: string) => Promise<void>
     abort: (sessionId: string) => Promise<void>
     dispose: (sessionId: string) => Promise<void>
     onEvent: (callback: (event: SessionStreamEvent) => void) => () => void
+  }
+  dialog: {
+    openFolder: () => Promise<string | null>
   }
 }

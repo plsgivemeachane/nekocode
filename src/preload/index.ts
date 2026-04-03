@@ -33,4 +33,8 @@ const sessionApi: NekoCodeIPC['session'] = {
 contextBridge.exposeInMainWorld('nekocode', {
   version: '0.1.0',
   session: sessionApi,
+  dialog: {
+    openFolder: (): Promise<string | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.DIALOG_OPEN_FOLDER),
+  },
 })

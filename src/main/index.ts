@@ -4,6 +4,7 @@ import { PiSessionManager } from './session-manager'
 import { registerIpcHandlers, sendEventToRenderer } from './ipc-handlers'
 
 const sessionManager = new PiSessionManager(sendEventToRenderer)
+let isQuitting = false
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -31,6 +32,20 @@ function createWindow(): BrowserWindow {
   return mainWindow
 }
 
+function performShutdown(): void {
+  if (isQuitting) return
+  isQuitting = true
+
+  const count = sessionManager.sessionCount
+  console.log(`[main] shutting down, disposing ${count} session(s)`)
+  try {
+    sessionManager.disposeAll()
+    console.log(`[main] disposed ${count} session(s) successfully`)
+  } catch (err) {
+    console.error('[main] error disposing sessions on quit:', err)
+  }
+}
+
 app.whenReady().then(() => {
   registerIpcHandlers(sessionManager)
   createWindow()
@@ -43,12 +58,12 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  performShutdown()
   if (process.platform !== 'darwin') {
-    sessionManager.disposeAll()
     app.quit()
   }
 })
 
 app.on('before-quit', () => {
-  sessionManager.disposeAll()
+  performShutdown()
 })
