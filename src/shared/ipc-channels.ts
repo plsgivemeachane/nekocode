@@ -8,6 +8,8 @@ export const IPC_CHANNELS = {
   SESSION_EVENTS: 'session:events',
   SESSION_ABORT: 'session:abort',
   SESSION_DISPOSE: 'session:dispose',
+  SESSION_RECONNECT: 'session:reconnect',
+  SESSION_LOAD_HISTORY: 'session:load-history',
   DIALOG_OPEN_FOLDER: 'dialog:openFolder',
   PROJECT_ADD: 'project:add',
   PROJECT_REMOVE: 'project:remove',

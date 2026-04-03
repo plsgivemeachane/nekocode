@@ -3,9 +3,11 @@ import { PiSessionManager } from '../main/session-manager'
 import type { SessionStreamEvent } from '../shared/ipc-types'
 
 /** Create a mock AgentSession with controllable subscribe/prompt/abort/dispose */
-function createMockSession() {
+function createMockSession(id?: string) {
   const listeners: Array<(event: any) => void> = []
   return {
+    sessionId: id ?? `sdk-session-${Math.random().toString(36).slice(2, 10)}`,
+    messages: [],
     subscribe: vi.fn((fn: (event: any) => void) => {
       listeners.push(fn)
       return vi.fn(() => {
@@ -54,13 +56,15 @@ describe('PiSessionManager', () => {
     })
   })
 
-  it('should create a session and return an ID', async () => {
+  it('should create a session and return a stable ID from the SDK', async () => {
     const id = await manager.create('/tmp/project')
-    expect(id).toMatch(/^session-\d+$/)
+    expect(id).toBeDefined()
+    expect(typeof id).toBe('string')
+    expect(id.length).toBeGreaterThan(0)
     expect(manager.sessionCount).toBe(1)
   })
 
-  it('should assign incrementing session IDs', async () => {
+  it('should assign unique stable session IDs', async () => {
     const id1 = await manager.create('/tmp/a')
     const id2 = await manager.create('/tmp/b')
     expect(id2).not.toBe(id1)
@@ -145,15 +149,90 @@ describe('PiSessionManager', () => {
     expect(events[1].event).toEqual({ type: 'done' })
   })
 
-  it('should ignore internal bookkeeping events', async () => {
+  it('should ignore purely internal bookkeeping events', async () => {
     await manager.create('/tmp/project')
 
-    const internalTypes = ['agent_start', 'turn_start', 'message_start', 'message_end', 'turn_end']
+    const internalTypes = ['agent_start', 'turn_start', 'turn_end', 'tool_execution_update']
     for (const type of internalTypes) {
       mockSession().emit({ type, message: {}, toolResults: [] })
     }
 
     expect(events).toHaveLength(0)
+  })
+
+  it('should record user messages on message_start', async () => {
+    const id = await manager.create('/tmp/project')
+    mockSession().emit({
+      type: 'message_start',
+      message: { role: 'user', content: 'hello world' },
+    })
+
+    const history = manager.getHistory(id)
+    expect(history).toHaveLength(1)
+    expect(history[0].role).toBe('user')
+    expect(history[0].content).toBe('hello world')
+  })
+
+  it('should accumulate assistant messages and finalize on agent_end', async () => {
+    const id = await manager.create('/tmp/project')
+
+    mockSession().emit({
+      type: 'message_update',
+      message: {},
+      assistantMessageEvent: { type: 'text_delta', delta: 'Hello', contentIndex: 0, partial: {} },
+    })
+    mockSession().emit({
+      type: 'message_update',
+      message: {},
+      assistantMessageEvent: { type: 'text_delta', delta: ' world', contentIndex: 0, partial: {} },
+    })
+    mockSession().emit({ type: 'agent_end', messages: [] })
+
+    const history = manager.getHistory(id)
+    expect(history).toHaveLength(1)
+    expect(history[0].role).toBe('assistant')
+    expect(history[0].content).toBe('Hello world')
+  })
+
+  it('should record tool calls and results in history', async () => {
+    const id = await manager.create('/tmp/project')
+
+    // Start assistant message
+    mockSession().emit({
+      type: 'message_update',
+      message: {},
+      assistantMessageEvent: { type: 'text_delta', delta: 'Let me read that.', contentIndex: 0, partial: {} },
+    })
+    // Tool call
+    mockSession().emit({
+      type: 'tool_execution_start',
+      toolCallId: 'tc-1',
+      toolName: 'read',
+      args: { path: 'file.txt' },
+    })
+    // Tool result
+    mockSession().emit({
+      type: 'tool_execution_end',
+      toolCallId: 'tc-1',
+      toolName: 'read',
+      result: 'file contents',
+      isError: false,
+    })
+    mockSession().emit({ type: 'agent_end', messages: [] })
+
+    const history = manager.getHistory(id)
+    expect(history).toHaveLength(1)
+    expect(history[0].role).toBe('assistant')
+    expect(history[0].content).toBe('Let me read that.')
+    expect(history[0].toolCalls).toHaveLength(1)
+    expect(history[0].toolCalls![0].name).toBe('read')
+    expect(history[0].toolCalls![0].result).toBe('file contents')
+  })
+
+  it('should return empty history for a new session', async () => {
+    const id = await manager.create('/tmp/project')
+    const history = manager.getHistory(id)
+    expect(history).toEqual([])
   })
 
   it('should forward prompt calls to the SDK session', async () => {

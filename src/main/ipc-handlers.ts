@@ -6,6 +6,10 @@ import type {
   SessionPromptPayload,
   SessionAbortPayload,
   SessionDisposePayload,
+  SessionReconnectPayload,
+  SessionReconnectResult,
+  SessionLoadHistoryPayload,
+  ChatMessageIPC,
   SessionStreamEvent,
   ProjectAddPayload,
   ProjectRemovePayload,
@@ -40,6 +44,15 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC_CHANNELS.SESSION_DISPOSE, async (_event, payload: SessionDisposePayload): Promise<void> => {
     sessionManager.dispose(payload.sessionId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SESSION_RECONNECT, async (_event, payload: SessionReconnectPayload): Promise<SessionReconnectResult> => {
+    const history = await sessionManager.reconnect(payload.sessionId, payload.cwd)
+    return { sessionId: payload.sessionId, history }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SESSION_LOAD_HISTORY, async (_event, payload: SessionLoadHistoryPayload): Promise<ChatMessageIPC[]> => {
+    return sessionManager.getHistory(payload.sessionId)
   })
 
   // --- Dialog handlers ---

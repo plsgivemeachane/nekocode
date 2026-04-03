@@ -1,7 +1,41 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import type { SessionStreamEvent } from '../../../shared/ipc-types'
+import type { SessionStreamEvent, ChatMessageIPC } from '../../../shared/ipc-types'
 import type { ChatMessage } from '../types/chat'
 import { generateId } from '../types/chat'
+
+/** Convert IPC message format to renderer ChatMessage format */
+function ipcToChatMessage(ipc: ChatMessageIPC): ChatMessage[] {
+  const msgs: ChatMessage[] = []
+  if (ipc.content) {
+    msgs.push({
+      role: ipc.role,
+      type: 'text',
+      content: ipc.content,
+      id: ipc.id,
+    } as ChatMessage)
+  }
+  if (ipc.toolCalls) {
+    for (const tc of ipc.toolCalls) {
+      msgs.push({
+        role: 'assistant',
+        type: 'tool_call',
+        toolName: tc.name,
+        toolId: tc.id,
+        args: tc.args,
+        status: 'done',
+        result: tc.result,
+        isError: tc.isError,
+        id: generateId(),
+      })
+    }
+  }
+  return msgs
+}
+
+/** Convert an array of IPC messages into renderer ChatMessages */
+function ipcToChatMessages(ipcMessages: ChatMessageIPC[]): ChatMessage[] {
+  return ipcMessages.flatMap(ipcToChatMessage)
+}
 
 interface UseSessionInput {
   sessionId: string | null
@@ -61,6 +95,25 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
 
     prevSessionRef.current = sessionId
   }, [sessionId]) // eslint-disable-line react-hooks/exhaustive-deps -- input is intentionally not a dep; we read it for save, not react to it
+
+  // Load message history from main process on mount / sessionId change
+  // This enables session persistence: reconnecting to an existing session
+  // loads its prior messages instead of starting empty.
+  useEffect(() => {
+    if (!sessionId) return
+    let cancelled = false
+    window.nekocode.session.loadHistory(sessionId).then((ipcMessages) => {
+      if (cancelled) return
+      if (ipcMessages.length > 0) {
+        setMessages(ipcToChatMessages(ipcMessages))
+      }
+    }).catch((err) => {
+      if (!cancelled) {
+        console.warn('[useSession] failed to load history:', err)
+      }
+    })
+    return () => { cancelled = true }
+  }, [sessionId])
 
   // Subscribe to global session events, filter by our sessionId
   useEffect(() => {

@@ -29,6 +29,32 @@ export interface SessionDisposePayload {
   sessionId: string
 }
 
+/** Payload for reconnecting to an existing session */
+export interface SessionReconnectPayload {
+  sessionId: string
+  cwd: string
+}
+
+/** Result of session reconnection */
+export interface SessionReconnectResult {
+  sessionId: string
+  history: ChatMessageIPC[]
+}
+
+/** Payload for loading session history */
+export interface SessionLoadHistoryPayload {
+  sessionId: string
+}
+
+/** A chat message suitable for IPC transfer (no circular refs, plain data) */
+export interface ChatMessageIPC {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  toolCalls?: Array<{ id: string; name: string; args: unknown; result?: unknown; isError?: boolean }>
+  timestamp: number
+}
+
 /**
  * Events streamed from main to renderer.
  * These are a simplified subset of the full AgentEvent type --
@@ -78,6 +104,8 @@ export interface NekoCodeIPC {
     prompt: (sessionId: string, text: string) => Promise<void>
     abort: (sessionId: string) => Promise<void>
     dispose: (sessionId: string) => Promise<void>
+    reconnect: (sessionId: string, cwd: string) => Promise<SessionReconnectResult>
+    loadHistory: (sessionId: string) => Promise<ChatMessageIPC[]>
     onEvent: (callback: (payload: { sessionId: string; event: SessionStreamEvent }) => void) => () => void
   }
   dialog: {

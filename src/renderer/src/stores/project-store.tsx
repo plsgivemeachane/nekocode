@@ -32,6 +32,7 @@ type ProjectAction =
   | { type: 'SET_SESSIONS'; projectId: string; sessions: ProjectInfo['sessions'] }
   | { type: 'ADD_SESSION_TO_PROJECT'; projectPath: string; session: SessionInfoDisplay }
   | { type: 'SET_ACTIVE_SESSION'; sessionId: string; projectPath: string }
+  | { type: 'RECONNECT_SESSION'; sessionId: string; projectPath: string }
   | { type: 'UPDATE_SESSION_STATUS'; sessionId: string; status: SessionStatus }
   | { type: 'CLEAR_ACTIVE_SESSION' }
 
@@ -96,6 +97,13 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
         activeProjectPath: action.projectPath,
       }
 
+    case 'RECONNECT_SESSION':
+      return {
+        ...state,
+        activeSessionId: action.sessionId,
+        activeProjectPath: action.projectPath,
+      }
+
     case 'UPDATE_SESSION_STATUS':
       return {
         ...state,
@@ -126,6 +134,7 @@ interface ProjectStoreAPI {
   addProject: (path: string) => Promise<void>
   removeProject: (projectId: string) => Promise<void>
   setActiveSession: (sessionId: string, projectPath: string) => void
+  reconnectSession: (sessionId: string, projectPath: string) => Promise<void>
   createSession: (projectPath: string) => Promise<void>
   refreshSessions: (projectId: string) => Promise<void>
 }
@@ -217,6 +226,18 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     [],
   )
 
+  const reconnectSession = useCallback(
+    async (sessionId: string, projectPath: string) => {
+      try {
+        await window.nekocode.session.reconnect(sessionId, projectPath)
+        dispatch({ type: 'RECONNECT_SESSION', sessionId, projectPath })
+      } catch (err) {
+        console.error('[project-store] reconnectSession failed:', err)
+      }
+    },
+    [],
+  )
+
   const createSession = useCallback(
     async (projectPath: string) => {
       try {
@@ -253,6 +274,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     addProject,
     removeProject,
     setActiveSession,
+    reconnectSession,
     createSession,
     refreshSessions,
   }

@@ -20,7 +20,7 @@ function StatusDot({ status }: { status: SessionStatus }) {
 }
 
 export function TreeSidebar() {
-  const { state, addProject, removeProject, setActiveSession, createSession } =
+  const { state, addProject, removeProject, reconnectSession, createSession } =
     useProjectStore()
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -152,7 +152,7 @@ export function TreeSidebar() {
                             ? 'bg-zinc-800 text-zinc-100 border-l-2 border-l-blue-500 -ml-px'
                             : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
                         }`}
-                        onClick={() => setActiveSession(session.id, project.path)}
+                        onClick={() => reconnectSession(session.id, project.path)}
                       >
                         {/* Session icon */}
                         <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="shrink-0">

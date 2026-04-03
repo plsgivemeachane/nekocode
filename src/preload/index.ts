@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from '../shared/ipc-channels'
 import type {
   SessionCreateResult,
+  SessionReconnectResult,
+  ChatMessageIPC,
   SessionStreamEvent,
   ProjectInfo,
   NekoCodeIPC,
@@ -19,6 +21,12 @@ const sessionApi: NekoCodeIPC['session'] = {
 
   dispose: (sessionId: string): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.SESSION_DISPOSE, { sessionId }),
+
+  reconnect: (sessionId: string, cwd: string): Promise<SessionReconnectResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SESSION_RECONNECT, { sessionId, cwd }),
+
+  loadHistory: (sessionId: string): Promise<ChatMessageIPC[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SESSION_LOAD_HISTORY, { sessionId }),
 
   onEvent: (callback: (payload: { sessionId: string; event: SessionStreamEvent }) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, payload: { sessionId: string; event: SessionStreamEvent }) => {
