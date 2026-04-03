@@ -66,11 +66,22 @@ export function SessionView() {
           </div>
         ) : (
           <div className="space-y-4 max-w-3xl mx-auto">
-            {messages.map((msg, i) => (
-              <pre key={i} className="whitespace-pre-wrap break-words text-sm text-zinc-300 font-mono bg-zinc-900 rounded-lg p-4">
-                {msg}
-              </pre>
-            ))}
+            {messages.map((msg) => {
+              let text: string
+              if (msg.role === 'user') {
+                text = msg.content
+              } else if (msg.type === 'text') {
+                text = msg.content
+              } else {
+                const status = msg.status === 'running' ? '...' : msg.isError ? ' (error)' : ' (done)'
+                text = `[${msg.toolName}${status}]`
+              }
+              return (
+                <pre key={msg.id} className="whitespace-pre-wrap break-words text-sm text-zinc-300 font-mono bg-zinc-900 rounded-lg p-4">
+                  {text}
+                </pre>
+              )
+            })}
             {isStreaming && (
               <span className="inline-block w-2 h-4 bg-zinc-400 animate-pulse ml-1" />
             )}
