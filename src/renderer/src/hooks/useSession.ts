@@ -3,52 +3,93 @@ import type { SessionStreamEvent } from '../../../shared/ipc-types'
 import type { ChatMessage } from '../types/chat'
 import { generateId } from '../types/chat'
 
-interface SessionState {
+interface UseSessionInput {
   sessionId: string | null
-  cwd: string | null
-  isStreaming: boolean
+}
+
+interface UseSessionOutput {
   messages: ChatMessage[]
+  isStreaming: boolean
   error: string | null
+  input: string
+  setInput: (text: string) => void
+  sendPrompt: (text: string) => Promise<void>
 }
 
-const INITIAL_STATE: SessionState = {
-  sessionId: null,
-  cwd: null,
-  isStreaming: false,
-  messages: [],
-  error: null,
-}
+const INITIAL_MESSAGES: ChatMessage[] = []
 
-export function useSession() {
-  const [state, setState] = useState<SessionState>(INITIAL_STATE)
-  const unsubRef = useRef<(() => void) | null>(null)
+/**
+ * Pure session viewer driven by an external sessionId.
+ * Subscribes to global events and filters by sessionId.
+ * Manages its own message state and input draft per session.
+ */
+export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
+  const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES)
+  const [isStreaming, setIsStreaming] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [input, setInput] = useState('')
 
+  // Draft preservation: save input text when switching away, restore when switching back
+  const drafts = useRef<Map<string, string>>(new Map())
+
+  // Save draft and reset on sessionId change
   useEffect(() => {
+    // Save current input under the *previous* sessionId (captured via cleanup)
     return () => {
-      unsubRef.current?.()
+      // This runs before the next effect with the new sessionId
     }
-  }, [])
+  }, [sessionId])
 
-  const handleEvent = useCallback((event: SessionStreamEvent) => {
-    switch (event.type) {
-      case 'text_delta':
-        setState(prev => {
-          const messages = [...prev.messages]
-          const last = messages[messages.length - 1]
-          if (last && last.role === 'assistant' && last.type === 'text' && prev.isStreaming) {
-            messages[messages.length - 1] = { ...last, content: last.content + event.delta }
-          } else {
-            messages.push({ role: 'assistant', type: 'text', content: event.delta, id: generateId() })
-          }
-          return { ...prev, messages, isStreaming: true, error: null }
-        })
-        break
+  // Handle draft save/restore around sessionId changes
+  const prevSessionRef = useRef<string | null>(null)
+  useEffect(() => {
+    const prev = prevSessionRef.current
 
-      case 'tool_call':
-        setState(prev => ({
-          ...prev,
-          messages: [
-            ...prev.messages,
+    // Save draft for previous session
+    if (prev !== null) {
+      drafts.current.set(prev, input)
+    }
+
+    // Reset state for new session
+    setMessages(INITIAL_MESSAGES)
+    setIsStreaming(false)
+    setError(null)
+
+    // Restore draft for new session
+    const draft = sessionId !== null ? drafts.current.get(sessionId) : null
+    setInput(draft ?? '')
+
+    prevSessionRef.current = sessionId
+  }, [sessionId]) // eslint-disable-line react-hooks/exhaustive-deps -- input is intentionally not a dep; we read it for save, not react to it
+
+  // Subscribe to global session events, filter by our sessionId
+  useEffect(() => {
+    if (!sessionId) return
+
+    const unsub = window.nekocode.session.onEvent((payload) => {
+      if (payload.sessionId !== sessionId) return
+
+      const event: SessionStreamEvent = payload.event
+
+      switch (event.type) {
+        case 'text_delta':
+          setMessages(prev => {
+            const msgs = [...prev]
+            const last = msgs[msgs.length - 1]
+            if (last && last.role === 'assistant' && last.type === 'text') {
+              msgs[msgs.length - 1] = { ...last, content: last.content + event.delta }
+            } else {
+              msgs.push({ role: 'assistant', type: 'text', content: event.delta, id: generateId() })
+            }
+            return msgs
+          })
+          setIsStreaming(true)
+          setError(null)
+          break
+
+        case 'tool_call':
+          setMessages(prev => [
+            ...prev,
             {
               role: 'assistant',
               type: 'tool_call',
@@ -58,88 +99,59 @@ export function useSession() {
               status: 'running',
               id: generateId(),
             },
-          ],
-        }))
-        break
+          ])
+          break
 
-      case 'tool_result': {
-        setState(prev => {
-          const messages = [...prev.messages]
-          for (let i = messages.length - 1; i >= 0; i--) {
-            const msg = messages[i]
-            if (
-              msg.role === 'assistant' &&
-              msg.type === 'tool_call' &&
-              msg.toolName === event.toolName &&
-              msg.status === 'running'
-            ) {
-              messages[i] = { ...msg, status: 'done', result: event.result, isError: event.isError }
-              break
+        case 'tool_result': {
+          setMessages(prev => {
+            const msgs = [...prev]
+            for (let i = msgs.length - 1; i >= 0; i--) {
+              const msg = msgs[i]
+              if (
+                msg.role === 'assistant' &&
+                msg.type === 'tool_call' &&
+                msg.toolName === event.toolName &&
+                msg.status === 'running'
+              ) {
+                msgs[i] = { ...msg, status: 'done', result: event.result, isError: event.isError }
+                break
+              }
             }
-          }
-          return { ...prev, messages }
-        })
-        break
+            return msgs
+          })
+          break
+        }
+
+        case 'error':
+          setIsStreaming(false)
+          setError(event.message)
+          break
+
+        case 'done':
+          setIsStreaming(false)
+          break
       }
+    })
 
-      case 'error':
-        setState(prev => ({ ...prev, isStreaming: false, error: event.message }))
-        break
-
-      case 'done':
-        setState(prev => ({ ...prev, isStreaming: false }))
-        break
+    return () => {
+      unsub()
     }
-  }, [])
+  }, [sessionId])
 
-  const createSession = useCallback(async (): Promise<boolean> => {
-    const folder = await window.nekocode.dialog.openFolder()
-    if (!folder) return false
+  const sendPrompt = useCallback(
+    async (text: string): Promise<void> => {
+      if (!sessionId) return
+      const userMsg: ChatMessage = { role: 'user', content: text, id: generateId() }
+      setMessages(prev => [...prev, userMsg])
+      setError(null)
+      try {
+        await window.nekocode.session.prompt(sessionId, text)
+      } catch (err) {
+        setError(`Prompt failed: ${err}`)
+      }
+    },
+    [sessionId],
+  )
 
-    try {
-      const { sessionId } = await window.nekocode.session.create(folder)
-      setState({ sessionId, cwd: folder, isStreaming: false, messages: [], error: null })
-
-      unsubRef.current?.()
-      unsubRef.current = window.nekocode.session.onEvent(handleEvent)
-      return true
-    } catch (err) {
-      setState(prev => ({ ...prev, error: `Failed to create session: ${err}` }))
-      return false
-    }
-  }, [handleEvent])
-
-  const sendPrompt = useCallback(async (text: string): Promise<void> => {
-    if (!state.sessionId) return
-    const userMsg: ChatMessage = { role: 'user', content: text, id: generateId() }
-    setState(prev => ({ ...prev, messages: [...prev.messages, userMsg], error: null }))
-    try {
-      await window.nekocode.session.prompt(state.sessionId, text)
-    } catch (err) {
-      setState(prev => ({ ...prev, error: `Prompt failed: ${err}` }))
-    }
-  }, [state.sessionId])
-
-  const disposeSession = useCallback(async (): Promise<void> => {
-    if (!state.sessionId) return
-    unsubRef.current?.()
-    unsubRef.current = null
-    try {
-      await window.nekocode.session.dispose(state.sessionId)
-    } catch (err) {
-      console.error('[session] dispose error:', err)
-    }
-    setState(INITIAL_STATE)
-  }, [state.sessionId])
-
-  return {
-    sessionId: state.sessionId,
-    cwd: state.cwd,
-    isStreaming: state.isStreaming,
-    messages: state.messages,
-    error: state.error,
-    createSession,
-    sendPrompt,
-    disposeSession,
-  }
+  return { messages, isStreaming, error, input, setInput, sendPrompt }
 }
