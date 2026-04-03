@@ -1,5 +1,9 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'path'
+import { PiSessionManager } from './session-manager'
+import { registerIpcHandlers, sendEventToRenderer } from './ipc-handlers'
+
+const sessionManager = new PiSessionManager(sendEventToRenderer)
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -9,6 +13,11 @@ function createWindow(): BrowserWindow {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
     }
+  })
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url)
+    return { action: 'deny' }
   })
 
   console.log('[main] BrowserWindow created')
@@ -23,6 +32,7 @@ function createWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
+  registerIpcHandlers(sessionManager)
   createWindow()
 
   app.on('activate', () => {
@@ -34,6 +44,11 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
+    sessionManager.disposeAll()
     app.quit()
   }
+})
+
+app.on('before-quit', () => {
+  sessionManager.disposeAll()
 })
