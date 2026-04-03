@@ -19,7 +19,7 @@ function CopyButton({ text }: CopyButtonProps) {
   return (
     <button
       onClick={handleCopy}
-      className="absolute top-2 right-2 px-2 py-0.5 text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-800 hover:bg-zinc-700 rounded transition-colors"
+      className="absolute top-2 right-2 px-2 py-0.5 text-xs text-text-tertiary hover:text-text-primary bg-surface-800 hover:bg-surface-700 rounded transition-colors duration-200"
       aria-label="Copy code"
     >
       {copied ? '✓' : 'Copy'}
@@ -38,7 +38,7 @@ function CodeBlock({ children, className }: CodeBlockProps) {
 
   if (isInline) {
     return (
-      <code className="bg-zinc-800 px-1.5 py-0.5 rounded text-sm font-mono text-emerald-400">
+      <code className="bg-surface-800 px-1.5 py-0.5 rounded text-sm font-mono text-accent-400">
         {children}
       </code>
     )
@@ -47,7 +47,7 @@ function CodeBlock({ children, className }: CodeBlockProps) {
   return (
     <div className="relative group">
       <CopyButton text={codeString} />
-      <pre className="bg-neutral-900 rounded-lg p-4 overflow-x-auto text-sm font-mono text-zinc-300">
+      <pre className="bg-surface-900 rounded-lg p-4 overflow-x-auto text-sm font-mono text-text-primary border border-surface-850">
         <code className={className}>{children}</code>
       </pre>
     </div>
@@ -70,7 +70,7 @@ interface MarkdownContentProps {
 
 export const MarkdownContent = React.memo(function MarkdownContent({ content }: MarkdownContentProps) {
   return (
-    <div className="prose prose-invert prose-sm max-w-none prose-pre:p-0 prose-pre:bg-transparent prose-code:before:content-none prose-code:after:content-none">
+    <div className="prose prose-invert prose-sm max-w-none prose-pre:p-0 prose-pre:bg-transparent prose-code:before:content-none prose-code:after:content-none animate-fade-in">
       <Markdown
         rehypePlugins={[rehypeHighlight]}
         components={{
@@ -78,12 +78,12 @@ export const MarkdownContent = React.memo(function MarkdownContent({ content }: 
             <CodeBlock className={className}>{children}</CodeBlock>
           ),
           a: ({ href, children, ...rest }) => (
-            <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">
+            <a href={href} target="_blank" rel="noopener noreferrer" className="text-text-accent hover:text-accent-300 underline underline-offset-2">
               {children}
             </a>
           ),
           pre: ({ children, ...rest }) => (
-            <pre className="bg-neutral-900 rounded-lg max-h-96 overflow-y-auto p-0" {...rest}>
+            <pre className="bg-surface-900 rounded-lg max-h-96 overflow-y-auto p-0 border border-surface-850" {...rest}>
               {children}
             </pre>
           ),

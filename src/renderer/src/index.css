@@ -1,2 +1,166 @@
 @import "tailwindcss";
 @import "highlight.js/styles/github-dark.css";
+
+/* ─── Design Tokens ─── */
+@theme {
+  /* Accent: cyan */
+  --color-accent-50: oklch(0.98 0.02 195);
+  --color-accent-100: oklch(0.95 0.04 195);
+  --color-accent-200: oklch(0.91 0.07 195);
+  --color-accent-300: oklch(0.86 0.10 195);
+  --color-accent-400: oklch(0.80 0.14 195);
+  --color-accent-500: oklch(0.75 0.15 195);
+  --color-accent-600: oklch(0.66 0.13 195);
+  --color-accent-700: oklch(0.56 0.11 195);
+  --color-accent-800: oklch(0.46 0.08 195);
+  --color-accent-900: oklch(0.37 0.06 195);
+
+  /* Surface: neutral cool grays */
+  --color-surface-950: oklch(0.15 0.007 260);
+  --color-surface-900: oklch(0.19 0.008 260);
+  --color-surface-850: oklch(0.22 0.008 260);
+  --color-surface-800: oklch(0.25 0.009 260);
+  --color-surface-700: oklch(0.30 0.008 260);
+  --color-surface-600: oklch(0.40 0.008 260);
+  --color-surface-500: oklch(0.52 0.006 260);
+  --color-surface-400: oklch(0.65 0.005 260);
+  --color-surface-300: oklch(0.76 0.004 260);
+  --color-surface-200: oklch(0.86 0.003 260);
+  --color-surface-100: oklch(0.94 0.002 260);
+  --color-surface-50: oklch(0.98 0.001 260);
+
+  /* Text on surfaces */
+  --color-text-primary: oklch(0.92 0.008 60);
+  --color-text-secondary: oklch(0.68 0.01 55);
+  --color-text-tertiary: oklch(0.48 0.008 55);
+  --color-text-accent: oklch(0.82 0.14 70);
+
+  /* Semantic */
+  --color-success: oklch(0.72 0.18 145);
+  --color-error: oklch(0.65 0.20 25);
+  --color-error-surface: oklch(0.20 0.04 25);
+
+  /* Fonts */
+  --font-display: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+  --font-body: "Inter", "SF Pro Text", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+
+  /* Custom spacing */
+  --spacing-18: 4.5rem;
+  --spacing-88: 22rem;
+
+  /* Easing */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-smooth: cubic-bezier(0.45, 0, 0.55, 1);
+
+  /* Animations */
+  --animate-fade-in: fade-in 0.3s var(--ease-out-expo) forwards;
+  --animate-slide-up: slide-up 0.25s var(--ease-out-expo) forwards;
+  --animate-glow-pulse: glow-pulse 2s ease-in-out infinite;
+}
+
+/* ─── Keyframes ─── */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* ─── Base Layer ─── */
+@layer base {
+  html {
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: var(--color-surface-950);
+    background-image: radial-gradient(ellipse 80% 60% at 50% 0%, oklch(0.18 0.008 260 / 0.5), transparent 70%);
+    color: var(--color-text-primary);
+  }
+
+  /* Subtle grain texture overlay */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.025;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    background-size: 128px 128px;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-surface-700);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-surface-600);
+  }
+
+  /* Selection */
+  ::selection {
+    background: oklch(0.75 0.15 195 / 0.3);
+    color: var(--color-text-primary);
+  }
+}
+
+/* ─── Component Layer ─── */
+@layer components {
+  /* Code block overrides for highlight.js */
+  pre code.hljs {
+    background: transparent !important;
+    padding: 0 !important;
+  }
+
+  .hljs {
+    color: var(--color-text-primary) !important;
+    background: transparent !important;
+  }
+
+  /* Prose overrides for warm theme */
+  .prose {
+    --tw-prose-body: var(--color-text-primary);
+    --tw-prose-headings: var(--color-text-primary);
+    --tw-prose-links: var(--color-text-accent);
+    --tw-prose-code: var(--color-accent-400);
+    --tw-prose-pre-bg: var(--color-surface-900);
+    --tw-prose-pre-code: var(--color-text-primary);
+    --tw-prose-bold: var(--color-text-primary);
+    --tw-prose-counters: var(--color-text-secondary);
+    --tw-prose-bullets: var(--color-text-secondary);
+    --tw-prose-hr: var(--color-surface-800);
+    --tw-prose-quotes: var(--color-text-secondary);
+    --tw-prose-quote-borders: var(--color-surface-700);
+    --tw-prose-th-borders: var(--color-surface-800);
+    --tw-prose-td-borders: var(--color-surface-850);
+  }
+}

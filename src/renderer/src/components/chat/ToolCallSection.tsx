@@ -16,33 +16,33 @@ export function ToolCallSection({ toolName, status, result, isError }: ToolCallS
 
   const statusIndicator =
     status === 'running' ? (
-      <span className="inline-block w-3 h-3 border-2 border-zinc-500 border-t-zinc-200 rounded-full animate-spin" />
+      <span className="inline-block w-3 h-3 border-2 border-surface-600 border-t-accent-400 rounded-full animate-spin" />
     ) : isError ? (
-      <span className="text-red-400" aria-label="error">&#x2717;</span>
+      <span className="text-error" aria-label="error">&#x2717;</span>
     ) : (
-      <span className="text-emerald-400" aria-label="done">&#x2713;</span>
+      <span className="text-success" aria-label="done">&#x2713;</span>
     )
 
   const resultText = result != null ? formatResult(result) : null
 
   return (
-    <div className="rounded-lg border border-zinc-800 overflow-hidden">
+    <div className="rounded-lg border border-surface-800 overflow-hidden">
       <button
         onClick={handleToggle}
-        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-zinc-800/50 transition-colors"
+        className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-surface-800/50 transition-colors duration-200"
         aria-expanded={expanded}
       >
-        <span className="text-zinc-500 font-mono text-xs">&#x26A1;</span>
-        <span className="text-sm font-mono text-zinc-300 truncate">{toolName}</span>
+        <span className="text-accent-500 font-mono text-xs">&#x26A1;</span>
+        <span className="text-sm font-mono text-text-primary truncate">{toolName}</span>
         {statusIndicator}
-        <span className="ml-auto text-xs text-zinc-600">
+        <span className="ml-auto text-xs text-text-tertiary">
           {expanded ? '▲' : '▼'}
         </span>
       </button>
 
       {expanded && resultText && (
-        <div className="border-t border-zinc-800">
-          <pre className="p-3 text-xs font-mono text-zinc-400 bg-zinc-900 max-h-64 overflow-y-auto whitespace-pre-wrap break-words">
+        <div className="border-t border-surface-800">
+          <pre className="p-3 text-xs font-mono text-text-secondary bg-surface-900 max-h-64 overflow-y-auto whitespace-pre-wrap break-words">
             {resultText}
           </pre>
         </div>

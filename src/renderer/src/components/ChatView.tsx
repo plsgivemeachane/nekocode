@@ -126,7 +126,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
   }
 
   return (
-    <div className={`bg-zinc-950 text-zinc-100 flex flex-col h-full ${className ?? ""}`}>
+    <div className={`bg-surface-950 text-text-primary flex flex-col h-full ${className ?? ""}`}>
       {/* No header — sidebar has the title */}
 
       <main
@@ -136,14 +136,14 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
       >
         {!sessionId ? (
           <div className="flex items-center justify-center h-full">
-            <p className="text-zinc-500">Select a session from the sidebar</p>
+            <p className="text-text-tertiary">Select a session from the sidebar</p>
           </div>
         ) : messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
-            <p className="text-zinc-500">Session ready. Type a prompt below.</p>
+            <p className="text-text-tertiary">Session ready. Type a prompt below.</p>
           </div>
         ) : (
-          <div className="space-y-4 max-w-3xl mx-auto">
+          <div className="space-y-5 max-w-3xl mx-auto">
             {messages.map((msg) => (
               <div key={msg.id}>{renderMessage(msg)}</div>
             ))}
@@ -154,7 +154,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
         {showScrollBtn && (
           <button
             onClick={() => scrollToBottom(true)}
-            className="fixed bottom-24 right-8 w-9 h-9 flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-full shadow-lg border border-zinc-700 transition-all duration-200 opacity-0 translate-y-2 animate-[fadeInUp_0.2s_ease_forwards]"
+            className="fixed bottom-24 right-8 w-9 h-9 flex items-center justify-center bg-surface-800 hover:bg-surface-700 text-text-secondary rounded-full shadow-lg shadow-surface-950/50 border border-surface-700 transition-all duration-200 opacity-0 translate-y-2 animate-slide-up"
             aria-label="Scroll to bottom"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -165,45 +165,85 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
       </main>
 
       {error && (
-        <div className="px-6 py-2 bg-red-950/50 border-t border-red-900 text-red-400 text-sm">
+        <div className="px-6 py-2 bg-error-surface border-t border-error/30 text-error text-sm">
           {error}
         </div>
       )}
 
-      <footer className="border-t border-zinc-800 px-6 py-3">
-        <form onSubmit={handleSubmit} className="flex gap-3 max-w-3xl mx-auto items-end">
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            placeholder={sessionId ? 'Type a prompt...' : 'Select a session first'}
-            disabled={!sessionId || isStreaming}
-            rows={1}
-            className="flex-1 px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed resize-none overflow-hidden"
-          />
-          <button
-            type="submit"
-            disabled={!sessionId || isStreaming || !input.trim()}
-            className="px-4 py-2 text-sm bg-zinc-100 text-zinc-900 font-medium rounded-lg hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            Send
-          </button>
-        </form>
+      <footer className="px-6 py-4 bg-surface-950">
+        <div className="max-w-3xl mx-auto">
+          <form onSubmit={handleSubmit}>
+            <div className="rounded-[1.25rem] border border-accent-500/70 bg-surface-900 p-4 shadow-[0_0_30px_oklch(0.75_0.15_195/0.06)]">
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask anything, @tag files/folders, or use / to show available commands"
+                disabled={!sessionId || isStreaming}
+                rows={1}
+                className="w-full bg-transparent text-sm text-text-primary placeholder:text-text-tertiary/50 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed resize-none overflow-hidden leading-relaxed"
+              />
+              <div className="flex items-center justify-between mt-2 pt-2">
+                <div className="flex items-center gap-0 text-xs text-text-secondary">
+                  <button type="button" className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-surface-800 transition-colors duration-150">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-accent-400">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/>
+                      <path d="M8 12h8M12 8v8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                    <span>GPT-5.4</span>
+                    <svg width="10" height="10" viewBox="0 0 10 10" className="text-text-tertiary"><path d="M3 4l2 2 2-2" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </button>
+                  <div className="w-px h-3.5 bg-surface-700/60 mx-1" />
+                  <button type="button" className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-surface-800 transition-colors duration-150">
+                    <span>High</span>
+                    <svg width="10" height="10" viewBox="0 0 10 10" className="text-text-tertiary"><path d="M3 4l2 2 2-2" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </button>
+                  <div className="w-px h-3.5 bg-surface-700/60 mx-1" />
+                  <button type="button" className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-surface-800 transition-colors duration-150">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-text-secondary">
+                      <rect x="5" y="7" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                      <circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1.5"/>
+                      <path d="M12 7V5M8 5h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                    <span>Chat</span>
+                  </button>
+                  <div className="w-px h-3.5 bg-surface-700/60 mx-1" />
+                  <button type="button" className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-surface-800 transition-colors duration-150">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-text-secondary">
+                      <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                      <path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                    <span>Full access</span>
+                  </button>
+                </div>
+                <button
+                  type="submit"
+                  disabled={!sessionId || isStreaming || !input.trim()}
+                  className="w-9 h-9 flex items-center justify-center rounded-full bg-accent-700 text-white hover:bg-accent-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-accent-700/25 hover:shadow-accent-600/35"
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M8 3v10M4 7l4-4 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </form>
+          <div className="flex items-center justify-between mt-2 px-1">
+            <span className="flex items-center gap-1.5 text-[11px] text-text-tertiary">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                <path d="M2 4h12M2 4v8a2 2 0 002 2h8a2 2 0 002-2V4M2 4l2-2h8l2 2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              Local
+            </span>
+            <span className="flex items-center gap-1 text-[11px] text-text-tertiary">
+              main
+              <svg width="10" height="10" viewBox="0 0 10 10"><path d="M3 4l2 2 2-2" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+          </div>
+        </div>
       </footer>
 
-      <style>{`
-        @keyframes fadeInUp {
-          from {
-            opacity: 0;
-            transform: translateY(0.5rem);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-      `}</style>
     </div>
   )
 }

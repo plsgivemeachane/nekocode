@@ -7,7 +7,7 @@ function AppLayout() {
   const { state } = useProjectStore()
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-surface-950">
       <TreeSidebar />
       <ChatView sessionId={state.activeSessionId} className="flex-1 min-w-0" />
     </div>
