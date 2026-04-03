@@ -1,3 +1,4 @@
+import React from 'react'
 import { SessionView } from './components/SessionView'
 
 function App() {
