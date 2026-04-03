@@ -9,6 +9,7 @@ import {
 } from 'react'
 import type {
   ProjectInfo,
+  SessionInfoDisplay,
   SessionStreamEvent,
 } from '../../../shared/ipc-types'
 
@@ -29,6 +30,7 @@ type ProjectAction =
   | { type: 'ADD_PROJECT'; project: ProjectInfo }
   | { type: 'REMOVE_PROJECT'; projectId: string }
   | { type: 'SET_SESSIONS'; projectId: string; sessions: ProjectInfo['sessions'] }
+  | { type: 'ADD_SESSION_TO_PROJECT'; projectPath: string; session: SessionInfoDisplay }
   | { type: 'SET_ACTIVE_SESSION'; sessionId: string; projectPath: string }
   | { type: 'UPDATE_SESSION_STATUS'; sessionId: string; status: SessionStatus }
   | { type: 'CLEAR_ACTIVE_SESSION' }
@@ -73,6 +75,16 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
         projects: state.projects.map(p =>
           p.id === action.projectId
             ? { ...p, sessions: action.sessions }
+            : p,
+        ),
+      }
+
+    case 'ADD_SESSION_TO_PROJECT':
+      return {
+        ...state,
+        projects: state.projects.map(p =>
+          p.path === action.projectPath
+            ? { ...p, sessions: [...p.sessions, action.session] }
             : p,
         ),
       }
@@ -210,6 +222,16 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       try {
         const result = await window.nekocode.session.create(projectPath)
         dispatch({ type: 'SET_ACTIVE_SESSION', sessionId: result.sessionId, projectPath })
+        dispatch({
+          type: 'ADD_SESSION_TO_PROJECT',
+          projectPath,
+          session: {
+            id: result.sessionId,
+            firstMessage: 'New session',
+            created: new Date().toISOString(),
+            messageCount: 0,
+          },
+        })
       } catch (err) {
         console.error('[project-store] createSession failed:', err)
       }

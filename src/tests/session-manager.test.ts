@@ -212,4 +212,47 @@ describe('PiSessionManager', () => {
     expect(events[0].event).toEqual({ type: 'text_delta', delta: 'before tool' })
     expect(events[1].event).toEqual({ type: 'tool_call', toolName: 'read', args: { path: 'file.txt' } })
   })
+
+  it('should support concurrent sessions with independent event streams', async () => {
+    const idA = await manager.create('/tmp/project-a')
+    const idB = await manager.create('/tmp/project-b')
+
+    expect(manager.sessionCount).toBe(2)
+    expect(idA).not.toBe(idB)
+
+    // Prompt both sessions concurrently
+    const promiseA = manager.prompt(idA, 'prompt for A')
+    const promiseB = manager.prompt(idB, 'prompt for B')
+
+    // Both prompts should have been forwarded to their respective SDK sessions
+    expect(mockSession().prompt).toHaveBeenCalledWith('prompt for B', { streamingBehavior: 'steer' })
+    // Session A was created first but session B is the "last created mock"
+    // Verify session count is still 2
+    expect(manager.sessionCount).toBe(2)
+
+    await Promise.all([promiseA, promiseB])
+
+    // Emit events to session B (the current lastCreatedMockSession)
+    mockSession().emit({
+      type: 'message_update',
+      message: {},
+      assistantMessageEvent: { type: 'text_delta', delta: 'response B', contentIndex: 0, partial: {} },
+    })
+    vi.advanceTimersByTime(16)
+
+    // The event from session B should arrive with session B's ID
+    expect(events.length).toBeGreaterThanOrEqual(1)
+    const bEvents = events.filter(e => e.sessionId === idB)
+    expect(bEvents).toHaveLength(1)
+    expect(bEvents[0].event).toEqual({ type: 'text_delta', delta: 'response B' })
+
+    // Session A should have no events (we only emitted to session B)
+    const aEvents = events.filter(e => e.sessionId === idA)
+    expect(aEvents).toHaveLength(0)
+
+    // Both sessions should still be alive and independently operable
+    manager.abort(idA)
+    manager.abort(idB)
+    expect(manager.sessionCount).toBe(2)
+  })
 })
