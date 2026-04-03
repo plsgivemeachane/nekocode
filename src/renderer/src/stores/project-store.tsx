@@ -168,13 +168,18 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         if (projects.length > 0) {
           dispatch({ type: 'SET_PROJECTS', projects })
 
-          // Restore last active session
+          // Restore last active session by reconnecting the Pi session
           const { sessionId, projectPath } = await window.nekocode.workspace.getActive()
           if (sessionId && projectPath) {
             // Verify the session still exists in the restored projects
             const project = projects.find(p => p.path === projectPath)
             if (project && project.sessions.some(s => s.id === sessionId)) {
-              dispatch({ type: 'SET_ACTIVE_SESSION', sessionId, projectPath })
+              try {
+                await window.nekocode.session.reconnect(sessionId, projectPath)
+                dispatch({ type: 'RECONNECT_SESSION', sessionId, projectPath })
+              } catch (err) {
+                console.error('[project-store] failed to reconnect restored session:', err)
+              }
             }
           }
         }
