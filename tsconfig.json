@@ -10,6 +10,7 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "types": ["vitest/globals"],
     "noEmit": true,
     "baseUrl": ".",
     "paths": {

@@ -7,9 +7,11 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
+    "lint": "eslint --ext .ts,.tsx ./src",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@mariozechner/pi-coding-agent": "^0.64.0",
@@ -20,16 +22,21 @@
     "rehype-highlight": "^7.0.2"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitest/coverage-v8": "^4.1.2",
     "electron": "^34.0.0",
     "electron-vite": "^3.0.0",
+    "eslint": "^10.2.0",
+    "eslint-plugin-react": "^7.37.5",
+    "globals": "^17.4.0",
     "jsdom": "^29.0.1",
     "react-devtools": "^7.0.1",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.0",
+    "typescript-eslint": "^8.58.0",
     "vitest": "^4.1.2"
   }
 }
