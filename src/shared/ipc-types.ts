@@ -62,8 +62,8 @@ export interface ChatMessageIPC {
  */
 export type SessionStreamEvent =
   | { type: 'text_delta'; delta: string }
-  | { type: 'tool_call'; toolName: string; args: unknown }
-  | { type: 'tool_result'; toolName: string; result: unknown; isError: boolean }
+  | { type: 'tool_call'; toolCallId: string; toolName: string; args: unknown }
+  | { type: 'tool_result'; toolCallId: string; toolName: string; result: unknown; isError: boolean }
   | { type: 'error'; message: string }
   | { type: 'done' }
 

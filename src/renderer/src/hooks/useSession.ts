@@ -141,34 +141,43 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
           break
 
         case 'tool_call':
-          setMessages(prev => [
-            ...prev,
-            {
-              role: 'assistant',
-              type: 'tool_call',
+          console.log(`[useSession] tool_call event: name=${event.toolName}, id=${event.toolCallId}`)
+          setMessages(prev => {
+            const newMsg = {
+              role: 'assistant' as const,
+              type: 'tool_call' as const,
               toolName: event.toolName,
-              toolId: generateId(),
+              toolId: event.toolCallId,
               args: event.args,
-              status: 'running',
+              status: 'running' as const,
               id: generateId(),
-            },
-          ])
+            }
+            console.log(`[useSession] adding tool_call message, prev length=${prev.length}, new length=${prev.length + 1}`)
+            return [...prev, newMsg]
+          })
           break
 
         case 'tool_result': {
+          console.log(`[useSession] tool_result event: name=${event.toolName}, id=${event.toolCallId}, isError=${event.isError}`)
           setMessages(prev => {
             const msgs = [...prev]
+            let matched = false
             for (let i = msgs.length - 1; i >= 0; i--) {
               const msg = msgs[i]
               if (
                 msg.role === 'assistant' &&
                 msg.type === 'tool_call' &&
-                msg.toolName === event.toolName &&
+                msg.toolId === event.toolCallId &&
                 msg.status === 'running'
               ) {
                 msgs[i] = { ...msg, status: 'done', result: event.result, isError: event.isError }
+                matched = true
+                console.log(`[useSession] matched tool_result to msg at index ${i}`)
                 break
               }
+            }
+            if (!matched) {
+              console.warn(`[useSession] tool_result NO MATCH: id=${event.toolCallId}, name=${event.toolName}. Running tool_calls:`, msgs.filter(m => m.role === 'assistant' && m.type === 'tool_call' && m.status === 'running').map(m => ({ id: m.toolId, name: m.toolName })))
             }
             return msgs
           })

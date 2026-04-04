@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useCallback } from 'react'
 import { useSession } from '../hooks/useSession'
 import { UserMessage } from './chat/UserMessage'
 import { AssistantMessage } from './chat/AssistantMessage'
-import { ToolCallSection } from './chat/ToolCallSection'
+import { ToolCallGroup } from './chat/ToolCallSection'
 import type { ChatMessage } from '../types/chat'
 
 const SCROLL_THRESHOLD_PX = 40
@@ -94,6 +94,29 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
 
   const lastMessageId = messages.length > 0 ? messages[messages.length - 1].id : null
 
+  // Group consecutive tool_call messages into clusters
+  type ToolCallMsg = Extract<ChatMessage, { role: 'assistant'; type: 'tool_call' }>
+  const isToolCall = (msg: ChatMessage): msg is ToolCallMsg => msg.role === 'assistant' && msg.type === 'tool_call'
+  const messageGroups: Array<{ key: string; type: 'single'; msg: ChatMessage } | { key: string; type: 'tool-group'; msgs: ToolCallMsg[] }> = []
+  let i = 0
+  while (i < messages.length) {
+    const msg = messages[i]
+    if (isToolCall(msg)) {
+      const toolMsgs: ToolCallMsg[] = []
+      let current = messages[i]
+      while (i < messages.length && isToolCall(current)) {
+        toolMsgs.push(current)
+        i++
+        current = messages[i]
+      }
+      messageGroups.push({ key: `tg-${toolMsgs[0].id}`, type: 'tool-group', msgs: toolMsgs })
+    } else {
+      messageGroups.push({ key: msg.id, type: 'single', msg })
+      i++
+    }
+  }
+  console.log(`[ChatView] messageGroups: ${messageGroups.length} groups (${messageGroups.filter(g => g.type === 'tool-group').length} tool-groups, ${messageGroups.filter(g => g.type === 'single' && g.msg.type === 'tool_call').length} orphan tool-calls), total messages: ${messages.length}`)
+
   const renderMessage = (msg: ChatMessage) => {
     const isLast = msg.id === lastMessageId
 
@@ -109,21 +132,13 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
             />
           )
         }
-        if (msg.type === 'tool_call') {
-          return (
-            <ToolCallSection
-              toolName={msg.toolName}
-              status={msg.status}
-              result={msg.result}
-              isError={msg.isError}
-            />
-          )
-        }
         return null
       default:
         return null
     }
   }
+
+
 
   return (
     <div className={`bg-surface-950 text-text-primary flex flex-col h-full ${className ?? ""}`}>
@@ -144,9 +159,23 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
           </div>
         ) : (
           <div className="space-y-5 max-w-3xl mx-auto">
-            {messages.map((msg) => (
-              <div key={msg.id}>{renderMessage(msg)}</div>
-            ))}
+            {messageGroups.map((group) => {
+              if (group.type === 'tool-group') {
+                return (
+                  <ToolCallGroup
+                    key={group.key}
+                    toolCalls={group.msgs.map(m => ({
+                      id: m.id,
+                      toolName: m.toolName,
+                      status: m.status,
+                      isError: m.isError,
+                      args: m.args,
+                    }))}
+                  />
+                )
+              }
+              return <div key={group.key}>{renderMessage(group.msg)}</div>
+            })}
           </div>
         )}
 

@@ -66,6 +66,15 @@ export class PiSessionManager {
   async reconnect(sessionId: string, cwd: string): Promise<ChatMessageIPC[]> {
     console.log(`[session] reconnect ${sessionId} cwd=${cwd}`)
 
+    // If the session is still in memory (never disposed), return its existing messages
+    // immediately, but kick off a background disk refresh as a failsafe.
+    const existing = this.sessions.get(sessionId)
+    if (existing) {
+      console.log(`[session] reconnect ${sessionId} — already in memory`)
+      this.tryRefreshFromDisk(sessionId, cwd).catch(() => {})
+      return existing.messages
+    }
+
     // Discover the session file for this session ID within the project's session dir
     const infos = await SdkSessionManager.list(cwd)
     const match = infos.find(info => info.id === sessionId)
@@ -92,6 +101,37 @@ export class PiSessionManager {
 
     this.sessions.set(stableId, managed)
     return managed.messages
+  }
+
+  /**
+   * Attempt to refresh an in-memory session from disk in the background.
+   * If the session has been persisted (has an assistant message), reload its
+   * messages from disk. Only updates if disk has more messages than memory,
+   * and never overwrites while the session is actively streaming.
+   */
+  private async tryRefreshFromDisk(sessionId: string, cwd: string): Promise<void> {
+    try {
+      const managed = this.sessions.get(sessionId)
+      if (!managed) return
+
+      // Don't refresh while streaming — in-memory state is authoritative then
+      if (managed.currentAssistantId) return
+
+      const infos = await SdkSessionManager.list(cwd)
+      const match = infos.find(info => info.id === sessionId)
+      if (!match?.path) return // Not on disk yet (empty session) — that's fine
+
+      const sdkSessionMgr = SdkSessionManager.open(match.path)
+      const diskMessages = this.extractHistoryFromSdkMessages(sdkSessionMgr.messages)
+
+      // Only update if disk has strictly more messages than memory
+      if (diskMessages.length > managed.messages.length) {
+        console.log(`[session] background refresh ${sessionId} — updated ${managed.messages.length} -> ${diskMessages.length} messages`)
+        managed.messages = diskMessages
+      }
+    } catch {
+      // Silently ignore — this is a best-effort background refresh
+    }
   }
 
   /** Send a user prompt to an active session. */
@@ -179,14 +219,24 @@ export class PiSessionManager {
     sdkMessages: AgentSession['messages'],
   ): ChatMessageIPC[] {
     const result: ChatMessageIPC[] = []
+    // First pass: collect toolResult messages keyed by toolCallId
+    const toolResults = new Map<string, { result: unknown; isError: boolean }>()
     for (const msg of sdkMessages) {
-      // Only process messages with user or assistant role
+      if ((msg as any).role === 'toolResult') {
+        const tr = msg as any
+        const content = Array.isArray(tr.content)
+          ? tr.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('')
+          : typeof tr.content === 'string' ? tr.content : ''
+        toolResults.set(tr.toolCallId, { result: content, isError: !!tr.isError })
+      }
+    }
+
+    for (const msg of sdkMessages) {
       const role = msg.role
       if (role !== 'user' && role !== 'assistant') continue
 
       let content = ''
       if (role === 'user') {
-        // UserMessage.content: string | (TextContent | ImageContent)[]
         const userContent = (msg as any).content
         if (typeof userContent === 'string') {
           content = userContent
@@ -197,7 +247,6 @@ export class PiSessionManager {
             .join('')
         }
       } else {
-        // AssistantMessage.content: (TextContent | ThinkingContent | ToolCall)[]
         const assistantContent = (msg as any).content
         if (Array.isArray(assistantContent)) {
           content = assistantContent
@@ -212,13 +261,18 @@ export class PiSessionManager {
       if (role === 'assistant') {
         const assistantContent = (msg as any).content
         if (Array.isArray(assistantContent)) {
-          const tcBlocks = assistantContent.filter((block: any) => block.type === 'toolcall')
+          const tcBlocks = assistantContent.filter((block: any) => block.type === 'toolCall')
           if (tcBlocks.length > 0) {
-            toolCalls = tcBlocks.map((tc: any) => ({
-              id: tc.id ?? crypto.randomUUID(),
-              name: tc.function?.name ?? tc.name ?? 'unknown',
-              args: tc.function?.arguments ? JSON.parse(tc.function.arguments) : tc.args,
-            }))
+            toolCalls = tcBlocks.map((tc: any) => {
+              const tcResult = toolResults.get(tc.id)
+              return {
+                id: tc.id ?? crypto.randomUUID(),
+                name: tc.name ?? 'unknown',
+                args: tc.arguments,
+                result: tcResult?.result,
+                isError: tcResult?.isError,
+              }
+            })
           }
         }
       }
@@ -244,7 +298,9 @@ export class PiSessionManager {
     batcher: StreamBatcher,
     managed: ManagedSession,
   ): void {
+    console.log(`[SessionManager] handleAgentEvent: type=${event.type}`)
     const emit = (streamEvent: SessionStreamEvent) => {
+      console.log(`[SessionManager] emit: ${streamEvent.type}`)
       this.onEvent(sessionId, streamEvent)
     }
 
@@ -294,7 +350,8 @@ export class PiSessionManager {
       }
       case 'tool_execution_start':
         batcher.flush()
-        emit({ type: 'tool_call', toolName: event.toolName, args: event.args })
+        console.log(`[SessionManager] tool_execution_start: name=${event.toolName}, id=${event.toolCallId}, args=`, JSON.stringify(event.args)?.slice(0, 200))
+        emit({ type: 'tool_call', toolCallId: event.toolCallId ?? managed.currentToolCallId ?? crypto.randomUUID(), toolName: event.toolName, args: event.args })
         // Finalize any in-progress assistant text before attaching tool calls
         this.finalizeAssistantMessage(managed)
         managed.currentToolCallId = event.toolCallId ?? crypto.randomUUID()
@@ -324,8 +381,10 @@ export class PiSessionManager {
         break
       case 'tool_execution_end':
         batcher.flush()
+        console.log(`[SessionManager] tool_execution_end: name=${event.toolName}, id=${event.toolCallId}, isError=${event.isError}, result=`, JSON.stringify(event.result)?.slice(0, 200))
         emit({
           type: 'tool_result',
+          toolCallId: event.toolCallId ?? managed.currentToolCallId ?? '',
           toolName: event.toolName,
           result: event.result,
           isError: event.isError,
