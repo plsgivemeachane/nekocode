@@ -1,4 +1,7 @@
 import { SessionStreamEvent } from '../shared/ipc-types'
+import { createLogger } from './logger'
+
+const logger = createLogger('stream-batcher')
 
 /**
  * Batches text_delta events into a single flushed event per 16ms window.
@@ -38,6 +41,7 @@ export class StreamBatcher {
     } else {
       // Non-text events flush any pending text first, then pass through
       this.flush()
+      logger.debug(`passthrough: ${event.type}`)
       this.onFlush(event)
     }
   }
@@ -51,12 +55,14 @@ export class StreamBatcher {
     if (this.pendingText.length > 0) {
       const text = this.pendingText
       this.pendingText = ''
+      logger.debug(`flush: ${text.length} chars`)
       this.onFlush({ type: 'text_delta', delta: text })
     }
   }
 
   /** Dispose the batcher, flushing any remaining text and clearing timers. */
   dispose(): void {
+    logger.debug('dispose')
     this.flush()
   }
 }

@@ -52,18 +52,22 @@ function performShutdown(): void {
 }
 
 app.whenReady().then(async () => {
+  logger.info('App ready, loading workspace')
   await projectManager.loadWorkspace()
+  logger.info(`Workspace loaded, ${projectManager.listProjects().length} project(s)`)
   registerIpcHandlers(sessionManager, projectManager)
   createWindow()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
+      logger.info('activate: creating new window')
       createWindow()
     }
   })
 })
 
 app.on('window-all-closed', () => {
+  logger.info('window-all-closed')
   performShutdown()
   if (process.platform !== 'darwin') {
     app.quit()

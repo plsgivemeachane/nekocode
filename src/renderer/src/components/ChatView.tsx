@@ -59,6 +59,20 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
     }
   }, [messages.length, scrollToBottom])
 
+  // Log session changes
+  useEffect(() => {
+    if (sessionId) {
+      logger.info(`session changed: ${sessionId.slice(0, 8)}...`)
+    }
+  }, [sessionId])
+
+  // Log errors
+  useEffect(() => {
+    if (error) {
+      logger.warn(`error: ${error}`)
+    }
+  }, [error])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const text = input.trim()
@@ -68,6 +82,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
     }
+    logger.info(`submit: ${text.slice(0, 80)}${text.length > 80 ? '...' : ''}`)
     await sendPrompt(text)
   }
 

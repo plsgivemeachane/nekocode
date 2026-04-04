@@ -2,6 +2,9 @@ import React from 'react'
 import { ProjectProvider, useProjectStore } from './stores/project-store'
 import { TreeSidebar } from './components/TreeSidebar'
 import { ChatView } from './components/ChatView'
+import { createLogger } from './logger'
+
+const logger = createLogger('App')
 
 function AppLayout() {
   const { state } = useProjectStore()
@@ -15,6 +18,7 @@ function AppLayout() {
 }
 
 function App() {
+  logger.info('App mounted')
   return (
     <ProjectProvider>
       <AppLayout />

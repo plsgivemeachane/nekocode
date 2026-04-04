@@ -51,6 +51,7 @@ const INITIAL_STATE: ProjectState = {
 }
 
 function reducer(state: ProjectState, action: ProjectAction): ProjectState {
+  logger.debug(`action: ${action.type}`)
   switch (action.type) {
     case 'SET_PROJECTS':
       return {
@@ -166,7 +167,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
     ;(async () => {
       try {
+        logger.info('initializing workspace')
         const projects = await window.nekocode.project.list()
+        logger.info(`workspace: ${projects.length} project(s) loaded`)
         if (projects.length > 0) {
           dispatch({ type: 'SET_PROJECTS', projects })
 
@@ -255,6 +258,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const addProject = useCallback(async (path: string) => {
     try {
       const project = await window.nekocode.project.add(path)
+      logger.info(`addProject OK: ${path}`)
       dispatch({ type: 'ADD_PROJECT', project })
     } catch (err) {
       logger.error('addProject failed:', err)
@@ -264,6 +268,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const removeProject = useCallback(async (projectId: string) => {
     try {
       await window.nekocode.project.remove(projectId)
+      logger.info(`removeProject OK: ${projectId}`)
       dispatch({ type: 'REMOVE_PROJECT', projectId })
     } catch (err) {
       logger.error('removeProject failed:', err)
@@ -281,6 +286,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     async (sessionId: string, projectPath: string) => {
       try {
         await window.nekocode.session.reconnect(sessionId, projectPath)
+        logger.info(`reconnectSession OK: ${sessionId.slice(0, 8)}...`)
         dispatch({ type: 'RECONNECT_SESSION', sessionId, projectPath })
       } catch (err) {
           logger.error('reconnectSession failed:', err)
@@ -293,6 +299,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     async (projectPath: string) => {
       try {
         const result = await window.nekocode.session.create(projectPath)
+        logger.info(`createSession OK: ${result.sessionId.slice(0, 8)}... cwd=${projectPath}`)
         dispatch({ type: 'SET_ACTIVE_SESSION', sessionId: result.sessionId, projectPath })
         dispatch({
           type: 'ADD_SESSION_TO_PROJECT',
@@ -314,6 +321,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const refreshSessions = useCallback(async (projectId: string) => {
     try {
       const updated = await window.nekocode.project.sessions(projectId)
+      logger.info(`refreshSessions OK: ${projectId} sessions=${updated.sessions.length}`)
       dispatch({ type: 'SET_SESSIONS', projectId, sessions: updated.sessions })
     } catch (err) {
       logger.error('refreshSessions failed:', err)

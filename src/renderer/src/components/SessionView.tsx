@@ -1,5 +1,8 @@
 import React, { useRef, useEffect } from 'react'
 import { useSession } from '../hooks/useSession'
+import { createLogger } from '../logger'
+
+const logger = createLogger('SessionView')
 
 interface SessionViewProps {
   sessionId: string
@@ -29,10 +32,12 @@ export function SessionView({ sessionId, cwd, onCreateSession, onDisposeSession 
     const text = input.trim()
     if (!text || isStreaming) return
     setInput('')
+    logger.info(`submit: ${text.slice(0, 80)}`)
     await sendPrompt(text)
   }
 
   const handleNewSession = async () => {
+    logger.info('new session requested')
     if (sessionId) {
       await onDisposeSession()
     }

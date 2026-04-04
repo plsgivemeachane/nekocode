@@ -58,6 +58,7 @@ export function TreeSidebar() {
   const handleAddProject = async () => {
     const folder = await window.nekocode.dialog.openFolder()
     if (folder) {
+      logger.info(`add project: ${folder}`)
       await addProject(folder)
     }
   }

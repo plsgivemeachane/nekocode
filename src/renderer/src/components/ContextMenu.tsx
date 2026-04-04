@@ -1,5 +1,8 @@
 import React, { useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
+import { createLogger } from '../logger'
+
+const logger = createLogger('ContextMenu')
 
 export interface ContextMenuItem {
   type?: undefined
@@ -27,6 +30,7 @@ interface ContextMenuProps {
 export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
   const adjustedPos = useRef({ x, y })
+  logger.debug(`open: ${items.length} items at (${x}, ${y})`)
 
   // Adjust position to stay within viewport
   useEffect(() => {
@@ -78,6 +82,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
 
   const handleItemClick = useCallback((item: ContextMenuItem) => {
     if (item.disabled) return
+    logger.debug(`click: ${item.label}`)
     item.onClick()
     onClose()
   }, [onClose])

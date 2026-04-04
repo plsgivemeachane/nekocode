@@ -84,6 +84,7 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
     // Save draft for previous session
     if (prev !== null) {
       drafts.current.set(prev, input)
+      logger.debug(`draft saved for ${prev.slice(0, 8)}...`)
     }
 
     // Reset state for new session
@@ -93,6 +94,9 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
 
     // Restore draft for new session
     const draft = sessionId !== null ? drafts.current.get(sessionId) : null
+    if (draft) {
+      logger.debug(`draft restored for ${sessionId!.slice(0, 8)}...`)
+    }
     setInput(draft ?? '')
 
     prevSessionRef.current = sessionId
@@ -104,9 +108,11 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
   useEffect(() => {
     if (!sessionId) return
     let cancelled = false
+    logger.debug(`loading history for ${sessionId.slice(0, 8)}...`)
     window.nekocode.session.loadHistory(sessionId).then((ipcMessages) => {
       if (cancelled) return
       if (ipcMessages.length > 0) {
+        logger.info(`history loaded: ${ipcMessages.length} messages for ${sessionId.slice(0, 8)}...`)
         setMessages(ipcToChatMessages(ipcMessages))
       }
     }).catch((err) => {
@@ -120,6 +126,7 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
   // Subscribe to global session events, filter by our sessionId
   useEffect(() => {
     if (!sessionId) return
+    logger.debug(`subscribing to events for ${sessionId.slice(0, 8)}...`)
 
     const unsub = window.nekocode.session.onEvent((payload) => {
       if (payload.sessionId !== sessionId) return
@@ -198,6 +205,7 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
     })
 
     return () => {
+      logger.debug(`unsubscribing from events for ${sessionId.slice(0, 8)}...`)
       unsub()
     }
   }, [sessionId])
@@ -208,9 +216,11 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
       const userMsg: ChatMessage = { role: 'user', content: text, id: generateId() }
       setMessages(prev => [...prev, userMsg])
       setError(null)
+      logger.info(`sendPrompt: ${text.slice(0, 80)}${text.length > 80 ? '...' : ''}`)
       try {
         await window.nekocode.session.prompt(sessionId, text)
       } catch (err) {
+        logger.error(`sendPrompt failed: ${err}`)
         setError(`Prompt failed: ${err}`)
       }
     },
