@@ -1,16 +1,6 @@
 /// <reference types="vite/client" />
 
-interface ViteImportMetaEnv {
-  DEV?: boolean
-  PROD?: boolean
-  MODE?: string
-}
-
-interface ViteImportMeta extends ImportMeta {
-  env: ViteImportMetaEnv
-}
-
-const isDev = typeof import.meta !== "undefined" && (import.meta as ViteImportMeta).env?.DEV !== false
+const isDev = import.meta.env.DEV
 
 export interface Logger {
   error(message: string, ...meta: unknown[]): void
