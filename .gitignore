@@ -31,3 +31,5 @@ out
 .pi
 
 .firecrawl
+package-lock.json
+bun.lock

@@ -3,6 +3,9 @@ import { useSession } from '../hooks/useSession'
 import { UserMessage } from './chat/UserMessage'
 import { AssistantMessage } from './chat/AssistantMessage'
 import { ToolCallGroup } from './chat/ToolCallSection'
+import { createLogger } from '../logger'
+
+const logger = createLogger('ChatView')
 import type { ChatMessage } from '../types/chat'
 
 const SCROLL_THRESHOLD_PX = 40
@@ -115,7 +118,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
       i++
     }
   }
-  console.log(`[ChatView] messageGroups: ${messageGroups.length} groups (${messageGroups.filter(g => g.type === 'tool-group').length} tool-groups, ${messageGroups.filter(g => g.type === 'single' && g.msg.role === 'assistant' && g.msg.type === 'tool_call').length} orphan tool-calls), total messages: ${messages.length}`)
+  logger.debug(`messageGroups: ${messageGroups.length} groups (${messageGroups.filter(g => g.type === 'tool-group').length} tool-groups, ${messageGroups.filter(g => g.type === 'single' && g.msg.role === 'assistant' && g.msg.type === 'tool_call').length} orphan tool-calls), total messages: ${messages.length}`)
 
   const renderMessage = (msg: ChatMessage) => {
     const isLast = msg.id === lastMessageId

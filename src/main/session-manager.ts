@@ -8,6 +8,9 @@ import {
 import type { TextContent, ToolCall, Message } from '@mariozechner/pi-ai'
 import { StreamBatcher } from './stream-batcher'
 import type { SessionStreamEvent, ChatMessageIPC } from '../shared/ipc-types'
+import { createLogger } from './logger'
+
+const logger = createLogger('session-manager')
 
 /** Internal representation of a managed session */
 interface ManagedSession {
@@ -52,11 +55,11 @@ export class PiSessionManager {
   async create(cwd: string): Promise<string> {
     const { session } = await createAgentSession({ cwd })
     const sessionId = session.sessionId
-    console.log(`[session] create ${sessionId} cwd=${cwd}`)
+    logger.info(`Create ${sessionId} cwd=${cwd}`)
 
     const managed = this.wrapSession(session, sessionId)
     this.sessions.set(sessionId, managed)
-    console.log(`[session] created ${sessionId}`)
+    logger.info(`Created ${sessionId}`)
     return sessionId
   }
 
@@ -66,13 +69,13 @@ export class PiSessionManager {
    * Populates message history from the SDK's persisted messages.
    */
   async reconnect(sessionId: string, cwd: string): Promise<ChatMessageIPC[]> {
-    console.log(`[session] reconnect ${sessionId} cwd=${cwd}`)
+    logger.info(`Reconnect ${sessionId} cwd=${cwd}`)
 
     // If the session is still in memory (never disposed), return its existing messages
     // immediately, but kick off a background disk refresh as a failsafe.
     const existing = this.sessions.get(sessionId)
     if (existing) {
-      console.log(`[session] reconnect ${sessionId} — already in memory`)
+      logger.info(`Reconnect ${sessionId} — already in memory`)
       this.tryRefreshFromDisk(sessionId, cwd).catch(() => {})
       return existing.messages
     }
@@ -94,7 +97,7 @@ export class PiSessionManager {
     })
 
     const stableId = session.sessionId
-    console.log(`[session] reconnected ${stableId} (requested: ${sessionId})`)
+    logger.info(`Reconnected ${stableId} (requested: ${sessionId})`)
 
     const managed = this.wrapSession(session, stableId)
 
@@ -128,7 +131,7 @@ export class PiSessionManager {
 
       // Only update if disk has strictly more messages than memory
       if (diskMessages.length > managed.messages.length) {
-        console.log(`[session] background refresh ${sessionId} — updated ${managed.messages.length} -> ${diskMessages.length} messages`)
+        logger.info(`Background refresh ${sessionId} — updated ${managed.messages.length} -> ${diskMessages.length} messages`)
         managed.messages = diskMessages
       }
     } catch {
@@ -146,7 +149,7 @@ export class PiSessionManager {
   abort(sessionId: string): void {
     const managed = this.getManaged(sessionId)
     managed.session.abort()
-    console.log(`[session] abort ${sessionId}`)
+    logger.info(`Abort ${sessionId}`)
   }
 
   /** Get the accumulated message history for a session. */
@@ -163,7 +166,7 @@ export class PiSessionManager {
     managed.unsubscribe()
     managed.session.dispose()
     this.sessions.delete(sessionId)
-    console.log(`[session] dispose ${sessionId}`)
+    logger.info(`Dispose ${sessionId}`)
   }
 
   /** Dispose all active sessions. Called on app quit. */
@@ -303,9 +306,9 @@ export class PiSessionManager {
     batcher: StreamBatcher,
     managed: ManagedSession,
   ): void {
-    console.log(`[SessionManager] handleAgentEvent: type=${event.type}`)
+    logger.debug(`handleAgentEvent: type=${event.type}`)
     const emit = (streamEvent: SessionStreamEvent) => {
-      console.log(`[SessionManager] emit: ${streamEvent.type}`)
+      logger.debug(`emit: ${streamEvent.type}`)
       this.onEvent(sessionId, streamEvent)
     }
 
@@ -355,7 +358,7 @@ export class PiSessionManager {
       }
       case 'tool_execution_start': {
         batcher.flush()
-        console.log(`[SessionManager] tool_execution_start: name=${event.toolName}, id=${event.toolCallId}, args=`, JSON.stringify(event.args)?.slice(0, 200))
+        logger.debug(`tool_execution_start: name=${event.toolName}, id=${event.toolCallId}, args=${JSON.stringify(event.args)?.slice(0, 200)}`)
         emit({ type: 'tool_call', toolCallId: event.toolCallId ?? managed.currentToolCallId ?? crypto.randomUUID(), toolName: event.toolName, args: event.args })
         // Finalize any in-progress assistant text before attaching tool calls
         this.finalizeAssistantMessage(managed)
@@ -387,7 +390,7 @@ export class PiSessionManager {
       }
       case 'tool_execution_end':
         batcher.flush()
-        console.log(`[SessionManager] tool_execution_end: name=${event.toolName}, id=${event.toolCallId}, isError=${event.isError}, result=`, JSON.stringify(event.result)?.slice(0, 200))
+        logger.debug(`tool_execution_end: name=${event.toolName}, id=${event.toolCallId}, isError=${event.isError}, result=${JSON.stringify(event.result)?.slice(0, 200)}`)
         emit({
           type: 'tool_result',
           toolCallId: event.toolCallId ?? managed.currentToolCallId ?? '',

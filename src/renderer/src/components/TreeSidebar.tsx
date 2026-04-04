@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useProjectStore, type SessionStatus } from '../stores/project-store'
 import { ContextMenu, type ContextMenuEntry } from './ContextMenu'
+import { createLogger } from '../logger'
+
+const logger = createLogger('TreeSidebar')
 
 function folderName(path: string): string {
   return path.replace(/\\/g, '/').split('/').pop() ?? path
@@ -116,7 +119,7 @@ export function TreeSidebar() {
           icon: <svg width="13" height="13" viewBox="0 0 12 12" fill="none"><path d="M2 3.5h8M4.5 3.5V2.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v1M9 3.5v6a.5.5 0 0 1-.5.5h-5a.5.5 0 0 1-.5-.5v-6" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" /></svg>,
           onClick: () => {
             // Session deletion not yet implemented in backend
-            console.warn('Session deletion not yet implemented')
+            logger.warn('Session deletion not yet implemented')
           },
           danger: true,
         },

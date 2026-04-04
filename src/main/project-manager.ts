@@ -3,6 +3,9 @@ import { SessionManager } from '@mariozechner/pi-coding-agent'
 import { join } from 'path'
 import { readFile, writeFile, mkdir } from 'fs/promises'
 import type { ProjectInfo, SessionInfoDisplay } from '../shared/ipc-types'
+import { createLogger } from './logger'
+
+const logger = createLogger('project')
 
 /** Internal representation of a tracked project */
 interface Project {
@@ -53,14 +56,14 @@ export class ProjectManager {
         const key = path.toLowerCase()
         const project: Project = { id, path, sessions }
         this.projects.set(key, project)
-        console.log(`[project] restored ${id} path=${path} sessions=${sessions.length}`)
+        logger.info(`Restored ${id} path=${path} sessions=${sessions.length}`)
       }
 
-      console.log(`[project] workspace loaded: ${this.projects.size} project(s)`)
+      logger.info(`Workspace loaded: ${this.projects.size} project(s)`)
     } catch (err) {
       // File doesn't exist yet or is corrupt — start fresh
       if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.error('[project] failed to load workspace:', err)
+        logger.error('Failed to load workspace', err)
       }
     }
   }
@@ -89,7 +92,7 @@ export class ProjectManager {
     const key = path.toLowerCase()
     const existing = this.projects.get(key)
     if (existing) {
-      console.log(`[project] already tracked: ${existing.id} path=${path}`)
+      logger.info(`Already tracked: ${existing.id} path=${path}`)
       return this.toProjectInfo(existing)
     }
 
@@ -98,7 +101,7 @@ export class ProjectManager {
 
     const project: Project = { id, path, sessions }
     this.projects.set(key, project)
-    console.log(`[project] added ${id} path=${path} sessions=${sessions.length}`)
+    logger.info(`Added ${id} path=${path} sessions=${sessions.length}`)
 
     await this.saveWorkspace()
     return this.toProjectInfo(project)
@@ -109,7 +112,7 @@ export class ProjectManager {
     for (const [key, project] of this.projects) {
       if (project.id === id) {
         this.projects.delete(key)
-        console.log(`[project] removed ${id}`)
+    logger.info(`Removed ${id}`)
 
         // Clear active session if it belonged to this project
         if (this.activeProjectPath === project.path) {
@@ -121,7 +124,7 @@ export class ProjectManager {
         return true
       }
     }
-    console.log(`[project] remove failed: ${id} not found`)
+    logger.warn(`Remove failed: ${id} not found`)
     return false
   }
 
@@ -136,7 +139,7 @@ export class ProjectManager {
     if (!project) return null
 
     project.sessions = await this.discoverSessions(project.path)
-    console.log(`[project] refreshed ${projectId} sessions=${project.sessions.length}`)
+    logger.info(`Refreshed ${projectId} sessions=${project.sessions.length}`)
     return this.toProjectInfo(project)
   }
 
@@ -154,7 +157,7 @@ export class ProjectManager {
         messageCount: s.messageCount,
       }))
     } catch (err) {
-      console.error(`[project] session discovery failed for ${path}:`, err)
+      logger.error(`Session discovery failed for ${path}`, err)
       return []
     }
   }
@@ -170,7 +173,7 @@ export class ProjectManager {
       await mkdir(join(app.getPath('userData')), { recursive: true })
       await writeFile(this.workspacePath, JSON.stringify(state, null, 2), 'utf-8')
     } catch (err) {
-      console.error('[project] failed to save workspace:', err)
+      logger.error('Failed to save workspace', err)
     }
   }
 

@@ -2,6 +2,9 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import type { SessionStreamEvent, ChatMessageIPC } from '../../../shared/ipc-types'
 import type { ChatMessage } from '../types/chat'
 import { generateId } from '../types/chat'
+import { createLogger } from '../logger'
+
+const logger = createLogger('useSession')
 
 /** Convert IPC message format to renderer ChatMessage format */
 function ipcToChatMessage(ipc: ChatMessageIPC): ChatMessage[] {
@@ -108,7 +111,7 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
       }
     }).catch((err) => {
       if (!cancelled) {
-        console.warn('[useSession] failed to load history:', err)
+        logger.warn('Failed to load history', err)
       }
     })
     return () => { cancelled = true }
@@ -140,7 +143,7 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
           break
 
         case 'tool_call':
-          console.log(`[useSession] tool_call event: name=${event.toolName}, id=${event.toolCallId}`)
+          logger.debug(`tool_call event: name=${event.toolName}, id=${event.toolCallId}`)
           setMessages(prev => {
             const newMsg = {
               role: 'assistant' as const,
@@ -151,13 +154,13 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
               status: 'running' as const,
               id: generateId(),
             }
-            console.log(`[useSession] adding tool_call message, prev length=${prev.length}, new length=${prev.length + 1}`)
+            logger.debug(`adding tool_call message, prev length=${prev.length}, new length=${prev.length + 1}`)
             return [...prev, newMsg]
           })
           break
 
         case 'tool_result': {
-          console.log(`[useSession] tool_result event: name=${event.toolName}, id=${event.toolCallId}, isError=${event.isError}`)
+          logger.debug(`tool_result event: name=${event.toolName}, id=${event.toolCallId}, isError=${event.isError}`)
           setMessages(prev => {
             const msgs = [...prev]
             let matched = false
@@ -171,12 +174,12 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
               ) {
                 msgs[i] = { ...msg, status: 'done', result: event.result, isError: event.isError }
                 matched = true
-                console.log(`[useSession] matched tool_result to msg at index ${i}`)
+                logger.debug(`matched tool_result to msg at index ${i}`)
                 break
               }
             }
             if (!matched) {
-              console.warn(`[useSession] tool_result NO MATCH: id=${event.toolCallId}, name=${event.toolName}. Running tool_calls:`, msgs.filter((m): m is Extract<ChatMessage, { type: 'tool_call' }> => m.role === 'assistant' && m.type === 'tool_call' && m.status === 'running').map(m => ({ id: m.toolId, name: m.toolName })))
+              logger.warn(`tool_result NO MATCH: id=${event.toolCallId}, name=${event.toolName}. Running tool_calls:`, msgs.filter((m): m is Extract<ChatMessage, { type: 'tool_call' }> => m.role === 'assistant' && m.type === 'tool_call' && m.status === 'running').map(m => ({ id: m.toolId, name: m.toolName })))
             }
             return msgs
           })

@@ -11,6 +11,9 @@ import type {
   ProjectInfo,
   SessionInfoDisplay,
 } from '../../../shared/ipc-types'
+import { createLogger } from '../logger'
+
+const logger = createLogger('project-store')
 
 // ---------------------------------------------------------------------------
 // Types
@@ -177,13 +180,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
                 await window.nekocode.session.reconnect(sessionId, projectPath)
                 dispatch({ type: 'RECONNECT_SESSION', sessionId, projectPath })
               } catch (err) {
-                console.error('[project-store] failed to reconnect restored session:', err)
+                logger.error('Failed to reconnect restored session', err)
               }
             }
           }
         }
       } catch (err) {
-        console.error('[project-store] failed to load workspace:', err)
+        logger.error('Failed to load workspace', err)
       }
     })()
   }, [])
@@ -193,7 +196,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     if (!initializedRef.current) return
     if (state.activeSessionId && state.activeProjectPath) {
       window.nekocode.workspace.setActive(state.activeSessionId, state.activeProjectPath)
-        .catch(err => console.error('[project-store] failed to persist active session:', err))
+        .catch(err => logger.error('Failed to persist active session', err))
     }
   }, [state.activeSessionId, state.activeProjectPath])
 
@@ -254,7 +257,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const project = await window.nekocode.project.add(path)
       dispatch({ type: 'ADD_PROJECT', project })
     } catch (err) {
-      console.error('[project-store] addProject failed:', err)
+      logger.error('addProject failed:', err)
     }
   }, [])
 
@@ -263,7 +266,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       await window.nekocode.project.remove(projectId)
       dispatch({ type: 'REMOVE_PROJECT', projectId })
     } catch (err) {
-      console.error('[project-store] removeProject failed:', err)
+      logger.error('removeProject failed:', err)
     }
   }, [])
 
@@ -280,7 +283,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         await window.nekocode.session.reconnect(sessionId, projectPath)
         dispatch({ type: 'RECONNECT_SESSION', sessionId, projectPath })
       } catch (err) {
-        console.error('[project-store] reconnectSession failed:', err)
+          logger.error('reconnectSession failed:', err)
       }
     },
     [],
@@ -302,7 +305,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           },
         })
       } catch (err) {
-        console.error('[project-store] createSession failed:', err)
+          logger.error('createSession failed:', err)
       }
     },
     [],
@@ -313,7 +316,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const updated = await window.nekocode.project.sessions(projectId)
       dispatch({ type: 'SET_SESSIONS', projectId, sessions: updated.sessions })
     } catch (err) {
-      console.error('[project-store] refreshSessions failed:', err)
+      logger.error('refreshSessions failed:', err)
     }
   }, [])
 

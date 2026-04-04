@@ -3,6 +3,9 @@ import { join } from 'path'
 import { PiSessionManager } from './session-manager'
 import { ProjectManager } from './project-manager'
 import { registerIpcHandlers, sendEventToRenderer } from './ipc-handlers'
+import { createLogger } from './logger'
+
+const logger = createLogger('main')
 
 const sessionManager = new PiSessionManager(sendEventToRenderer)
 const projectManager = new ProjectManager()
@@ -23,7 +26,7 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' }
   })
 
-  console.log('[main] BrowserWindow created')
+  logger.info('BrowserWindow created')
 
   if (process.env.ELECTRON_RENDERER_URL) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
@@ -39,12 +42,12 @@ function performShutdown(): void {
   isQuitting = true
 
   const count = sessionManager.sessionCount
-  console.log(`[main] shutting down, disposing ${count} session(s)`)
+  logger.info(`Shutting down, disposing ${count} session(s)`)
   try {
     sessionManager.disposeAll()
-    console.log(`[main] disposed ${count} session(s) successfully`)
+    logger.info(`Disposed ${count} session(s) successfully`)
   } catch (err) {
-    console.error('[main] error disposing sessions on quit:', err)
+    logger.error('Error disposing sessions on quit', err)
   }
 }
 
