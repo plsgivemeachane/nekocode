@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ProjectManager } from '../main/project-manager'
 
+// Mock Electron's app module
+vi.mock('electron', () => ({
+  app: {
+    getPath: vi.fn(() => '/tmp/test-userdata'),
+  },
+}))
+
 // Mock SessionManager.list to return controlled data
 vi.mock('@mariozechner/pi-coding-agent', () => ({
   SessionManager: {
@@ -88,12 +95,12 @@ describe('ProjectManager', () => {
       mockedList.mockResolvedValue([])
       const added = await pm.addProject('/path/x')
 
-      expect(pm.removeProject(added.id)).toBe(true)
+      expect(await pm.removeProject(added.id)).toBe(true)
       expect(pm.listProjects()).toHaveLength(0)
     })
 
-    it('returns false for non-existent id', () => {
-      expect(pm.removeProject('no-such-id')).toBe(false)
+    it('returns false for non-existent id', async () => {
+      expect(await pm.removeProject('no-such-id')).toBe(false)
     })
   })
 
@@ -154,6 +161,17 @@ describe('ProjectManager', () => {
 
       expect(p1.id).toBe(p2.id)
       expect(pm.listProjects()).toHaveLength(1)
+    })
+
+    it('handles paths with trailing slashes', async () => {
+      mockedList.mockResolvedValue([])
+      const p1 = await pm.addProject('/path/project/')
+      const p2 = await pm.addProject('/path/project')
+
+      // Note: path normalization does NOT strip trailing slashes
+      // These are treated as different paths
+      expect(p1.id).not.toBe(p2.id)
+      expect(pm.listProjects()).toHaveLength(2)
     })
   })
 })

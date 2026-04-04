@@ -110,7 +110,7 @@ describe('PiSessionManager', () => {
     })
 
     expect(events).toHaveLength(1)
-    expect(events[0].event).toEqual({ type: 'tool_call', toolName: 'bash', args: { command: 'ls' } })
+    expect(events[0].event).toEqual({ type: 'tool_call', toolCallId: 'tc-1', toolName: 'bash', args: { command: 'ls' } })
   })
 
   it('should pass tool_result events through immediately', async () => {
@@ -127,6 +127,7 @@ describe('PiSessionManager', () => {
     expect(events).toHaveLength(1)
     expect(events[0].event).toEqual({
       type: 'tool_result',
+      toolCallId: 'tc-1',
       toolName: 'bash',
       result: 'file1.txt\nfile2.txt',
       isError: false,
@@ -289,7 +290,7 @@ describe('PiSessionManager', () => {
 
     expect(events).toHaveLength(2)
     expect(events[0].event).toEqual({ type: 'text_delta', delta: 'before tool' })
-    expect(events[1].event).toEqual({ type: 'tool_call', toolName: 'read', args: { path: 'file.txt' } })
+    expect(events[1].event).toEqual({ type: 'tool_call', toolCallId: 'tc-1', toolName: 'read', args: { path: 'file.txt' } })
   })
 
   it('should support concurrent sessions with independent event streams', async () => {
@@ -333,5 +334,54 @@ describe('PiSessionManager', () => {
     manager.abort(idA)
     manager.abort(idB)
     expect(manager.sessionCount).toBe(2)
+  })
+
+  it('should handle dispose during active streaming without errors', async () => {
+    const id = await manager.create('/tmp/project')
+
+    // Start streaming text
+    mockSession().emit({
+      type: 'message_update',
+      message: {},
+      assistantMessageEvent: { type: 'text_delta', delta: 'streaming...', contentIndex: 0, partial: {} },
+    })
+
+    // Dispose while streaming — should flush pending text
+    manager.dispose(id)
+
+    // Should have flushed the pending text
+    expect(events).toHaveLength(1)
+    expect(events[0].event).toEqual({ type: 'text_delta', delta: 'streaming...' })
+    expect(manager.sessionCount).toBe(0)
+  })
+
+  it('should handle tool errors correctly in history', async () => {
+    const id = await manager.create('/tmp/project')
+
+    mockSession().emit({
+      type: 'message_update',
+      message: {},
+      assistantMessageEvent: { type: 'text_delta', delta: 'Trying...', contentIndex: 0, partial: {} },
+    })
+    mockSession().emit({
+      type: 'tool_execution_start',
+      toolCallId: 'tc-err',
+      toolName: 'bash',
+      args: { command: 'bad_command' },
+    })
+    mockSession().emit({
+      type: 'tool_execution_end',
+      toolCallId: 'tc-err',
+      toolName: 'bash',
+      result: 'command not found: bad_command',
+      isError: true,
+    })
+    mockSession().emit({ type: 'agent_end', messages: [] })
+
+    const history = manager.getHistory(id)
+    expect(history).toHaveLength(1)
+    expect(history[0].toolCalls).toHaveLength(1)
+    expect(history[0].toolCalls![0].isError).toBe(true)
+    expect(history[0].toolCalls![0].result).toBe('command not found: bad_command')
   })
 })
