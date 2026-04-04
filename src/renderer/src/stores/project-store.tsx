@@ -157,7 +157,6 @@ const ProjectStoreContext = createContext<ProjectStoreAPI | null>(null)
 
 export function ProjectProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE)
-  const debounceRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const initializedRef = useRef(false)
 
   // Load persisted workspace on first mount
@@ -209,49 +208,22 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const { sessionId, event } = payload
 
       switch (event.type) {
-        case 'text_delta': {
-          // Set streaming immediately, then debounce resetting to idle
+        case 'agent_start':
           dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId, status: 'streaming' })
-
-          const existing = debounceRef.current.get(sessionId)
-          if (existing) clearTimeout(existing)
-
-          const timer = setTimeout(() => {
-            debounceRef.current.delete(sessionId)
-            // Only reset if still streaming (no done/error arrived in the window)
-            dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId, status: 'idle' })
-          }, 2000)
-
-          debounceRef.current.set(sessionId, timer)
           break
-        }
 
-        case 'done': {
-          const timer = debounceRef.current.get(sessionId)
-          if (timer) {
-            clearTimeout(timer)
-            debounceRef.current.delete(sessionId)
-          }
+        case 'done':
           dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId, status: 'idle' })
           break
-        }
 
-        case 'error': {
-          const timer = debounceRef.current.get(sessionId)
-          if (timer) {
-            clearTimeout(timer)
-            debounceRef.current.delete(sessionId)
-          }
+        case 'error':
           dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId, status: 'error' })
           break
-        }
       }
     })
 
     return () => {
       unsub()
-      debounceRef.current.forEach(timer => clearTimeout(timer))
-      debounceRef.current.clear()
     }
   }, [])
 

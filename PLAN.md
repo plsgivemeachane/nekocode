@@ -1,104 +1,57 @@
-# Plan: Add Winston Logging to NekoCode
+# Streaming "Agent Working" Indicator Improvements
 
 ## Context
 
-NekoCode is an Electron + React + TypeScript desktop app (AI coding assistant). Currently, all logging is done via raw console.log/error/warn calls scattered across 4 main files and 5 renderer files (~40 total calls). There is no structured logging, no log persistence, no log levels, and no way for users to debug issues from log files.
+The SDK already emits clear lifecycle events (`agent_start`, `agent_end`, `turn_start`, `turn_end`, `tool_execution_start`, etc.), but `session-manager.ts` explicitly **ignores** `agent_start` (falls into `default` case — comment: "not useful for the renderer"). As a result, the renderer has no reliable signal for when the agent starts working. The current workarounds are:
 
-The goal is to replace all console.* calls with Winston (v3.19.0) to provide:
-- Structured, leveled logging (error/warn/info/debug)
-- File-based log persistence with daily rotation (winston-daily-rotate-file v5.0.0)
-- Consistent log format with timestamps and module labels
-- Development-friendly console output with colors
-- Easy ability to adjust log verbosity
+1. **Sidebar status** (`project-store.tsx`): Uses a **2-second debounce hack** on `text_delta` — sets status to `'streaming'` on first delta, then resets to `'idle'` after 2s of silence. This means there's always a ~2s window where the status flickers to idle mid-turn, and there's zero indication between prompt send and first token.
+2. **Chat `isStreaming`** (`useSession.ts`): Only set `true` on `text_delta`, so there's a gap between user sending the prompt and the first token arriving.
+3. **No working indicator** below the agent's current message during tool execution or thinking.
+4. **Auto-scroll** exists but doesn't account for tool_call messages properly.
+
+The fix: forward `agent_start` as a real IPC event, consume it everywhere, and **kill the debounce hack**.
 
 ## Approach
 
-### Architecture: One Logger Factory, Per-Module Child Loggers
+### Phase 1: Wire `agent_start` through the pipeline
 
-Create a single logger.ts module in src/main/ that:
-1. Creates the root Winston logger with configured transports
-2. Exports a createLogger(moduleLabel) function that returns logger.child({ label: moduleLabel })
-3. Uses app.getPath('userData') for log file location (same pattern as project-manager.ts line 34)
+Add a new `agent_start` event type to `SessionStreamEvent`, forward it from `session-manager.ts` when the SDK emits `agent_start`, and consume it in both `useSession.ts` (for `isStreaming`) and `project-store.tsx` (for sidebar status).
 
-For the renderer process, Winston file transports will not work (no Node.js fs access). The renderer needs a lightweight approach:
-- Create a simple logger.ts in src/renderer/src/ that wraps console.* with the same logger.info/error/warn/debug API and label prefix
-- This keeps the renderer import API identical to main process, making future migration (e.g., sending logs to main via IPC) trivial
+### Phase 2: UI indicators
 
-### Transport Configuration (Main Process)
-
-| Transport | Level | Format | Purpose |
-|-----------|-------|--------|---------|
-| Console | debug (dev) / warn (prod) | Colorized simple + timestamp | Developer debugging |
-| File (combined) | info | JSON with timestamp | Full persistent log |
-| File (error) | error | JSON with timestamp | Error-only log for quick triage |
-| Daily Rotate (combined) | info | JSON with timestamp | Rotating logs to prevent disk bloat |
-
-### Console.* Mapping Rules
-
-| Current Call | Winston Equivalent |
-|---|---|
-| console.log("[module] ...") | logger.info("...")  |
-| console.error("[module] ...") | logger.error("...") |
-| console.warn("[module] ...") | logger.warn("...") |
-| console.log("[module] debug: ...") | logger.debug("...") |
-
-The [module] prefix in existing messages is redundant since Winston label handles this and will be stripped during replacement.
-
-### Verbose/Debug Logs Decision
-
-Several existing console.log calls are clearly debug-level (e.g., handleAgentEvent, tool_execution_start/end with truncated JSON, ChatView message group counts, useSession tool_call matching). These will be mapped to logger.debug() so they do not noise up production logs but are available when needed.
+1. **Sidebar dot** — already works via `StatusDot` + `sessionStatuses`, just needs the correct signal (Phase 1 fixes this)
+2. **In-message working indicator** — add a persistent working indicator (e.g., pulsing dots, or a subtle "Agent is working..." text) below the last message/content. This is shown for the **entire duration** the agent is working — from `agent_start` until `agent_end`. It stays visible during text streaming, during tool execution, and during thinking gaps. It only disappears when the agent fully finishes.
+3. **Send button lock** — already implemented (`disabled={isStreaming}`), just needs the earlier `isStreaming=true` from Phase 1
+4. **Auto-scroll** — already implemented with `isAtBottomRef` sticky logic, works correctly
 
 ## Files to Modify
 
-### New Files
-| File | Purpose |
-|------|---------|
-| src/main/logger.ts | Winston logger factory for main process |
-| src/renderer/src/logger.ts | Lightweight console-wrapper logger for renderer |
-
-### Modified Files (console.* replacement)
-| File | Calls to Replace | Notes |
-|------|-----------------|-------|
-| src/main/index.ts | 4 calls | Window lifecycle, shutdown |
-| src/main/project-manager.ts | 9 calls | Project CRUD, workspace persistence |
-| src/main/session-manager.ts | 11 calls | Session lifecycle, agent events, tool execution |
-| src/renderer/src/main.tsx | 1 call | App mount |
-| src/renderer/src/hooks/useSession.ts | 6 calls | Session events, tool matching |
-| src/renderer/src/components/TreeSidebar.tsx | 1 call | Unimplemented feature warning |
-| src/renderer/src/components/ChatView.tsx | 1 call | Debug message count |
-| src/renderer/src/stores/project-store.tsx | 8 calls | Error handling in store actions |
-
-### Package Dependencies (install phase)
-- winston ^3.19.0
-- winston-daily-rotate-file ^5.0.0
+| File | Change |
+|------|--------|
+| `src/shared/ipc-types.ts` | Add `{ type: 'agent_start' }` to `SessionStreamEvent` union |
+| `src/main/session-manager.ts` | Forward `agent_start` from SDK as `{ type: 'agent_start' }` via batcher (remove from `default` case) |
+| `src/renderer/src/hooks/useSession.ts` | Handle `agent_start` → set `isStreaming = true` |
+| `src/renderer/src/stores/project-store.tsx` | Handle `agent_start` → set status `'streaming'`. **Remove the 2-second debounce hack entirely**. |
+| `src/renderer/src/components/ChatView.tsx` | Add a working spinner below the last message when `isStreaming &&` no active text streaming |
 
 ## Reuse
 
-- app.getPath('userData') - already used in src/main/project-manager.ts:34 for workspace path; same pattern for log directory
-- import { app } from electron - available in all main process files
-- Path alias @/* - defined in tsconfig.json; can use @/main/logger if needed
-- Existing [module] label convention - the codebase already prefixes messages with [project], [session], [SessionManager], etc. These map directly to Winston label values
+- **`StatusDot`** in `TreeSidebar.tsx` (line 16) — already renders `bg-accent-400 animate-glow-pulse` for `'streaming'` status. No changes needed to sidebar UI.
+- **`isAtBottomRef` + `scrollToBottom`** in `ChatView.tsx` (lines 28-55) — auto-scroll sticky logic already works correctly. No changes needed.
+- **Send button `disabled={isStreaming}`** in `ChatView.tsx` (line 261) — already wired. Will automatically work once `isStreaming` goes true earlier.
 
 ## Steps
 
-- [ ] Step 1: Install dependencies - bun add winston winston-daily-rotate-file
-- [ ] Step 2: Create src/main/logger.ts - Winston factory with console + file + daily-rotate transports, createLogger(label) export, app.getPath(userData) for log dir
-- [ ] Step 3: Create src/renderer/src/logger.ts - Lightweight console wrapper with same createLogger(label) API, no Winston dependency
-- [ ] Step 4: Replace console.* in src/main/index.ts - Import logger, replace 4 calls, strip [main] prefix
-- [ ] Step 5: Replace console.* in src/main/project-manager.ts - Import logger with label "project", replace 9 calls, strip [project] prefix
-- [ ] Step 6: Replace console.* in src/main/session-manager.ts - Import logger with label "session-manager", replace 11 calls, map verbose/event tracing to debug level
-- [ ] Step 7: Replace console.* in src/renderer/src/main.tsx - Import renderer logger, replace 1 call
-- [ ] Step 8: Replace console.* in src/renderer/src/hooks/useSession.ts - Import renderer logger with label "useSession", replace 6 calls, map tool matching traces to debug
-- [ ] Step 9: Replace console.* in src/renderer/src/components/TreeSidebar.tsx - Replace 1 console.warn
-- [ ] Step 10: Replace console.* in src/renderer/src/components/ChatView.tsx - Import renderer logger, replace 1 debug call with logger.debug
-- [ ] Step 11: Replace console.* in src/renderer/src/stores/project-store.tsx - Import renderer logger with label "project-store", replace 8 console.error calls
-- [ ] Step 12: Verify - Run bun run build, check for type errors; manually launch app and verify logs appear in console and log files
+- [ ] **Step 1**: Add `{ type: 'agent_start' }` to `SessionStreamEvent` union in `src/shared/ipc-types.ts`
+- [ ] **Step 2**: In `src/main/session-manager.ts`, move `agent_start` out of the `default` case. Call `emit({ type: 'agent_start' })` (flush batcher first so any prior content arrives before the start signal)
+- [ ] **Step 3**: In `src/renderer/src/hooks/useSession.ts`, add `case 'agent_start': setIsStreaming(true); break;` in the event switch
+- [ ] **Step 4**: In `src/renderer/src/stores/project-store.tsx`, add `case 'agent_start': dispatch UPDATE_SESSION_STATUS → 'streaming'; break;`. **Remove the entire debounce mechanism** (`debounceRef`, the `setTimeout` in `text_delta`, and the cleanup in `done`/`error`). Simplify `text_delta` to a no-op for status (or remove the case entirely since `useSession` handles it).
+- [ ] **Step 5**: In `src/renderer/src/components/ChatView.tsx`, add a persistent working indicator after the last message group when `isStreaming` is true. This indicator stays visible for the **entire** agent execution (from `agent_start` through all turns until `agent_end`). Use a subtle design — e.g., three pulsing dots or a dimmed "Agent is working..." line — that doesn't distract from streaming text but clearly signals the agent is active. It renders below the message stream area, always at the bottom of the content.
 
 ## Verification
 
-1. Build check: bun run build - no TypeScript errors, logger modules resolve correctly
-2. Console output: Launch app in dev mode - verify colored, timestamped, labeled log lines appear in terminal
-3. File output: Check {userData}/logs/ directory - verify combined.log, error.log, and daily rotated files are created
-4. Log rotation: Confirm winston-daily-rotate-file creates date-stamped files and cleans old ones
-5. Renderer logs: Open DevTools console - verify renderer logs show [renderer:label] prefix format
-6. Zero console.* remaining: grep for console. in src/ - should return 0 matches (excluding test files and node_modules)
+1. Send a prompt → sidebar dot should light up **immediately** (before first token), send button should disable immediately
+2. During tool execution → sidebar dot stays lit, working indicator visible below the tool call group
+3. After `agent_end` → sidebar dot goes idle, send button re-enables, working indicator disappears
+4. No 2-second flicker to idle mid-turn (debounce is gone)
+5. Auto-scroll: scroll to bottom → sticks during streaming. Scroll up → unsticks. Scroll-to-bottom button appears when scrolled up.

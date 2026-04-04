@@ -422,8 +422,12 @@ export class PiSessionManager {
         // turn_end fires per turn; agent_end fires when fully done.
         // We emit 'done' on agent_end, so turn_end is just a no-op here.
         break
+      case 'agent_start':
+        batcher.flush()
+        emit({ type: 'agent_start' })
+        break
       default:
-        // agent_start, turn_start, tool_execution_update
+        // turn_start, tool_execution_update
         // are internal bookkeeping — not useful for the renderer.
         break
     }

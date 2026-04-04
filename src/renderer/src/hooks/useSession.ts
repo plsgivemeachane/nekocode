@@ -134,6 +134,11 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
       const event: SessionStreamEvent = payload.event
 
       switch (event.type) {
+        case 'agent_start':
+          setIsStreaming(true)
+          setError(null)
+          break
+
         case 'text_delta':
           setMessages(prev => {
             const msgs = [...prev]

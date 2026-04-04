@@ -45,12 +45,12 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
     setShowScrollBtn(!atBottom && messages.length > 0)
   }, [messages.length])
 
-  // Auto-scroll when messages change — only if user hasn't scrolled up
+  // Auto-scroll when messages or streaming state change — only if user hasn't scrolled up
   useEffect(() => {
     if (isAtBottomRef.current) {
       scrollToBottom(false)
     }
-  }, [messages, scrollToBottom])
+  }, [messages, isStreaming, scrollToBottom])
 
   // Scroll to bottom on initial session (when first messages arrive)
   useEffect(() => {
@@ -194,6 +194,12 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
               }
               return <div key={group.key}>{renderMessage(group.msg)}</div>
             })}
+            {isStreaming && (
+              <div className="flex items-center gap-2 py-1">
+                <span className="sr-only">Agent is working</span>
+                <span className="text-sm text-text-tertiary animate-pulse">thinking...</span>
+              </div>
+            )}
           </div>
         )}
 
