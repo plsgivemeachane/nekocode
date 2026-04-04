@@ -1,57 +1,91 @@
-# Streaming "Agent Working" Indicator Improvements
+# Apply T3 Code Rendering Pipeline
 
 ## Context
 
-The SDK already emits clear lifecycle events (`agent_start`, `agent_end`, `turn_start`, `turn_end`, `tool_execution_start`, etc.), but `session-manager.ts` explicitly **ignores** `agent_start` (falls into `default` case — comment: "not useful for the renderer"). As a result, the renderer has no reliable signal for when the agent starts working. The current workarounds are:
+NekoCode's chat markdown rendering currently uses `highlight.js` + `rehype-highlight` for syntax highlighting, with a basic always-visible copy button and no language label. The `MARKDOWN_BREAKDOWN.md` spec describes T3Code's production-grade approach: **Shiki** for highlighting, theme-bridged backgrounds, hover-reveal copy button with language label header, GFM support, and completion dividers between turns. This plan upgrades the rendering to match that quality bar.
 
-1. **Sidebar status** (`project-store.tsx`): Uses a **2-second debounce hack** on `text_delta` — sets status to `'streaming'` on first delta, then resets to `'idle'` after 2s of silence. This means there's always a ~2s window where the status flickers to idle mid-turn, and there's zero indication between prompt send and first token.
-2. **Chat `isStreaming`** (`useSession.ts`): Only set `true` on `text_delta`, so there's a gap between user sending the prompt and the first token arriving.
-3. **No working indicator** below the agent's current message during tool execution or thinking.
-4. **Auto-scroll** exists but doesn't account for tool_call messages properly.
+**Current state:**
+- `react-markdown` v10.1.0 + `rehype-highlight` + `highlight.js`
+- Copy button: always visible, top-right absolute positioned, no language label
+- No `remark-gfm` (tables, task lists, strikethrough won't render)
+- No completion dividers between chat turns
+- Inline code uses `bg-surface-800` -- fine, but no explicit font-size normalization
+- Code blocks use `bg-surface-900` with `border border-surface-850`
 
-The fix: forward `agent_start` as a real IPC event, consume it everywhere, and **kill the debounce hack**.
+**Target state (T3):**
+- `shiki` for syntax highlighting (replaces highlight.js + rehype-highlight)
+- Code block header bar: language label (left) + hover-reveal copy button (right)
+- Theme-bridged background using existing surface design tokens
+- `remark-gfm` for full GFM support
+- CSS: `tab-size: 2`, `cursor: text`, consistent line-height, scroll handling
 
 ## Approach
 
-### Phase 1: Wire `agent_start` through the pipeline
-
-Add a new `agent_start` event type to `SessionStreamEvent`, forward it from `session-manager.ts` when the SDK emits `agent_start`, and consume it in both `useSession.ts` (for `isStreaming`) and `project-store.tsx` (for sidebar status).
-
-### Phase 2: UI indicators
-
-1. **Sidebar dot** — already works via `StatusDot` + `sessionStatuses`, just needs the correct signal (Phase 1 fixes this)
-2. **In-message working indicator** — add a persistent working indicator (e.g., pulsing dots, or a subtle "Agent is working..." text) below the last message/content. This is shown for the **entire duration** the agent is working — from `agent_start` until `agent_end`. It stays visible during text streaming, during tool execution, and during thinking gaps. It only disappears when the agent fully finishes.
-3. **Send button lock** — already implemented (`disabled={isStreaming}`), just needs the earlier `isStreaming=true` from Phase 1
-4. **Auto-scroll** — already implemented with `isAtBottomRef` sticky logic, works correctly
+Replace the syntax highlighting pipeline (highlight.js → shiki), restructure the `CodeBlock` component to include a header bar with language label and hover-reveal copy, add `remark-gfm`. Keep all styling within the existing Tailwind + CSS custom property system — no new color tokens needed.
 
 ## Files to Modify
 
 | File | Change |
 |------|--------|
-| `src/shared/ipc-types.ts` | Add `{ type: 'agent_start' }` to `SessionStreamEvent` union |
-| `src/main/session-manager.ts` | Forward `agent_start` from SDK as `{ type: 'agent_start' }` via batcher (remove from `default` case) |
-| `src/renderer/src/hooks/useSession.ts` | Handle `agent_start` → set `isStreaming = true` |
-| `src/renderer/src/stores/project-store.tsx` | Handle `agent_start` → set status `'streaming'`. **Remove the 2-second debounce hack entirely**. |
-| `src/renderer/src/components/ChatView.tsx` | Add a working spinner below the last message when `isStreaming &&` no active text streaming |
+| `package.json` | Add `shiki`, `remark-gfm`. Remove `highlight.js`, `rehype-highlight` |
+| `src/renderer/src/index.css` | Remove `@import "highlight.js/..."`. Remove `.hljs` overrides. Add `.shiki` base styles, code block CSS, completion divider gradient styles |
+| `src/renderer/src/components/chat/MarkdownContent.tsx` | **Major rewrite**: Replace `rehype-highlight` plugin with a custom Shiki-based `code` component. Add header bar to `CodeBlock`. Make copy button hover-reveal. Add language label. Update inline code styling. Add `remark-gfm` to plugins |
+
+| `bun.lock` / `package-lock.json` | Regenerated after dependency changes (via `bun install`) |
 
 ## Reuse
 
-- **`StatusDot`** in `TreeSidebar.tsx` (line 16) — already renders `bg-accent-400 animate-glow-pulse` for `'streaming'` status. No changes needed to sidebar UI.
-- **`isAtBottomRef` + `scrollToBottom`** in `ChatView.tsx` (lines 28-55) — auto-scroll sticky logic already works correctly. No changes needed.
-- **Send button `disabled={isStreaming}`** in `ChatView.tsx` (line 261) — already wired. Will automatically work once `isStreaming` goes true earlier.
+- **`extractText()`** in `MarkdownContent.tsx` (line 62) -- keep as-is for extracting code text for clipboard
+- **`CopyButton`** concept -- keep but restructure: move from always-visible top-right to header-bar right-side with hover reveal
+- **Design tokens** in `index.css` -- reuse `--color-surface-900`, `--color-surface-850`, `--color-surface-800`, `--color-text-secondary`, `--color-text-tertiary` for code block backgrounds, header, and labels
+- **`--font-mono`** -- already set to JetBrains Mono, use for code blocks and language labels
+- **`--ease-out-expo`** -- reuse for hover transitions on copy button
+- **`animate-fade-in`** -- reuse for code block appearance
+- **Prose overrides** in `index.css` `.prose {}` block -- keep, these handle non-code markdown styling
+- **`AssistantMessage`** wrapper `max-w-[80%]` -- keep as-is
+- **`messageGroups`** grouping logic in `ChatView.tsx` (lines 116-137) -- no changes needed
 
 ## Steps
 
-- [ ] **Step 1**: Add `{ type: 'agent_start' }` to `SessionStreamEvent` union in `src/shared/ipc-types.ts`
-- [ ] **Step 2**: In `src/main/session-manager.ts`, move `agent_start` out of the `default` case. Call `emit({ type: 'agent_start' })` (flush batcher first so any prior content arrives before the start signal)
-- [ ] **Step 3**: In `src/renderer/src/hooks/useSession.ts`, add `case 'agent_start': setIsStreaming(true); break;` in the event switch
-- [ ] **Step 4**: In `src/renderer/src/stores/project-store.tsx`, add `case 'agent_start': dispatch UPDATE_SESSION_STATUS → 'streaming'; break;`. **Remove the entire debounce mechanism** (`debounceRef`, the `setTimeout` in `text_delta`, and the cleanup in `done`/`error`). Simplify `text_delta` to a no-op for status (or remove the case entirely since `useSession` handles it).
-- [ ] **Step 5**: In `src/renderer/src/components/ChatView.tsx`, add a persistent working indicator after the last message group when `isStreaming` is true. This indicator stays visible for the **entire** agent execution (from `agent_start` through all turns until `agent_end`). Use a subtle design — e.g., three pulsing dots or a dimmed "Agent is working..." line — that doesn't distract from streaming text but clearly signals the agent is active. It renders below the message stream area, always at the bottom of the content.
+- [ ] **Step 1: Update dependencies** -- Add `shiki` and `remark-gfm` to `package.json` dependencies. Remove `highlight.js` and `rehype-highlight`. Run `bun install` to update lockfiles
+- [ ] **Step 2: Remove highlight.js CSS and overrides** -- In `src/renderer/src/index.css`: delete `@import "highlight.js/styles/github-dark.css"`, delete the `.hljs` and `pre code.hljs` override blocks in the components layer
+- [ ] **Step 3: Add Shiki + code block CSS** -- In `src/renderer/src/index.css` components layer, add: `.shiki` base styles (background transparent, padding 0), code block container styles (border-radius, overflow handling), header bar styles (language label left, copy area right), `tab-size: 2`, `cursor: text`
+- [ ] **Step 4: Rewrite MarkdownContent.tsx** -- Replace `rehype-highlight` plugin with a custom Shiki-based `code` component that: (a) detects language from className, (b) async-highlights via `shiki.highlighter.load()` with `github-dark` theme and a broad language set (python, typescript, javascript, bash, json, css, html, tsx, jsx, rust, go, sql, yaml, markdown), (c) renders a header bar with language label + hover-reveal copy button, (d) renders pre/code with Shiki HTML output. Add `remarkGfm` to plugins. Keep `extractText()` and inline code handling. Use a lazy singleton pattern for the Shiki highlighter (create once, reuse across all code blocks)
+- [ ] **Step 5: Verify and test** -- Run `bun run dev`, send prompts that produce code blocks, verify: Shiki highlighting works, language labels appear, copy button reveals on hover, GFM tables render, no highlight.js artifacts remain
+
+## Detailed: MarkdownContent.tsx Rewrite
+
+The new component tree:
+
+  MarkdownContent
+    Markdown remarkPlugins={[remarkGfm]} components={...}
+    code -> CodeBlock (handles both inline and block)
+      Inline: code with bg-surface-800, text-accent-400
+      Block: CodeBlockWithShiki
+        Header bar
+          Language label (left, text-text-tertiary, font-mono, text-xs)
+          Copy button (right, opacity-0 group-hover:opacity-100)
+        pre > code with Shiki HTML (bg-surface-900, border, rounded-lg)
+    a -> external link (keep existing)
+    pre -> wrapper (simplify - no duplicate bg/border since CodeBlock handles it)
+
+**Shiki integration pattern** (preferred: lazy singleton):
+- Create a module-level cached promise for the Shiki highlighter
+- On first code block mount, call `shiki.createHighlighter()` with `github-dark` theme and a broad language set (python, typescript, javascript, bash, json, css, html, tsx, jsx, rust, go, sql, yaml, markdown)
+- In component `useEffect`, await the cached promise, call `highlighter.codeToHtml(code, { lang, theme: 'github-dark' })`, set HTML state
+- Render via `dangerouslySetInnerHTML` inside <code> (Shiki output is safe, pre-escaped)
+
+**Language detection from className:**
+- react-markdown passes `className="language-python"` for fenced blocks
+- Extract: `className?.replace(/^language-/, '') ?? 'text'`
 
 ## Verification
 
-1. Send a prompt → sidebar dot should light up **immediately** (before first token), send button should disable immediately
-2. During tool execution → sidebar dot stays lit, working indicator visible below the tool call group
-3. After `agent_end` → sidebar dot goes idle, send button re-enables, working indicator disappears
-4. No 2-second flicker to idle mid-turn (debounce is gone)
-5. Auto-scroll: scroll to bottom → sticks during streaming. Scroll up → unsticks. Scroll-to-bottom button appears when scrolled up.
+1. `bun run dev` -- app starts without errors
+2. Send a prompt asking for Python code -- code block renders with Shiki highlighting, "python" label in header, copy button hidden until hover
+3. Send a prompt asking for a markdown table -- table renders correctly (GFM support)
+4. Inline code renders with accent color on dark background
+5. Copy button copies full code text, shows checkmark for 2s, then resets
+6. No `highlight.js` CSS or classes remain in devtools
+7. `bun run type-check` passes
+8. `bun run lint` passes

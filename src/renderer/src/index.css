@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@import "highlight.js/styles/github-dark.css";
+
 
 /* ─── Design Tokens ─── */
 @theme {
@@ -135,32 +135,187 @@
 
 /* ─── Component Layer ─── */
 @layer components {
-  /* Code block overrides for highlight.js */
-  pre code.hljs {
+  /* Shiki base — neutralize injected defaults */
+  .shiki {
     background: transparent !important;
     padding: 0 !important;
   }
 
-  .hljs {
-    color: var(--color-text-primary) !important;
-    background: transparent !important;
+  /* Code block container */
+  .code-block-container {
+    position: relative;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    border: 1px solid var(--color-surface-850);
+    background-color: var(--color-surface-900);
   }
 
-  /* Prose overrides for warm theme */
-  .prose {
-    --tw-prose-body: var(--color-text-primary);
-    --tw-prose-headings: var(--color-text-primary);
-    --tw-prose-links: var(--color-text-accent);
-    --tw-prose-code: var(--color-accent-400);
-    --tw-prose-pre-bg: var(--color-surface-900);
-    --tw-prose-pre-code: var(--color-text-primary);
-    --tw-prose-bold: var(--color-text-primary);
-    --tw-prose-counters: var(--color-text-secondary);
-    --tw-prose-bullets: var(--color-text-secondary);
-    --tw-prose-hr: var(--color-surface-800);
-    --tw-prose-quotes: var(--color-text-secondary);
-    --tw-prose-quote-borders: var(--color-surface-700);
-    --tw-prose-th-borders: var(--color-surface-800);
-    --tw-prose-td-borders: var(--color-surface-850);
+  .code-block-container pre {
+    margin: 0;
+    overflow-x: auto;
+    tab-size: 2;
+    -moz-tab-size: 2;
+    cursor: text;
+  }
+
+  .code-block-container pre code {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    line-height: 1.85;
+    display: block;
+    padding: 1rem 1.25rem;
+  }
+
+  /* Code block copy button — small icon, hover-reveal */
+  .chat-markdown-copy-button {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    width: 1.5rem;
+    height: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--color-surface-800);
+    border-radius: 0.375rem;
+    background: var(--color-surface-850);
+    color: var(--color-text-tertiary);
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease, background 0.15s ease;
+  }
+
+  .code-block-container:hover .chat-markdown-copy-button {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .chat-markdown-copy-button:hover {
+    background: var(--color-surface-700);
+    color: var(--color-text-primary);
+  }
+
+  /* Shiki output wrapper — neutralize injected pre styles */
+  .shiki-wrapper pre {
+    margin: 0 !important;
+    padding: 1rem 1.25rem !important;
+    overflow-x: auto;
+    tab-size: 2;
+    -moz-tab-size: 2;
+    cursor: text;
+    border-radius: 0 0 0.5rem 0.5rem;
+  }
+
+  .shiki-wrapper pre code {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    line-height: 1.85;
+  }
+
+  /* Chat markdown rendering (hand-written, no prose) */
+  .chat-markdown {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    font-size: 0.875rem;
+    line-height: 1.625;
+    color: var(--color-text-primary);
+  }
+
+  .chat-markdown > :first-child {
+    margin-top: 0;
+  }
+
+  .chat-markdown > :last-child {
+    margin-bottom: 0;
+  }
+
+  .chat-markdown p,
+  .chat-markdown ul,
+  .chat-markdown ol,
+  .chat-markdown blockquote,
+  .chat-markdown pre,
+  .chat-markdown table {
+    margin: 0.65rem 0;
+  }
+
+  .chat-markdown ul {
+    padding-left: 1.25rem;
+    list-style-type: disc;
+  }
+
+  .chat-markdown ol {
+    padding-left: 1.25rem;
+    list-style-type: decimal;
+  }
+
+  .chat-markdown ul ul {
+    list-style-type: circle;
+  }
+
+  .chat-markdown ul ul ul {
+    list-style-type: square;
+  }
+
+  .chat-markdown ol ol {
+    list-style-type: lower-alpha;
+  }
+
+  .chat-markdown ol ol ol {
+    list-style-type: lower-roman;
+  }
+
+  .chat-markdown li + li {
+    margin-top: 0.25rem;
+  }
+
+  .chat-markdown a {
+    color: var(--color-text-accent);
+    text-decoration: underline;
+    text-decoration-color: var(--color-surface-800);
+  }
+
+  .chat-markdown a:hover {
+    opacity: 0.8;
+  }
+
+  .chat-markdown blockquote {
+    border-left: 2px solid var(--color-surface-700);
+    padding-left: 0.8rem;
+    color: var(--color-text-secondary);
+  }
+
+  .chat-markdown strong {
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  .chat-markdown :not(pre) > code {
+    border: 1px solid var(--color-surface-800);
+    border-radius: 0.375rem;
+    background: var(--color-surface-800);
+    padding: 0.1rem 0.35rem;
+    color: var(--color-text-primary);
+    font-size: 0.75rem;
+  }
+
+  .chat-markdown table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0.65rem 0;
+  }
+
+  .chat-markdown th,
+  .chat-markdown td {
+    border: 1px solid var(--color-surface-800);
+    padding: 0.35rem 0.45rem;
+    text-align: left;
+  }
+
+  .chat-markdown th {
+    font-weight: 600;
+    font-size: 0.75rem;
+    color: var(--color-text-tertiary);
   }
 }
