@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import type { ProjectInfo, SessionInfoDisplay, SessionStatus } from '@/shared/ipc-types'
+import type { ProjectInfo, SessionInfoDisplay } from '@/shared/ipc-types'
+
+type SessionStatus = 'idle' | 'streaming' | 'error'
 
 /**
  * project-store reducer tests — pure function unit tests.
@@ -362,7 +364,7 @@ describe('project-store reducer', () => {
 
   describe('unknown action type', () => {
     it('returns unchanged state', () => {
-      const state = reducer(INITIAL_STATE, { type: 'UNKNOWN_ACTION' } as any)
+      const state = reducer(INITIAL_STATE, { type: 'UNKNOWN_ACTION' } as never)
       expect(state).toBe(INITIAL_STATE)
     })
   })

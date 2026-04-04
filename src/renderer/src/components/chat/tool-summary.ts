@@ -44,7 +44,7 @@ export function extractToolSummary(toolName: string, args: unknown): string {
       case 'pi_changelog_versions':
         return ''
       default: {
-        const values = Object.values(a).filter(v => typeof v === 'string' && v.length > 0)
+        const values = Object.values(a).filter((v): v is string => typeof v === 'string' && v.length > 0)
         return values[0]?.slice(0, 80) ?? ''
       }
     }

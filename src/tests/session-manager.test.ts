@@ -1,14 +1,31 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { PiSessionManager } from '../main/session-manager'
 import type { SessionStreamEvent } from '../shared/ipc-types'
+import type { AgentSessionEvent } from '@mariozechner/pi-coding-agent'
+import type { Message, AssistantMessage } from '@mariozechner/pi-ai'
+
+/** Create a minimal mock AssistantMessage for SDK events */
+function mockAssistantMessage(overrides: Partial<AssistantMessage> = {}): AssistantMessage {
+  return {
+    role: 'assistant',
+    content: [],
+    api: {} as AssistantMessage['api'],
+    provider: {} as AssistantMessage['provider'],
+    model: 'test-model',
+    usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+    stopReason: 'stop',
+    timestamp: Date.now(),
+    ...overrides,
+  }
+}
 
 /** Create a mock AgentSession with controllable subscribe/prompt/abort/dispose */
 function createMockSession(id?: string) {
-  const listeners: Array<(event: any) => void> = []
+  const listeners: Array<(event: AgentSessionEvent) => void> = []
   return {
     sessionId: id ?? `sdk-session-${Math.random().toString(36).slice(2, 10)}`,
-    messages: [],
-    subscribe: vi.fn((fn: (event: any) => void) => {
+    messages: [] as Message[],
+    subscribe: vi.fn((fn: (event: AgentSessionEvent) => void) => {
       listeners.push(fn)
       return vi.fn(() => {
         const idx = listeners.indexOf(fn)
@@ -19,7 +36,7 @@ function createMockSession(id?: string) {
     abort: vi.fn(),
     dispose: vi.fn(),
     /** Simulate the SDK emitting an event */
-    emit(event: any) {
+    emit(event: AgentSessionEvent) {
       for (const fn of listeners) fn(event)
     },
   }
@@ -30,7 +47,7 @@ let lastCreatedMockSession: ReturnType<typeof createMockSession> | null = null
 
 // Mock the SDK module so tests run without a real pi installation
 vi.mock('@mariozechner/pi-coding-agent', () => ({
-  createAgentSession: vi.fn(async ({ cwd }: { cwd: string }) => {
+  createAgentSession: vi.fn(async () => {
     const session = createMockSession()
     lastCreatedMockSession = session
     return { session, extensionsResult: { extensions: [], loadedExtensionIds: [], errors: [] } }
@@ -81,13 +98,13 @@ describe('PiSessionManager', () => {
 
     mockSession().emit({
       type: 'message_update',
-      message: {},
-      assistantMessageEvent: { type: 'text_delta', delta: 'hi', contentIndex: 0, partial: {} },
+      message: mockAssistantMessage(),
+      assistantMessageEvent: { type: 'text_delta', delta: 'hi', contentIndex: 0, partial: mockAssistantMessage() },
     })
     mockSession().emit({
       type: 'message_update',
-      message: {},
-      assistantMessageEvent: { type: 'text_delta', delta: ' there', contentIndex: 0, partial: {} },
+      message: mockAssistantMessage(),
+      assistantMessageEvent: { type: 'text_delta', delta: ' there', contentIndex: 0, partial: mockAssistantMessage() },
     })
 
     // Not flushed yet (16ms batcher)
@@ -139,8 +156,8 @@ describe('PiSessionManager', () => {
 
     mockSession().emit({
       type: 'message_update',
-      message: {},
-      assistantMessageEvent: { type: 'text_delta', delta: 'final', contentIndex: 0, partial: {} },
+      message: mockAssistantMessage(),
+      assistantMessageEvent: { type: 'text_delta', delta: 'final', contentIndex: 0, partial: mockAssistantMessage() },
     })
     mockSession().emit({ type: 'agent_end', messages: [] })
 
@@ -153,10 +170,12 @@ describe('PiSessionManager', () => {
   it('should ignore purely internal bookkeeping events', async () => {
     await manager.create('/tmp/project')
 
-    const internalTypes = ['agent_start', 'turn_start', 'turn_end', 'tool_execution_update']
+    const internalTypes = ['agent_start', 'turn_start', 'turn_end'] as const
     for (const type of internalTypes) {
-      mockSession().emit({ type, message: {}, toolResults: [] })
+      mockSession().emit({ type } as AgentSessionEvent)
     }
+    // tool_execution_update requires specific properties
+    mockSession().emit({ type: 'tool_execution_update', toolCallId: 'tc-1', toolName: 'bash', args: {}, partialResult: null } as AgentSessionEvent)
 
     expect(events).toHaveLength(0)
   })
@@ -165,7 +184,7 @@ describe('PiSessionManager', () => {
     const id = await manager.create('/tmp/project')
     mockSession().emit({
       type: 'message_start',
-      message: { role: 'user', content: 'hello world' },
+      message: { role: 'user', content: 'hello world', timestamp: Date.now() },
     })
 
     const history = manager.getHistory(id)
@@ -179,13 +198,13 @@ describe('PiSessionManager', () => {
 
     mockSession().emit({
       type: 'message_update',
-      message: {},
-      assistantMessageEvent: { type: 'text_delta', delta: 'Hello', contentIndex: 0, partial: {} },
+      message: mockAssistantMessage(),
+      assistantMessageEvent: { type: 'text_delta', delta: 'Hello', contentIndex: 0, partial: mockAssistantMessage() },
     })
     mockSession().emit({
       type: 'message_update',
-      message: {},
-      assistantMessageEvent: { type: 'text_delta', delta: ' world', contentIndex: 0, partial: {} },
+      message: mockAssistantMessage(),
+      assistantMessageEvent: { type: 'text_delta', delta: ' world', contentIndex: 0, partial: mockAssistantMessage() },
     })
     mockSession().emit({ type: 'agent_end', messages: [] })
 
@@ -201,8 +220,8 @@ describe('PiSessionManager', () => {
     // Start assistant message
     mockSession().emit({
       type: 'message_update',
-      message: {},
-      assistantMessageEvent: { type: 'text_delta', delta: 'Let me read that.', contentIndex: 0, partial: {} },
+      message: mockAssistantMessage(),
+      assistantMessageEvent: { type: 'text_delta', delta: 'Let me read that.', contentIndex: 0, partial: mockAssistantMessage() },
     })
     // Tool call
     mockSession().emit({
@@ -278,8 +297,8 @@ describe('PiSessionManager', () => {
 
     mockSession().emit({
       type: 'message_update',
-      message: {},
-      assistantMessageEvent: { type: 'text_delta', delta: 'before tool', contentIndex: 0, partial: {} },
+      message: mockAssistantMessage(),
+      assistantMessageEvent: { type: 'text_delta', delta: 'before tool', contentIndex: 0, partial: mockAssistantMessage() },
     })
     mockSession().emit({
       type: 'tool_execution_start',
@@ -315,8 +334,8 @@ describe('PiSessionManager', () => {
     // Emit events to session B (the current lastCreatedMockSession)
     mockSession().emit({
       type: 'message_update',
-      message: {},
-      assistantMessageEvent: { type: 'text_delta', delta: 'response B', contentIndex: 0, partial: {} },
+      message: mockAssistantMessage(),
+      assistantMessageEvent: { type: 'text_delta', delta: 'response B', contentIndex: 0, partial: mockAssistantMessage() },
     })
     vi.advanceTimersByTime(16)
 
@@ -342,8 +361,8 @@ describe('PiSessionManager', () => {
     // Start streaming text
     mockSession().emit({
       type: 'message_update',
-      message: {},
-      assistantMessageEvent: { type: 'text_delta', delta: 'streaming...', contentIndex: 0, partial: {} },
+      message: mockAssistantMessage(),
+      assistantMessageEvent: { type: 'text_delta', delta: 'streaming...', contentIndex: 0, partial: mockAssistantMessage() },
     })
 
     // Dispose while streaming — should flush pending text
@@ -360,8 +379,8 @@ describe('PiSessionManager', () => {
 
     mockSession().emit({
       type: 'message_update',
-      message: {},
-      assistantMessageEvent: { type: 'text_delta', delta: 'Trying...', contentIndex: 0, partial: {} },
+      message: mockAssistantMessage(),
+      assistantMessageEvent: { type: 'text_delta', delta: 'Trying...', contentIndex: 0, partial: mockAssistantMessage() },
     })
     mockSession().emit({
       type: 'tool_execution_start',
@@ -385,3 +404,5 @@ describe('PiSessionManager', () => {
     expect(history[0].toolCalls![0].result).toBe('command not found: bad_command')
   })
 })
+
+

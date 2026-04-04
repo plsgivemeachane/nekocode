@@ -1,19 +1,23 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useRef, useEffect } from 'react'
 import { useSession } from '../hooks/useSession'
 
-export function SessionView() {
+interface SessionViewProps {
+  sessionId: string
+  cwd?: string
+  onCreateSession: () => Promise<void>
+  onDisposeSession: () => Promise<void>
+}
+
+export function SessionView({ sessionId, cwd, onCreateSession, onDisposeSession }: SessionViewProps) {
   const {
-    sessionId,
-    cwd,
     isStreaming,
     messages,
     error,
-    createSession,
     sendPrompt,
-    disposeSession,
-  } = useSession()
+    input,
+    setInput,
+  } = useSession({ sessionId })
 
-  const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -30,9 +34,9 @@ export function SessionView() {
 
   const handleNewSession = async () => {
     if (sessionId) {
-      await disposeSession()
+      await onDisposeSession()
     }
-    await createSession()
+    await onCreateSession()
   }
 
   return (
@@ -112,31 +116,31 @@ export function SessionView() {
                 <div className="flex items-center gap-0 text-xs text-text-secondary">
                   <button type="button" className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-surface-800 transition-colors duration-150">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-accent-400">
-                      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/>
-                      <path d="M8 12h8M12 8v8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5"/>
+                      <path d="M8 12h8M12 8v8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                     </svg>
                     <span>GPT-5.4</span>
-                    <svg width="10" height="10" viewBox="0 0 10 10" className="text-text-tertiary"><path d="M3 4l2 2 2-2" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <svg width="10" height="10" viewBox="0 0 10 10" className="text-text-tertiary"><path d="M3 4l2 2 2-2" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </button>
                   <div className="w-px h-3.5 bg-surface-700/60 mx-1" />
                   <button type="button" className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-surface-800 transition-colors duration-150">
                     <span>High</span>
-                    <svg width="10" height="10" viewBox="0 0 10 10" className="text-text-tertiary"><path d="M3 4l2 2 2-2" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <svg width="10" height="10" viewBox="0 0 10 10" className="text-text-tertiary"><path d="M3 4l2 2 2-2" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </button>
                   <div className="w-px h-3.5 bg-surface-700/60 mx-1" />
                   <button type="button" className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-surface-800 transition-colors duration-150">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-text-secondary">
-                      <rect x="5" y="7" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/>
-                      <circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1.5"/>
-                      <path d="M12 7V5M8 5h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                      <rect x="5" y="7" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+                      <circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="1.5"/>
+                      <path d="M12 7V5M8 5h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                     </svg>
                     <span>Chat</span>
                   </button>
                   <div className="w-px h-3.5 bg-surface-700/60 mx-1" />
                   <button type="button" className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-surface-800 transition-colors duration-150">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-text-secondary">
-                      <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/>
-                      <path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                      <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+                      <path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                     </svg>
                     <span>Full access</span>
                   </button>
@@ -147,7 +151,7 @@ export function SessionView() {
                   className="w-9 h-9 flex items-center justify-center rounded-full bg-accent-700 text-white hover:bg-accent-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-accent-700/25 hover:shadow-accent-600/35"
                 >
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path d="M8 3v10M4 7l4-4 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M8 3v10M4 7l4-4 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                 </button>
               </div>
@@ -156,13 +160,13 @@ export function SessionView() {
           <div className="flex items-center justify-between mt-2 px-1">
             <span className="flex items-center gap-1.5 text-[11px] text-text-tertiary">
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                <path d="M2 4h12M2 4v8a2 2 0 002 2h8a2 2 0 002-2V4M2 4l2-2h8l2 2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M2 4h12M2 4v8a2 2 0 002 2h8a2 2 0 002-2V4M2 4l2-2h8l2 2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
               Local
             </span>
             <span className="flex items-center gap-1 text-[11px] text-text-tertiary">
               main
-              <svg width="10" height="10" viewBox="0 0 10 10"><path d="M3 4l2 2 2-2" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <svg width="10" height="10" viewBox="0 0 10 10"><path d="M3 4l2 2 2-2" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </span>
           </div>
         </div>

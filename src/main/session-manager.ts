@@ -3,7 +3,9 @@ import {
   SessionManager as SdkSessionManager,
   type AgentSession,
   type AgentSessionEvent,
+  type SessionMessageEntry,
 } from '@mariozechner/pi-coding-agent'
+import type { TextContent, ToolCall, Message } from '@mariozechner/pi-ai'
 import { StreamBatcher } from './stream-batcher'
 import type { SessionStreamEvent, ChatMessageIPC } from '../shared/ipc-types'
 
@@ -122,7 +124,7 @@ export class PiSessionManager {
       if (!match?.path) return // Not on disk yet (empty session) — that's fine
 
       const sdkSessionMgr = SdkSessionManager.open(match.path)
-      const diskMessages = this.extractHistoryFromSdkMessages(sdkSessionMgr.messages)
+      const diskMessages = this.extractHistoryFromSdkMessages(sdkSessionMgr.getEntries().filter((e): e is SessionMessageEntry => e.type === "message").map(e => e.message))
 
       // Only update if disk has strictly more messages than memory
       if (diskMessages.length > managed.messages.length) {
@@ -222,36 +224,39 @@ export class PiSessionManager {
     // First pass: collect toolResult messages keyed by toolCallId
     const toolResults = new Map<string, { result: unknown; isError: boolean }>()
     for (const msg of sdkMessages) {
-      if ((msg as any).role === 'toolResult') {
-        const tr = msg as any
-        const content = Array.isArray(tr.content)
-          ? tr.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('')
-          : typeof tr.content === 'string' ? tr.content : ''
-        toolResults.set(tr.toolCallId, { result: content, isError: !!tr.isError })
+      if (!('role' in msg)) continue
+      const m = msg as Message
+      if (m.role === 'toolResult') {
+        const content = Array.isArray(m.content)
+          ? m.content.filter((b): b is TextContent => b.type === 'text').map(b => b.text).join('')
+          : ''
+        toolResults.set(m.toolCallId, { result: content, isError: !!m.isError })
       }
     }
 
     for (const msg of sdkMessages) {
-      const role = msg.role
+      if (!('role' in msg)) continue
+      const m = msg as Message
+      const role = m.role
       if (role !== 'user' && role !== 'assistant') continue
 
       let content = ''
       if (role === 'user') {
-        const userContent = (msg as any).content
+        const userContent = m.content
         if (typeof userContent === 'string') {
           content = userContent
         } else if (Array.isArray(userContent)) {
           content = userContent
-            .filter((block: any) => block.type === 'text')
-            .map((block: any) => block.text)
+            .filter((block): block is TextContent => block.type === 'text')
+            .map(block => block.text)
             .join('')
         }
       } else {
-        const assistantContent = (msg as any).content
+        const assistantContent = m.content
         if (Array.isArray(assistantContent)) {
           content = assistantContent
-            .filter((block: any) => block.type === 'text')
-            .map((block: any) => block.text)
+            .filter((block): block is TextContent => block.type === 'text')
+            .map(block => block.text)
             .join('')
         }
       }
@@ -259,15 +264,15 @@ export class PiSessionManager {
       // Extract tool calls from assistant messages
       let toolCalls: ChatMessageIPC['toolCalls']
       if (role === 'assistant') {
-        const assistantContent = (msg as any).content
+        const assistantContent = m.content
         if (Array.isArray(assistantContent)) {
-          const tcBlocks = assistantContent.filter((block: any) => block.type === 'toolCall')
+          const tcBlocks = assistantContent.filter((block): block is ToolCall => block.type === 'toolCall')
           if (tcBlocks.length > 0) {
-            toolCalls = tcBlocks.map((tc: any) => {
+            toolCalls = tcBlocks.map(tc => {
               const tcResult = toolResults.get(tc.id)
               return {
-                id: tc.id ?? crypto.randomUUID(),
-                name: tc.name ?? 'unknown',
+                id: tc.id,
+                name: tc.name,
                 args: tc.arguments,
                 result: tcResult?.result,
                 isError: tcResult?.isError,
@@ -278,11 +283,11 @@ export class PiSessionManager {
       }
 
       result.push({
-        id: (msg as any).id ?? crypto.randomUUID(),
-        role: role as 'user' | 'assistant',
+        id: crypto.randomUUID(),
+        role,
         content,
         toolCalls,
-        timestamp: (msg as any).timestamp ?? Date.now(),
+        timestamp: 'timestamp' in m ? m.timestamp : Date.now(),
       })
     }
     return result
@@ -328,12 +333,12 @@ export class PiSessionManager {
             content = event.message.content
           } else if (Array.isArray(event.message.content)) {
             content = event.message.content
-              .filter((block: any) => block.type === 'text')
-              .map((block: any) => block.text)
+              .filter((block): block is TextContent => block.type === 'text')
+              .map(block => block.text)
               .join('')
           }
           managed.messages.push({
-            id: (event.message as any).id ?? crypto.randomUUID(),
+            id: crypto.randomUUID(),
             role: 'user',
             content,
             timestamp: Date.now(),
@@ -348,7 +353,7 @@ export class PiSessionManager {
         }
         break
       }
-      case 'tool_execution_start':
+      case 'tool_execution_start': {
         batcher.flush()
         console.log(`[SessionManager] tool_execution_start: name=${event.toolName}, id=${event.toolCallId}, args=`, JSON.stringify(event.args)?.slice(0, 200))
         emit({ type: 'tool_call', toolCallId: event.toolCallId ?? managed.currentToolCallId ?? crypto.randomUUID(), toolName: event.toolName, args: event.args })
@@ -379,6 +384,7 @@ export class PiSessionManager {
           })
         }
         break
+      }
       case 'tool_execution_end':
         batcher.flush()
         console.log(`[SessionManager] tool_execution_end: name=${event.toolName}, id=${event.toolCallId}, isError=${event.isError}, result=`, JSON.stringify(event.result)?.slice(0, 200))

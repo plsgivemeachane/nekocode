@@ -137,7 +137,7 @@ describe('StreamBatcher', () => {
     const batcher = createBatcher((e) => flushed.push(e))
 
     batcher.push({ type: 'tool_call', toolCallId: 'tc-1', toolName: 'bash', args: {} })
-    batcher.push({ type: 'tool_result', toolCallId: 'tc-1', toolName: 'bash', result: 'ok' })
+    batcher.push({ type: 'tool_result', toolCallId: 'tc-1', toolName: 'bash', result: 'ok', isError: false })
     batcher.push({ type: 'done' })
 
     expect(flushed).toHaveLength(3)

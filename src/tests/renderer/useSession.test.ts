@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import type { SessionStreamEvent, ChatMessageIPC } from '@/shared/ipc-types'
+import { describe, it, expect } from 'vitest'
+import type { SessionStreamEvent } from '@/shared/ipc-types'
 import { generateId } from '@/renderer/src/types/chat'
 
 /**
@@ -21,7 +21,7 @@ interface ChatMessage {
   content?: string
   toolName?: string
   toolId?: string
-  args?: any
+  args?: unknown
   status?: string
   result?: string
   isError?: boolean
@@ -61,7 +61,7 @@ function handleToolResult(messages: ChatMessage[], event: SessionStreamEvent & {
       msg.toolId === event.toolCallId &&
       msg.status === 'running'
     ) {
-      msgs[i] = { ...msg, status: 'done', result: event.result, isError: event.isError }
+      msgs[i] = { ...msg, status: 'done', result: typeof event.result === 'string' ? event.result : undefined, isError: event.isError }
       return msgs
     }
   }

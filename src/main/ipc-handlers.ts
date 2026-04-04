@@ -16,7 +16,6 @@ import type {
   ProjectSessionsPayload,
   ProjectInfo,
   WorkspaceSetActivePayload,
-  WorkspaceActiveResult,
 } from '../shared/ipc-types'
 import { PiSessionManager } from './session-manager'
 import type { ProjectManager } from './project-manager'
@@ -33,7 +32,7 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC_CHANNELS.SESSION_CREATE, async (_event, payload: SessionCreatePayload): Promise<SessionCreateResult> => {
     const sessionId = await sessionManager.create(payload.cwd)
-    return { sessionId }
+    return { sessionId, stableId: sessionId }
   })
 
   ipcMain.handle(IPC_CHANNELS.SESSION_PROMPT, async (_event, payload: SessionPromptPayload): Promise<void> => {
@@ -50,7 +49,7 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC_CHANNELS.SESSION_RECONNECT, async (_event, payload: SessionReconnectPayload): Promise<SessionReconnectResult> => {
     const history = await sessionManager.reconnect(payload.sessionId, payload.cwd)
-    return { sessionId: payload.sessionId, history }
+    return { sessionId: payload.sessionId, stableId: payload.sessionId, history }
   })
 
   ipcMain.handle(IPC_CHANNELS.SESSION_LOAD_HISTORY, async (_event, payload: SessionLoadHistoryPayload): Promise<ChatMessageIPC[]> => {

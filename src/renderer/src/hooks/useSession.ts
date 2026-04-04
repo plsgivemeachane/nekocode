@@ -7,12 +7,11 @@ import { generateId } from '../types/chat'
 function ipcToChatMessage(ipc: ChatMessageIPC): ChatMessage[] {
   const msgs: ChatMessage[] = []
   if (ipc.content) {
-    msgs.push({
-      role: ipc.role,
-      type: 'text',
-      content: ipc.content,
-      id: ipc.id,
-    } as ChatMessage)
+    if (ipc.role === 'user') {
+      msgs.push({ role: 'user', content: ipc.content, id: ipc.id })
+    } else {
+      msgs.push({ role: 'assistant', type: 'text', content: ipc.content, id: ipc.id })
+    }
   }
   if (ipc.toolCalls) {
     for (const tc of ipc.toolCalls) {
@@ -94,7 +93,7 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
     setInput(draft ?? '')
 
     prevSessionRef.current = sessionId
-  }, [sessionId]) // eslint-disable-line react-hooks/exhaustive-deps -- input is intentionally not a dep; we read it for save, not react to it
+  }, [sessionId])
 
   // Load message history from main process on mount / sessionId change
   // This enables session persistence: reconnecting to an existing session
@@ -177,7 +176,7 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
               }
             }
             if (!matched) {
-              console.warn(`[useSession] tool_result NO MATCH: id=${event.toolCallId}, name=${event.toolName}. Running tool_calls:`, msgs.filter(m => m.role === 'assistant' && m.type === 'tool_call' && m.status === 'running').map(m => ({ id: m.toolId, name: m.toolName })))
+              console.warn(`[useSession] tool_result NO MATCH: id=${event.toolCallId}, name=${event.toolName}. Running tool_calls:`, msgs.filter((m): m is Extract<ChatMessage, { type: 'tool_call' }> => m.role === 'assistant' && m.type === 'tool_call' && m.status === 'running').map(m => ({ id: m.toolId, name: m.toolName })))
             }
             return msgs
           })

@@ -1,3 +1,4 @@
+import React from 'react'
 import { MarkdownContent } from './MarkdownContent'
 
 interface AssistantMessageProps {

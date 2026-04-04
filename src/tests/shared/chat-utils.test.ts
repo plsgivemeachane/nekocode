@@ -1,23 +1,37 @@
 import { describe, it, expect } from 'vitest'
 import { generateId } from '@/renderer/src/types/chat'
 import type { ChatMessageIPC } from '@/shared/ipc-types'
+import type { ChatMessage } from '@/renderer/src/types/chat'
 
 // We test the pure conversion functions by re-implementing them here
 // since they are not exported from useSession.ts. If they get exported
 // in the future, replace these with direct imports.
 
+/** Narrow a ChatMessage to a specific variant for test assertions */
+function asToolCall(m: ChatMessage) {
+  if (m.role === 'assistant' && m.type === 'tool_call') return m
+  throw new Error('Expected tool_call message')
+}
+function asText(m: ChatMessage) {
+  if (m.role === 'assistant' && m.type === 'text') return m
+  throw new Error('Expected text message')
+}
+function asUser(m: ChatMessage) {
+  if (m.role === 'user') return m
+  throw new Error('Expected user message')
+}
+
 // ── Inline copies of the functions under test ─────────────────────
 // These match the source exactly. If source changes, these must too.
 
-function ipcToChatMessage(ipc: ChatMessageIPC): any[] {
-  const msgs: any[] = []
+function ipcToChatMessage(ipc: ChatMessageIPC): ChatMessage[] {
+  const msgs: ChatMessage[] = []
   if (ipc.content) {
-    msgs.push({
-      role: ipc.role,
-      type: 'text',
-      content: ipc.content,
-      id: ipc.id,
-    })
+    if (ipc.role === 'user') {
+      msgs.push({ role: 'user', content: ipc.content, id: ipc.id })
+    } else {
+      msgs.push({ role: 'assistant', type: 'text', content: ipc.content, id: ipc.id })
+    }
   }
   if (ipc.toolCalls) {
     for (const tc of ipc.toolCalls) {
@@ -37,7 +51,7 @@ function ipcToChatMessage(ipc: ChatMessageIPC): any[] {
   return msgs
 }
 
-function ipcToChatMessages(ipcMessages: ChatMessageIPC[]): any[] {
+function ipcToChatMessages(ipcMessages: ChatMessageIPC[]): ChatMessage[] {
   return ipcMessages.flatMap(ipcToChatMessage)
 }
 
@@ -49,6 +63,7 @@ describe('ipcToChatMessage', () => {
       id: 'msg-1',
       role: 'user',
       content: 'Hello world',
+      timestamp: 0,
     }
     const result = ipcToChatMessage(ipc)
     expect(result).toHaveLength(1)
@@ -65,6 +80,7 @@ describe('ipcToChatMessage', () => {
       id: 'msg-2',
       role: 'assistant',
       content: '',
+      timestamp: 0,
       toolCalls: [{
         id: 'tc-1',
         name: 'bash',
@@ -75,11 +91,12 @@ describe('ipcToChatMessage', () => {
     }
     const result = ipcToChatMessage(ipc)
     expect(result).toHaveLength(1)
-    expect(result[0].type).toBe('tool_call')
-    expect(result[0].toolName).toBe('bash')
-    expect(result[0].status).toBe('done')
-    expect(result[0].result).toBe('file1.txt')
-    expect(result[0].id).toMatch(/^msg-\d+-\d+$/)
+    const tc = asToolCall(result[0])
+    expect(tc.type).toBe('tool_call')
+    expect(tc.toolName).toBe('bash')
+    expect(tc.status).toBe('done')
+    expect(tc.result).toBe('file1.txt')
+    expect(tc.id).toMatch(/^msg-\d+-\d+$/)
   })
 
   it('converts message with both text and tool calls', () => {
@@ -87,6 +104,7 @@ describe('ipcToChatMessage', () => {
       id: 'msg-3',
       role: 'assistant',
       content: 'Let me check...',
+      timestamp: 0,
       toolCalls: [{
         id: 'tc-2',
         name: 'read',
@@ -97,26 +115,18 @@ describe('ipcToChatMessage', () => {
     }
     const result = ipcToChatMessage(ipc)
     expect(result).toHaveLength(2)
-    expect(result[0].type).toBe('text')
-    expect(result[0].content).toBe('Let me check...')
-    expect(result[1].type).toBe('tool_call')
+    const txt = asText(result[0])
+    expect(txt.type).toBe('text')
+    expect(txt.content).toBe('Let me check...')
+    expect(asToolCall(result[1]).type).toBe('tool_call')
   })
 
   it('converts message with empty content (falsy) — no text message', () => {
     const ipc: ChatMessageIPC = {
-      id: 'msg-4',
-      role: 'assistant',
-      content: '',
-    }
-    const result = ipcToChatMessage(ipc)
-    expect(result).toHaveLength(0)
-  })
-
-  it('converts message with null content — no text message', () => {
-    const ipc: ChatMessageIPC = {
       id: 'msg-5',
       role: 'assistant',
-      content: null as any,
+      content: '',
+      timestamp: 0,
     }
     const result = ipcToChatMessage(ipc)
     expect(result).toHaveLength(0)
@@ -127,6 +137,7 @@ describe('ipcToChatMessage', () => {
       id: 'msg-6',
       role: 'assistant',
       content: '',
+      timestamp: 0,
       toolCalls: [
         { id: 'tc-a', name: 'read', args: {}, result: 'a', isError: false },
         { id: 'tc-b', name: 'bash', args: {}, result: 'b', isError: false },
@@ -135,27 +146,27 @@ describe('ipcToChatMessage', () => {
     }
     const result = ipcToChatMessage(ipc)
     expect(result).toHaveLength(3)
-    expect(result.map((m: any) => m.toolName)).toEqual(['read', 'bash', 'write'])
-    expect(result[2].isError).toBe(true)
+    expect(result.map((m) => { if (m.role === 'assistant' && 'toolName' in m) return m.toolName; return null })).toEqual(['read', 'bash', 'write'])
+    expect(asToolCall(result[2]).isError).toBe(true)
   })
 })
 
 describe('ipcToChatMessages', () => {
   it('flatMaps multiple IPC messages', () => {
     const ipcMessages: ChatMessageIPC[] = [
-      { id: 'm1', role: 'user', content: 'hi' },
-      { id: 'm2', role: 'assistant', content: 'hello', toolCalls: [
+      { id: 'm1', role: 'user', content: 'hi', timestamp: 0 },
+      { id: 'm2', role: 'assistant', content: 'hello', timestamp: 0, toolCalls: [
         { id: 'tc-1', name: 'bash', args: {}, result: 'ok', isError: false },
       ]},
-      { id: 'm3', role: 'user', content: 'bye' },
+      { id: 'm3', role: 'user', content: 'bye', timestamp: 0 },
     ]
     const result = ipcToChatMessages(ipcMessages)
     // m1 -> 1 text, m2 -> 1 text + 1 tool, m3 -> 1 text = 4 total
     expect(result).toHaveLength(4)
-    expect(result[0].content).toBe('hi')
-    expect(result[1].content).toBe('hello')
-    expect(result[2].type).toBe('tool_call')
-    expect(result[3].content).toBe('bye')
+    expect(asUser(result[0]).content).toBe('hi')
+    expect(asText(result[1]).content).toBe('hello')
+    expect(asToolCall(result[2]).type).toBe('tool_call')
+    expect(asUser(result[3]).content).toBe('bye')
   })
 
   it('returns empty array for empty input', () => {
@@ -164,12 +175,12 @@ describe('ipcToChatMessages', () => {
 
   it('filters out empty-content messages with no tool calls', () => {
     const ipcMessages: ChatMessageIPC[] = [
-      { id: 'm1', role: 'assistant', content: '' },
-      { id: 'm2', role: 'user', content: 'real' },
+      { id: 'm1', role: 'assistant', content: '', timestamp: 0 },
+      { id: 'm2', role: 'user', content: 'real', timestamp: 0 },
     ]
     const result = ipcToChatMessages(ipcMessages)
     expect(result).toHaveLength(1)
-    expect(result[0].content).toBe('real')
+    expect(asUser(result[0]).content).toBe('real')
   })
 })
 

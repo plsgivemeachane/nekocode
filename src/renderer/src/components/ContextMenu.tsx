@@ -1,7 +1,8 @@
-import { useEffect, useRef, useCallback } from 'react'
+import React, { useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 
 export interface ContextMenuItem {
+  type?: undefined
   label: string
   icon?: React.ReactNode
   onClick: () => void
@@ -89,7 +90,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
         style={{ pointerEvents: 'auto' }}
       >
         {items.map((item, i) => {
-          if (item.type === 'separator') {
+          if ('type' in item && item.type === 'separator') {
             return (
               <div
                 key={`sep-${i}`}

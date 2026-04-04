@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useProjectStore, type SessionStatus } from '../stores/project-store'
 import { ContextMenu, type ContextMenuEntry } from './ContextMenu'
 
@@ -59,11 +59,6 @@ export function TreeSidebar() {
     }
   }
 
-  const handleRemove = async (e: React.MouseEvent, projectId: string) => {
-    e.stopPropagation()
-    await removeProject(projectId)
-  }
-
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; items: ContextMenuEntry[] } | null>(null)
   const closeCtxMenu = useCallback(() => setCtxMenu(null), [])
 
@@ -104,7 +99,7 @@ export function TreeSidebar() {
     })
   }, [createSession, refreshSessions, removeProject])
 
-  const openSessionMenu = useCallback((e: React.MouseEvent, sessionId: string, projectPath: string) => {
+  const openSessionMenu = useCallback((e: React.MouseEvent, sessionId: string) => {
     e.preventDefault()
     e.stopPropagation()
     setCtxMenu({
@@ -208,7 +203,7 @@ export function TreeSidebar() {
                             : 'text-text-secondary/70 hover:bg-surface-800/40 hover:text-text-secondary'
                         }`}
                         onClick={() => reconnectSession(session.id, project.path)}
-                        onContextMenu={(e) => openSessionMenu(e, session.id, project.path)}
+                        onContextMenu={(e) => openSessionMenu(e, session.id)}
                       >
                         <span className={`truncate flex-1 ${isActiveSession ? '' : 'pl-3'}`}>
                           {session.firstMessage ? truncate(session.firstMessage, 26) : 'Untitled'}

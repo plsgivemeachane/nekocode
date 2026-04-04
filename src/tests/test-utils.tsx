@@ -15,6 +15,7 @@ function createMockSessionAPI(): NekoCodeIPC['session'] {
     reconnect: vi.fn<() => Promise<SessionReconnectResult>>().mockResolvedValue({
       sessionId: 'mock-sdk-session-id',
       stableId: 'mock-stable-id',
+      history: [],
     }),
     loadHistory: vi.fn<() => Promise<ChatMessageIPC[]>>().mockResolvedValue([]),
     onEvent: vi.fn<() => () => void>().mockReturnValue(() => {}),
@@ -69,12 +70,12 @@ export function createMockIPC(): NekoCodeIPC {
 
 export function setupMockIPC(mock?: Partial<NekoCodeIPC>): NekoCodeIPC {
   const full = { ...createMockIPC(), ...mock }
-  ;(globalThis as any).nekocode = full
+  ;(globalThis as unknown as Record<string, NekoCodeIPC>).nekocode = full
   return full
 }
 
 export function clearMockIPC(): void {
-  delete (globalThis as any).nekocode
+  delete (globalThis as unknown as Record<string, NekoCodeIPC>).nekocode
 }
 
 // ── Event emitter helper for onEvent tests ────────────────────────
@@ -99,7 +100,7 @@ export function makeTextDeltaEvent(delta: string): SessionStreamEvent {
   return { type: 'text_delta', delta }
 }
 
-export function makeToolCallEvent(toolName: string, toolCallId: string, args: Record<string, any>): SessionStreamEvent {
+export function makeToolCallEvent(toolName: string, toolCallId: string, args: Record<string, unknown>): SessionStreamEvent {
   return { type: 'tool_call', toolName, toolCallId, args }
 }
 

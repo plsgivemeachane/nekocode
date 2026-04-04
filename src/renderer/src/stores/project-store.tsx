@@ -1,4 +1,4 @@
-import {
+import React, {
   createContext,
   useContext,
   useReducer,
@@ -10,7 +10,6 @@ import {
 import type {
   ProjectInfo,
   SessionInfoDisplay,
-  SessionStreamEvent,
 } from '../../../shared/ipc-types'
 
 // ---------------------------------------------------------------------------

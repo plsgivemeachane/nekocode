@@ -11,6 +11,7 @@ export interface SessionCreatePayload {
 /** Result of session creation */
 export interface SessionCreateResult {
   sessionId: string
+  stableId: string
 }
 
 /** Payload for sending a prompt */
@@ -38,6 +39,7 @@ export interface SessionReconnectPayload {
 /** Result of session reconnection */
 export interface SessionReconnectResult {
   sessionId: string
+  stableId: string
   history: ChatMessageIPC[]
 }
 
@@ -66,6 +68,7 @@ export type SessionStreamEvent =
   | { type: 'tool_result'; toolCallId: string; toolName: string; result: unknown; isError: boolean }
   | { type: 'error'; message: string }
   | { type: 'done' }
+  | { type: 'user_message'; text: string }
 
 /** Display info for a session shown in the sidebar */
 export interface SessionInfoDisplay {
@@ -78,6 +81,7 @@ export interface SessionInfoDisplay {
 /** Info about a tracked project */
 export interface ProjectInfo {
   id: string
+  name: string
   path: string
   sessions: SessionInfoDisplay[]
 }

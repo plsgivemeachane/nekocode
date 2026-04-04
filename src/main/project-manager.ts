@@ -184,6 +184,7 @@ export class ProjectManager {
   private toProjectInfo(project: Project): ProjectInfo {
     return {
       id: project.id,
+      name: project.path.split(/[/\\]/).pop() ?? project.path,
       path: project.path,
       sessions: project.sessions,
     }

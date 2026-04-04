@@ -1,3 +1,4 @@
+import React from 'react'
 import { extractToolSummary } from './tool-summary'
 
 interface ToolCallData {

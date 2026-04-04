@@ -58,8 +58,8 @@ function extractText(node: React.ReactNode): string {
   if (typeof node === 'string') return node
   if (typeof node === 'number') return String(node)
   if (Array.isArray(node)) return node.map(extractText).join('')
-  if (node && typeof node === 'object' && 'props' in node) {
-    return extractText((node as React.ReactElement).props.children)
+  if (node && typeof node === "object" && "props" in node) {
+    return extractText((node as React.ReactElement<{ children: React.ReactNode }>).props.children)
   }
   return ''
 }
@@ -74,10 +74,10 @@ export const MarkdownContent = React.memo(function MarkdownContent({ content }: 
       <Markdown
         rehypePlugins={[rehypeHighlight]}
         components={{
-          code: ({ children, className, ...rest }) => (
+          code: ({ children, className }) => (
             <CodeBlock className={className}>{children}</CodeBlock>
           ),
-          a: ({ href, children, ...rest }) => (
+          a: ({ href, children }) => (
             <a href={href} target="_blank" rel="noopener noreferrer" className="text-text-accent hover:text-accent-300 underline underline-offset-2">
               {children}
             </a>
