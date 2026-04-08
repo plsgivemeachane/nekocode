@@ -19,13 +19,29 @@ export function SessionView({ sessionId, cwd, onCreateSession, onDisposeSession 
     sendPrompt,
     input,
     setInput,
+    activeModel,
+    modelList,
   } = useSession({ sessionId })
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [showModelDropdown, setShowModelDropdown] = React.useState(false)
+  const modelDropdownRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // Close model dropdown on outside click
+  useEffect(() => {
+    if (!showModelDropdown) return
+    const handler = (e: MouseEvent) => {
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
+        setShowModelDropdown(false)
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [showModelDropdown])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -47,7 +63,7 @@ export function SessionView({ sessionId, cwd, onCreateSession, onDisposeSession 
   return (
     <div className="min-h-screen bg-surface-950 text-text-primary flex flex-col">
       <header className="border-b border-surface-800 px-6 py-3.5 flex items-center justify-between">
-        <h1 className="text-xl font-display font-bold tracking-tight text-accent-400">NekoCode</h1>
+        <h1 className="text-xl font-display font-bold tracking-tight"><span className="text-pink-400">Neko</span><span className="text-white">code</span></h1>
         <div className="flex items-center gap-3">
           {cwd && (
             <span className="text-xs text-text-tertiary font-mono truncate max-w-xs" title={cwd}>
@@ -119,36 +135,34 @@ export function SessionView({ sessionId, cwd, onCreateSession, onDisposeSession 
               />
               <div className="flex items-center justify-between mt-2 pt-2">
                 <div className="flex items-center gap-0 text-xs text-text-secondary">
-                  <button type="button" className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-surface-800 transition-colors duration-150">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-accent-400">
-                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5"/>
-                      <path d="M8 12h8M12 8v8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                    </svg>
-                    <span>GPT-5.4</span>
-                    <svg width="10" height="10" viewBox="0 0 10 10" className="text-text-tertiary"><path d="M3 4l2 2 2-2" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </button>
-                  <div className="w-px h-3.5 bg-surface-700/60 mx-1" />
-                  <button type="button" className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-surface-800 transition-colors duration-150">
-                    <span>High</span>
-                    <svg width="10" height="10" viewBox="0 0 10 10" className="text-text-tertiary"><path d="M3 4l2 2 2-2" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </button>
-                  <div className="w-px h-3.5 bg-surface-700/60 mx-1" />
-                  <button type="button" className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-surface-800 transition-colors duration-150">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-text-secondary">
-                      <rect x="5" y="7" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/>
-                      <circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="1.5"/>
-                      <path d="M12 7V5M8 5h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                    </svg>
-                    <span>Chat</span>
-                  </button>
-                  <div className="w-px h-3.5 bg-surface-700/60 mx-1" />
-                  <button type="button" className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-surface-800 transition-colors duration-150">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-text-secondary">
-                      <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/>
-                      <path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                    </svg>
-                    <span>Full access</span>
-                  </button>
+                  <div ref={modelDropdownRef} className="relative">
+                    <button type="button" onClick={() => setShowModelDropdown(v => !v)} className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-surface-800 transition-colors duration-150">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-accent-400">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5"/>
+                        <path d="M8 12h8M12 8v8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                      </svg>
+                      <span>{activeModel ? activeModel.name : "Loading..."}</span>
+                      <svg width="10" height="10" viewBox="0 0 10 10" className="text-text-tertiary"><path d="M3 4l2 2 2-2" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </button>
+                    {showModelDropdown && modelList.length > 0 && (
+                      <div className="absolute bottom-full left-0 mb-1 w-56 bg-surface-800 border border-surface-700 rounded-lg shadow-xl p-2 max-h-64 overflow-y-auto z-50">
+                        {modelList.map(m => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => setShowModelDropdown(false)}
+                            className={`w-full text-left px-3 py-1.5 text-xs hover:bg-surface-700 transition-colors flex items-center justify-between ${activeModel?.id === m.id ? "text-accent-400" : "text-text-secondary"}`}
+                          >
+                            <span>{m.name}</span>
+                            <span className="text-text-tertiary text-[10px] ml-2">{m.provider}</span>
+                          </button>
+                        ))}
+                        {modelList.length === 0 && (
+                          <div className="px-3 py-2 text-xs text-text-tertiary">No models configured</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <button
                   type="submit"

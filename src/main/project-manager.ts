@@ -77,6 +77,7 @@ export class ProjectManager {
 
   /** Get the last active session info for auto-restoration by the renderer. */
   getActiveSession(): { sessionId: string | null; projectPath: string | null } {
+    logger.debug(`getActiveSession: sessionId=${this.activeSessionId ?? 'none'}, projectPath=${this.activeProjectPath ?? 'none'}`)
     return {
       sessionId: this.activeSessionId,
       projectPath: this.activeProjectPath,
@@ -130,6 +131,7 @@ export class ProjectManager {
 
   /** List all tracked projects. */
   listProjects(): ProjectInfo[] {
+    logger.debug(`listProjects: ${this.projects.size} project(s)`)
     return Array.from(this.projects.values()).map((p) => this.toProjectInfo(p))
   }
 
@@ -150,6 +152,7 @@ export class ProjectManager {
   private async discoverSessions(path: string): Promise<SessionInfoDisplay[]> {
     try {
       const sessions = await SessionManager.list(path)
+      logger.debug(`discoverSessions ${path}: found ${sessions.length} session(s)`)
       return sessions.map((s) => ({
         id: s.id,
         firstMessage: s.firstMessage,
@@ -172,6 +175,7 @@ export class ProjectManager {
       }
       await mkdir(join(app.getPath('userData')), { recursive: true })
       await writeFile(this.workspacePath, JSON.stringify(state, null, 2), 'utf-8')
+      logger.debug(`Workspace saved: ${state.projectPaths.length} project(s), activeSession=${state.activeSessionId ?? 'none'}`)
     } catch (err) {
       logger.error('Failed to save workspace', err)
     }
@@ -179,8 +183,12 @@ export class ProjectManager {
 
   private findProject(id: string): Project | undefined {
     for (const project of this.projects.values()) {
-      if (project.id === id) return project
+      if (project.id === id) {
+        logger.debug(`findProject: found ${id} -> path=${project.path}`)
+        return project
+      }
     }
+    logger.debug(`findProject: ${id} not found among ${this.projects.size} project(s)`)
     return undefined
   }
 

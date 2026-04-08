@@ -15,6 +15,7 @@ function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    icon: join(__dirname, '../../resources/icon.ico'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
@@ -27,11 +28,16 @@ function createWindow(): BrowserWindow {
   })
 
   logger.info('BrowserWindow created')
+  logger.debug(`preload path: ${join(__dirname, '../preload/index.js')}`)
+  logger.debug(`icon path: ${join(__dirname, '../../resources/icon.ico')}`)
 
   if (process.env.ELECTRON_RENDERER_URL) {
+    logger.info(`Loading dev URL: ${process.env.ELECTRON_RENDERER_URL}`)
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    const indexPath = join(__dirname, '../renderer/index.html')
+    logger.info(`Loading production file: ${indexPath}`)
+    mainWindow.loadFile(indexPath)
   }
 
   return mainWindow
@@ -67,10 +73,13 @@ app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => {
-  logger.info('window-all-closed')
+  logger.info(`window-all-closed (platform=${process.platform})`)
   performShutdown()
   if (process.platform !== 'darwin') {
+    logger.info('Quitting app (non-macOS)')
     app.quit()
+  } else {
+    logger.info('Keeping app alive (macOS)')
   }
 })
 

@@ -9,6 +9,7 @@ import type {
   NekoCodeIPC,
   WorkspaceSetActivePayload,
   WorkspaceActiveResult,
+  ModelInfo,
 } from '../shared/ipc-types'
 
 const sessionApi: NekoCodeIPC['session'] = {
@@ -39,6 +40,12 @@ const sessionApi: NekoCodeIPC['session'] = {
       ipcRenderer.removeListener(IPC_CHANNELS.SESSION_EVENTS, handler)
     }
   },
+
+  getModel: (sessionId: string): Promise<ModelInfo | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SESSION_GET_MODEL, { sessionId }),
+
+  listModels: (): Promise<ModelInfo[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SESSION_LIST_MODELS),
 }
 
 const projectApi: NekoCodeIPC['project'] = {

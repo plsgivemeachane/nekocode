@@ -114,6 +114,12 @@ export interface WorkspaceActiveResult {
   projectPath: string | null
 }
 
+export interface ModelInfo {
+  id: string
+  name: string
+  provider: string
+}
+
 /** API exposed to the renderer via contextBridge */
 export interface NekoCodeIPC {
   session: {
@@ -124,6 +130,8 @@ export interface NekoCodeIPC {
     reconnect: (sessionId: string, cwd: string) => Promise<SessionReconnectResult>
     loadHistory: (sessionId: string) => Promise<ChatMessageIPC[]>
     onEvent: (callback: (payload: { sessionId: string; event: SessionStreamEvent }) => void) => () => void
+    getModel: (sessionId: string) => Promise<ModelInfo | null>
+    listModels: () => Promise<ModelInfo[]>
   }
   dialog: {
     openFolder: () => Promise<string | null>

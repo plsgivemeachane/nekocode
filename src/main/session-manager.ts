@@ -7,9 +7,8 @@ import {
 } from '@mariozechner/pi-coding-agent'
 import type { TextContent, ToolCall, Message } from '@mariozechner/pi-ai'
 import { StreamBatcher } from './stream-batcher'
-import type { SessionStreamEvent, ChatMessageIPC } from '../shared/ipc-types'
+import type { SessionStreamEvent, ChatMessageIPC, ModelInfo } from '../shared/ipc-types'
 import { createLogger } from './logger'
-
 const logger = createLogger('session-manager')
 
 /** Internal representation of a managed session */
@@ -53,7 +52,16 @@ export class PiSessionManager {
    * Returns the stable session ID from the SDK (persisted on disk).
    */
   async create(cwd: string): Promise<string> {
-    const { session } = await createAgentSession({ cwd })
+    const { session, extensionsResult } = await createAgentSession({ cwd })
+
+    if (extensionsResult.errors.length > 0) {
+      logger.error(`[create] Extension load errors (${extensionsResult.errors.length}):`, extensionsResult.errors)
+    }
+    logger.info(`[create] Extensions loaded: ${extensionsResult.extensions.length}, errors: ${extensionsResult.errors.length}`)
+    for (const ext of extensionsResult.extensions) {
+      logger.info(`[create] Extension: ${ext.name || ext.path}`)
+    }
+
     const sessionId = session.sessionId
     logger.info(`Create ${sessionId} cwd=${cwd}`)
 
@@ -91,10 +99,18 @@ export class PiSessionManager {
     const sdkSessionMgr = SdkSessionManager.open(match.path)
 
     // Create a new AgentSession wrapping the opened session manager
-    const { session } = await createAgentSession({
+    const { session, extensionsResult } = await createAgentSession({
       cwd,
       sessionManager: sdkSessionMgr,
     })
+
+    if (extensionsResult.errors.length > 0) {
+      logger.error(`[reconnect] Extension load errors (${extensionsResult.errors.length}):`, extensionsResult.errors)
+    }
+    logger.info(`[reconnect] Extensions loaded: ${extensionsResult.extensions.length}, errors: ${extensionsResult.errors.length}`)
+    for (const ext of extensionsResult.extensions) {
+      logger.info(`[reconnect] Extension: ${ext.name || ext.path}`)
+    }
 
     const stableId = session.sessionId
     logger.info(`Reconnected ${stableId} (requested: ${sessionId})`)
@@ -134,15 +150,19 @@ export class PiSessionManager {
         logger.info(`Background refresh ${sessionId} — updated ${managed.messages.length} -> ${diskMessages.length} messages`)
         managed.messages = diskMessages
       }
-    } catch {
-      // Silently ignore — this is a best-effort background refresh
+    } catch (err) {
+      // Best-effort background refresh — log but don't throw
+      logger.debug(`Background refresh failed for ${sessionId}: ${err}`)
     }
   }
 
   /** Send a user prompt to an active session. */
   async prompt(sessionId: string, text: string): Promise<void> {
+    logger.info(`Prompt ${sessionId} text=${text.slice(0, 120)}${text.length > 120 ? '...' : ''}`)
     const managed = this.getManaged(sessionId)
+    logger.debug(`Prompt ${sessionId} — streaming state: currentAssistantId=${managed.currentAssistantId ?? 'none'}, currentToolCallId=${managed.currentToolCallId ?? 'none'}`)
     await managed.session.prompt(text, { streamingBehavior: 'steer' })
+    logger.debug(`Prompt ${sessionId} — SDK prompt() returned (streaming initiated)`)
   }
 
   /** Abort the current streaming response. */
@@ -155,6 +175,7 @@ export class PiSessionManager {
   /** Get the accumulated message history for a session. */
   getHistory(sessionId: string): ChatMessageIPC[] {
     const managed = this.getManaged(sessionId)
+    logger.debug(`getHistory ${sessionId} — returning ${managed.messages.length} message(s)`)
     // Return a copy to prevent mutation
     return [...managed.messages]
   }
@@ -176,6 +197,31 @@ export class PiSessionManager {
     }
   }
 
+  /** Get the current model for a session. */
+  getModel(sessionId: string): ModelInfo | null {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) return null
+    const model = managed.session.model
+    if (!model) return null
+    return { id: model.id, name: model.name, provider: model.provider }
+  }
+
+  /** List all available models with valid API keys. */
+  async listModels(): Promise<ModelInfo[]> {
+    let modelRegistry: import('@mariozechner/pi-coding-agent').ModelRegistry | null = null
+    for (const [, managed] of this.sessions) {
+      modelRegistry = managed.session.modelRegistry
+      break
+    }
+    if (!modelRegistry) {
+      const { ModelRegistry, AuthStorage } = await import('@mariozechner/pi-coding-agent')
+      const authStorage = AuthStorage.create()
+      modelRegistry = ModelRegistry.create(authStorage)
+    }
+    const available = modelRegistry.getAvailable()
+    return available.map((m: import('@mariozechner/pi-ai').Model<any>) => ({ id: m.id, name: m.name, provider: m.provider }))
+  }
+
   /** Get the number of active sessions. */
   get sessionCount(): number {
     return this.sessions.size
@@ -184,6 +230,7 @@ export class PiSessionManager {
   private getManaged(sessionId: string): ManagedSession {
     const managed = this.sessions.get(sessionId)
     if (!managed) {
+      logger.error(`getManaged: session not found ${sessionId} — active sessions: [${Array.from(this.sessions.keys()).join(', ')}]`)
       throw new Error(`Session not found: ${sessionId}`)
     }
     return managed
@@ -223,6 +270,7 @@ export class PiSessionManager {
   private extractHistoryFromSdkMessages(
     sdkMessages: AgentSession['messages'],
   ): ChatMessageIPC[] {
+    logger.debug(`extractHistoryFromSdkMessages: ${sdkMessages.length} raw SDK message(s)`)
     const result: ChatMessageIPC[] = []
     // First pass: collect toolResult messages keyed by toolCallId
     const toolResults = new Map<string, { result: unknown; isError: boolean }>()
@@ -293,6 +341,7 @@ export class PiSessionManager {
         timestamp: 'timestamp' in m ? m.timestamp : Date.now(),
       })
     }
+    logger.debug(`extractHistoryFromSdkMessages: produced ${result.length} ChatMessageIPC(s)`)
     return result
   }
 
@@ -327,6 +376,7 @@ export class PiSessionManager {
         break
       }
       case 'message_start': {
+        logger.debug(`message_start: role=${event.message?.role ?? 'unknown'}`)
         // Check if this is a user message start — if so, flush any pending assistant
         if (event.message?.role === 'user') {
           this.finalizeAssistantMessage(managed)
@@ -346,10 +396,12 @@ export class PiSessionManager {
             content,
             timestamp: Date.now(),
           })
+          logger.debug(`message_start: recorded user message, content=${content.length} chars, total=${managed.messages.length}`)
         }
         break
       }
       case 'message_end': {
+        logger.debug(`message_end: role=${event.message?.role ?? 'unknown'}`)
         // Finalize the assistant message when the message ends
         if (managed.currentAssistantId) {
           this.finalizeAssistantMessage(managed)
@@ -416,6 +468,7 @@ export class PiSessionManager {
       case 'agent_end':
         batcher.flush()
         this.finalizeAssistantMessage(managed)
+        logger.debug(`agent_end: total accumulated messages=${managed.messages.length}`)
         emit({ type: 'done' })
         break
       case 'turn_end':
@@ -424,11 +477,13 @@ export class PiSessionManager {
         break
       case 'agent_start':
         batcher.flush()
+        logger.debug(`agent_start: flushing batcher, emitting agent_start`)
         emit({ type: 'agent_start' })
         break
       default:
         // turn_start, tool_execution_update
         // are internal bookkeeping — not useful for the renderer.
+        logger.debug(`unhandled event type: ${(event as { type: string }).type}`)
         break
     }
   }
@@ -439,12 +494,14 @@ export class PiSessionManager {
    */
   private finalizeAssistantMessage(managed: ManagedSession): void {
     if (!managed.currentAssistantId) return
+    logger.debug(`finalizeAssistantMessage: id=${managed.currentAssistantId} content=${managed.currentAssistantContent.length} chars`)
     managed.messages.push({
       id: managed.currentAssistantId,
       role: 'assistant',
       content: managed.currentAssistantContent,
       timestamp: Date.now(),
     })
+    logger.debug(`finalizeAssistantMessage: total messages now ${managed.messages.length}`)
     managed.currentAssistantId = null
     managed.currentAssistantContent = ''
   }

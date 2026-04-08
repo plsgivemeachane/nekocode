@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import type { SessionStreamEvent, ChatMessageIPC } from '../../../shared/ipc-types'
+import type { SessionStreamEvent, ChatMessageIPC, ModelInfo } from '../../../shared/ipc-types'
 import type { ChatMessage } from '../types/chat'
 import { generateId } from '../types/chat'
 import { createLogger } from '../logger'
@@ -50,6 +50,8 @@ interface UseSessionOutput {
   input: string
   setInput: (text: string) => void
   sendPrompt: (text: string) => Promise<void>
+  activeModel: ModelInfo | null
+  modelList: ModelInfo[]
 }
 
 const INITIAL_MESSAGES: ChatMessage[] = []
@@ -64,6 +66,8 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [input, setInput] = useState('')
+  const [activeModel, setActiveModel] = useState<ModelInfo | null>(null)
+  const [modelList, setModelList] = useState<ModelInfo[]>([])
 
   // Draft preservation: save input text when switching away, restore when switching back
   const drafts = useRef<Map<string, string>>(new Map())
@@ -123,6 +127,32 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
     return () => { cancelled = true }
   }, [sessionId])
 
+  // Fetch the active model for the current session
+  useEffect(() => {
+    if (!sessionId) {
+      setActiveModel(null)
+      return
+    }
+    let cancelled = false
+    window.nekocode.session.getModel(sessionId).then((model) => {
+      if (!cancelled) setActiveModel(model)
+    }).catch(() => {
+      if (!cancelled) setActiveModel(null)
+    })
+    return () => { cancelled = true }
+  }, [sessionId])
+
+  // Fetch available models list
+  useEffect(() => {
+    let cancelled = false
+    window.nekocode.session.listModels().then((models) => {
+      if (!cancelled) setModelList(models)
+    }).catch(() => {
+      if (!cancelled) setModelList([])
+    })
+    return () => { cancelled = true }
+  }, [])
+
   // Subscribe to global session events, filter by our sessionId
   useEffect(() => {
     if (!sessionId) return
@@ -135,6 +165,7 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
 
       switch (event.type) {
         case 'agent_start':
+          logger.info('agent_start received — setting streaming=true')
           setIsStreaming(true)
           setError(null)
           break
@@ -145,8 +176,10 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
             const last = msgs[msgs.length - 1]
             if (last && last.role === 'assistant' && last.type === 'text') {
               msgs[msgs.length - 1] = { ...last, content: last.content + event.delta }
+              if (msgs.length % 50 === 0) logger.debug(`text_delta: appended to last msg, total msgs=${msgs.length}`)
             } else {
               msgs.push({ role: 'assistant', type: 'text', content: event.delta, id: generateId() })
+              logger.debug(`text_delta: created new assistant msg, total msgs=${msgs.length}`)
             }
             return msgs
           })
@@ -199,11 +232,13 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
         }
 
         case 'error':
+          logger.error(`session error: ${event.message}`)
           setIsStreaming(false)
           setError(event.message)
           break
 
         case 'done':
+          logger.info('done event received — streaming complete')
           setIsStreaming(false)
           break
       }
@@ -232,5 +267,5 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
     [sessionId],
   )
 
-  return { messages, isStreaming, error, input, setInput, sendPrompt }
+  return { messages, isStreaming, error, input, setInput, sendPrompt, activeModel, modelList }
 }

@@ -16,6 +16,7 @@ import type {
   ProjectSessionsPayload,
   ProjectInfo,
   WorkspaceSetActivePayload,
+  ModelInfo,
 } from '../shared/ipc-types'
 import { PiSessionManager } from './session-manager'
 import type { ProjectManager } from './project-manager'
@@ -130,6 +131,18 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.WORKSPACE_GET_ACTIVE, async (): Promise<{ sessionId: string | null; projectPath: string | null }> => {
     logger.debug('WORKSPACE_GET_ACTIVE')
     return projectManager.getActiveSession()
+  })
+
+  // --- Model handlers ---
+
+  ipcMain.handle(IPC_CHANNELS.SESSION_GET_MODEL, async (_event, payload: { sessionId: string }): Promise<ModelInfo | null> => {
+    logger.debug(`SESSION_GET_MODEL sessionId=${payload.sessionId}`)
+    return sessionManager.getModel(payload.sessionId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SESSION_LIST_MODELS, async (): Promise<ModelInfo[]> => {
+    logger.debug('SESSION_LIST_MODELS')
+    return sessionManager.listModels()
   })
 
   ipcMain.handle(IPC_CHANNELS.PROJECT_LIST, async (): Promise<ProjectInfo[]> => {

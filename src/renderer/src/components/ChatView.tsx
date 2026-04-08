@@ -17,13 +17,15 @@ interface ChatViewProps {
 }
 
 export function ChatView({ sessionId, className }: ChatViewProps) {
-  const { messages, isStreaming, error, input, setInput, sendPrompt } =
+  const { messages, isStreaming, error, input, setInput, sendPrompt, activeModel, modelList } =
     useSession({ sessionId })
 
   const [showScrollBtn, setShowScrollBtn] = React.useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const isAtBottomRef = useRef(true)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [showModelDropdown, setShowModelDropdown] = React.useState(false)
+  const modelDropdownRef = useRef<HTMLDivElement>(null)
 
   // Instant scroll to bottom (no smooth — avoids jank during streaming)
   const scrollToBottom = useCallback((smooth = false) => {
@@ -35,6 +37,18 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
       el.scrollTop = el.scrollHeight
     }
   }, [])
+
+  // Close model dropdown on outside click
+  useEffect(() => {
+    if (!showModelDropdown) return
+    const handler = (e: MouseEvent) => {
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
+        setShowModelDropdown(false)
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [showModelDropdown])
 
   // Track scroll position — update isAtBottomRef and button visibility
   const handleScroll = useCallback(() => {
@@ -239,36 +253,34 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
               />
               <div className="flex items-center justify-between mt-2 pt-2">
                 <div className="flex items-center gap-0 text-xs text-text-secondary">
-                  <button type="button" className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-surface-800 transition-colors duration-150">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-accent-400">
-                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5"/>
-                      <path d="M8 12h8M12 8v8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                    </svg>
-                    <span>GPT-5.4</span>
-                    <svg width="10" height="10" viewBox="0 0 10 10" className="text-text-tertiary"><path d="M3 4l2 2 2-2" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </button>
-                  <div className="w-px h-3.5 bg-surface-700/60 mx-1" />
-                  <button type="button" className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-surface-800 transition-colors duration-150">
-                    <span>High</span>
-                    <svg width="10" height="10" viewBox="0 0 10 10" className="text-text-tertiary"><path d="M3 4l2 2 2-2" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </button>
-                  <div className="w-px h-3.5 bg-surface-700/60 mx-1" />
-                  <button type="button" className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-surface-800 transition-colors duration-150">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-text-secondary">
-                      <rect x="5" y="7" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/>
-                      <circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="1.5"/>
-                      <path d="M12 7V5M8 5h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                    </svg>
-                    <span>Chat</span>
-                  </button>
-                  <div className="w-px h-3.5 bg-surface-700/60 mx-1" />
-                  <button type="button" className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-surface-800 transition-colors duration-150">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-text-secondary">
-                      <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.5"/>
-                      <path d="M8 11V7a4 4 0 018 0v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                    </svg>
-                    <span>Full access</span>
-                  </button>
+                  <div ref={modelDropdownRef} className="relative">
+                    <button type="button" onClick={() => setShowModelDropdown(v => !v)} className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-surface-800 transition-colors duration-150">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-accent-400">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5"/>
+                        <path d="M8 12h8M12 8v8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                      </svg>
+                      <span>{activeModel ? activeModel.name : "Loading..."}</span>
+                      <svg width="10" height="10" viewBox="0 0 10 10" className="text-text-tertiary"><path d="M3 4l2 2 2-2" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </button>
+                    {showModelDropdown && modelList.length > 0 && (
+                      <div className="absolute bottom-full left-0 mb-1 w-56 bg-surface-800 border border-surface-700 rounded-lg shadow-xl p-2 max-h-64 overflow-y-auto z-50">
+                        {modelList.map(m => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => setShowModelDropdown(false)}
+                            className={`w-full text-left px-3 py-1.5 text-xs hover:bg-surface-700 transition-colors flex items-center justify-between ${activeModel?.id === m.id ? "text-accent-400" : "text-text-secondary"}`}
+                          >
+                            <span>{m.name}</span>
+                            <span className="text-text-tertiary text-[10px] ml-2">{m.provider}</span>
+                          </button>
+                        ))}
+                        {modelList.length === 0 && (
+                          <div className="px-3 py-2 text-xs text-text-tertiary">No models configured</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <button
                   type="submit"

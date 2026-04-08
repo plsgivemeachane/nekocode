@@ -26,6 +26,7 @@ export class StreamBatcher {
   ) {
     this.onFlush = onFlush
     this.flushIntervalMs = flushIntervalMs
+    logger.debug(`StreamBatcher created: interval=${flushIntervalMs}ms`)
   }
 
   /**
@@ -35,6 +36,7 @@ export class StreamBatcher {
   push(event: SessionStreamEvent): void {
     if (event.type === 'text_delta') {
       this.pendingText += event.delta
+      logger.debug(`push: accumulated ${this.pendingText.length} chars (delta=${event.delta.length})`)
       if (this.timer === null) {
         this.timer = setTimeout(() => this.flush(), this.flushIntervalMs)
       }

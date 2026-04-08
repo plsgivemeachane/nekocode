@@ -33,3 +33,4 @@ out
 .firecrawl
 package-lock.json
 bun.lock
+tsconfig.tsbuildinfo

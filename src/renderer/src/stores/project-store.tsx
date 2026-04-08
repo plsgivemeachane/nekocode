@@ -54,12 +54,14 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
   logger.debug(`action: ${action.type}`)
   switch (action.type) {
     case 'SET_PROJECTS':
+      logger.debug(`SET_PROJECTS: ${action.projects.length} project(s)`)
       return {
         ...state,
         projects: action.projects,
       }
 
     case 'ADD_PROJECT':
+      logger.debug(`ADD_PROJECT: id=${action.project.id} path=${action.project.path}`)
       return {
         ...state,
         projects: state.projects.some(p => p.id === action.project.id)
@@ -69,6 +71,7 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
 
     case 'REMOVE_PROJECT': {
       const removed = state.projects.find(p => p.id === action.projectId)
+      logger.debug(`REMOVE_PROJECT: id=${action.projectId} found=${!!removed}`)
       const clearedActive =
         removed && state.activeProjectPath === removed.path
       return {
@@ -91,6 +94,7 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
       }
 
     case 'ADD_SESSION_TO_PROJECT':
+      logger.debug(`ADD_SESSION_TO_PROJECT: path=${action.projectPath} sessionId=${action.session.id}`)
       return {
         ...state,
         projects: state.projects.map(p =>
@@ -124,6 +128,7 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
       }
 
     case 'CLEAR_ACTIVE_SESSION':
+      logger.debug('CLEAR_ACTIVE_SESSION')
       return {
         ...state,
         activeSessionId: null,
@@ -209,14 +214,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
       switch (event.type) {
         case 'agent_start':
+          logger.debug(`[global] agent_start sessionId=${sessionId.slice(0, 8)}...`)
           dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId, status: 'streaming' })
           break
 
         case 'done':
+          logger.debug(`[global] done sessionId=${sessionId.slice(0, 8)}...`)
           dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId, status: 'idle' })
           break
 
         case 'error':
+          logger.debug(`[global] error sessionId=${sessionId.slice(0, 8)}... message=${event.message}`)
           dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId, status: 'error' })
           break
       }

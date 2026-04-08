@@ -133,7 +133,7 @@ export function TreeSidebar() {
       {/* Header */}
       <div className="px-5 pt-5 pb-4">
         <div className="flex items-center justify-between">
-          <span className="text-[13px] font-display font-semibold text-text-primary tracking-tight">NekoCode</span>
+          <span className="text-xl font-display font-semibold tracking-tight"><span className="text-pink-400">Neko</span><span className="text-white">code</span></span>
           <button
             onClick={handleAddProject}
             className="p-1 text-text-secondary hover:text-text-primary hover:bg-surface-800/80 rounded-md transition-colors duration-200"

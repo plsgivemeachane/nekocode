@@ -1,5 +1,5 @@
 import type { NekoCodeIPC } from '@/shared/ipc-types'
-import type { SessionStreamEvent, ChatMessageIPC, ProjectInfo, SessionCreateResult, SessionReconnectResult, WorkspaceActiveResult } from '@/shared/ipc-types'
+import type { SessionStreamEvent, ChatMessageIPC, ProjectInfo, SessionCreateResult, SessionReconnectResult, WorkspaceActiveResult, ModelInfo } from '@/shared/ipc-types'
 
 // ── Mock IPC factory ──────────────────────────────────────────────
 
@@ -19,6 +19,8 @@ function createMockSessionAPI(): NekoCodeIPC['session'] {
     }),
     loadHistory: vi.fn<() => Promise<ChatMessageIPC[]>>().mockResolvedValue([]),
     onEvent: vi.fn<() => () => void>().mockReturnValue(() => {}),
+    getModel: vi.fn<(sessionId: string) => Promise<ModelInfo | null>>().mockResolvedValue(null),
+    listModels: vi.fn<() => Promise<ModelInfo[]>>().mockResolvedValue([]),
   }
 }
 
