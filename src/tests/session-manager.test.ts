@@ -7,6 +7,7 @@ const sdkMocks = vi.hoisted(() => ({
   settingsCreateMock: vi.fn(() => ({ kind: 'settings' })),
   getAgentDirMock: vi.fn(() => '/tmp/agent-dir'),
   sessionInMemoryMock: vi.fn(() => ({ kind: 'in-memory' })),
+  sessionCreateMock: vi.fn((cwd: string) => ({ kind: 'persisted', cwd })),
   sessionListMock: vi.fn<(cwd: string) => Promise<SessionInfo[]>>(async () => []),
   sessionOpenMock: vi.fn(),
 }))
@@ -81,6 +82,7 @@ vi.mock('@mariozechner/pi-coding-agent', () => ({
   },
   SessionManager: {
     inMemory: sdkMocks.sessionInMemoryMock,
+    create: sdkMocks.sessionCreateMock,
     list: sdkMocks.sessionListMock,
     open: sdkMocks.sessionOpenMock,
   },
@@ -106,6 +108,7 @@ describe('PiSessionManager', () => {
     sdkMocks.settingsCreateMock.mockClear()
     sdkMocks.getAgentDirMock.mockClear()
     sdkMocks.sessionInMemoryMock.mockClear()
+    sdkMocks.sessionCreateMock.mockClear()
     sdkMocks.sessionListMock.mockClear()
     sdkMocks.sessionOpenMock.mockClear()
     sdkMocks.createAgentSessionMock.mockReset()

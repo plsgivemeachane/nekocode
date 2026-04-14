@@ -60,7 +60,7 @@ export class PiSessionManager {
    * Returns the stable session ID from the SDK (persisted on disk).
    */
   async create(cwd: string): Promise<string> {
-    const primaryAttempt = await this.createSdkSession(SessionManager.inMemory(), cwd, 'create')
+    const primaryAttempt = await this.createSdkSession(SessionManager.create(cwd), cwd, 'create')
     const primaryErrors = this.normalizeExtensionErrors(primaryAttempt.extensionsResult.errors)
 
     let session = primaryAttempt.session
@@ -74,7 +74,7 @@ export class PiSessionManager {
         throw new Error(`[create] Systemic extension loader failure (${primaryErrors.length}) - set NEKOCODE_ALLOW_EXTENSION_FALLBACK=1 to allow degraded reconnect/create without extensions`)
       }
       logger.warn('[create] Detected systemic extension loader failure signature, retrying with extensions disabled')
-      const retryAttempt = await this.createSdkSession(SessionManager.inMemory(), cwd, 'create-noext', { noExtensions: true })
+      const retryAttempt = await this.createSdkSession(SessionManager.create(cwd), cwd, 'create-noext', { noExtensions: true })
       session = retryAttempt.session
       extensionsResult = retryAttempt.extensionsResult
       extensionsDisabled = retryAttempt.extensionsResult.errors.length === 0
