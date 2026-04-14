@@ -1,10 +1,7 @@
 import {
-  AuthStorage,
   createAgentSession,
-  createEventBus,
   DefaultResourceLoader,
   getAgentDir,
-  ModelRegistry,
   SessionManager as SdkSessionManager,
   SessionManager,
   SettingsManager,
@@ -12,10 +9,9 @@ import {
   type AgentSessionEvent,
   type SessionMessageEntry,
 } from '@mariozechner/pi-coding-agent'
-import {} from '@mariozechner/pi-coding-agent'
 import type { TextContent, ToolCall, Message } from '@mariozechner/pi-ai'
 import { StreamBatcher } from './stream-batcher'
-import type { SessionStreamEvent, ChatMessageIPC, ModelInfo } from '../shared/ipc-types'
+import type { SessionStreamEvent, ChatMessageIPC, ModelInfo, ExtensionLoadError } from '../shared/ipc-types'
 import { createLogger } from './logger'
 const logger = createLogger('session-manager')
 
@@ -24,6 +20,8 @@ interface ManagedSession {
   session: AgentSession
   unsubscribe: () => void
   batcher: StreamBatcher
+  extensionErrors: ExtensionLoadError[]
+  extensionsDisabled: boolean
   /** Accumulated message history for fast IPC retrieval */
   messages: ChatMessageIPC[]
   /** Tracks the current assistant message being streamed */
@@ -50,9 +48,11 @@ export type SessionEventCallback = (sessionId: string, event: SessionStreamEvent
 export class PiSessionManager {
   private sessions = new Map<string, ManagedSession>()
   private readonly onEvent: SessionEventCallback
+  private readonly allowExtensionFallback: boolean
 
   constructor(onEvent: SessionEventCallback) {
     this.onEvent = onEvent
+    this.allowExtensionFallback = process.env.NEKOCODE_ALLOW_EXTENSION_FALLBACK === '1'
   }
 
   /**
@@ -60,29 +60,54 @@ export class PiSessionManager {
    * Returns the stable session ID from the SDK (persisted on disk).
    */
   async create(cwd: string): Promise<string> {
-    const loader = new DefaultResourceLoader({
-      cwd: process.cwd(),
-      agentDir: getAgentDir(),
-      settingsManager: SettingsManager.create(),
-    });
-    await loader.reload();
-    const { session,  extensionsResult } = await createAgentSession({
-      resourceLoader: loader,
-      sessionManager: SessionManager.inMemory(),
-    });
-    // const { session, extensionsResult } = await createAgentSession({ cwd });  
-    if (extensionsResult.errors.length > 0) {
-      logger.error(`[create] Extension load errors (${extensionsResult.errors.length}):`, extensionsResult.errors)
+    const primaryAttempt = await this.createSdkSession(SessionManager.inMemory(), cwd, 'create')
+    const primaryErrors = this.normalizeExtensionErrors(primaryAttempt.extensionsResult.errors)
+
+    let session = primaryAttempt.session
+    let extensionsResult = primaryAttempt.extensionsResult
+    let extensionErrors = primaryErrors
+    let extensionsDisabled = false
+
+    if (this.shouldRetryWithoutExtensions(primaryErrors, primaryAttempt.extensionsResult.extensions.length)) {
+      if (!this.allowExtensionFallback) {
+        this.logExtensionErrors('create', primaryErrors)
+        throw new Error(`[create] Systemic extension loader failure (${primaryErrors.length}) - set NEKOCODE_ALLOW_EXTENSION_FALLBACK=1 to allow degraded reconnect/create without extensions`)
+      }
+      logger.warn('[create] Detected systemic extension loader failure signature, retrying with extensions disabled')
+      const retryAttempt = await this.createSdkSession(SessionManager.inMemory(), cwd, 'create-noext', { noExtensions: true })
+      session = retryAttempt.session
+      extensionsResult = retryAttempt.extensionsResult
+      extensionsDisabled = retryAttempt.extensionsResult.errors.length === 0
+      if (extensionsDisabled) {
+        logger.warn(`[create] Primary extension load failed (${primaryErrors.length}); fallback create without extensions succeeded`)
+        extensionErrors = [
+          {
+            path: '__create__',
+            message: `Create fallback engaged: extensions disabled for this session due to systemic extension loader failure (primaryErrors=${primaryErrors.length})`,
+          },
+        ]
+      } else {
+        extensionErrors = [
+          ...primaryErrors,
+          ...this.normalizeExtensionErrors(retryAttempt.extensionsResult.errors),
+          {
+            path: '__create__',
+            message: 'Create fallback attempted with extensions disabled but still encountered extension load errors',
+          },
+        ]
+      }
     }
+
+    this.logExtensionErrors('create', extensionErrors)
     logger.info(`[create] Extensions loaded: ${extensionsResult.extensions.length}, errors: ${extensionsResult.errors.length}`)
     for (const ext of extensionsResult.extensions) {
-      logger.info(`[create] Extension: ${ext.name || ext.path}`)
+      logger.info(`[create] Extension: ${ext.path}`)
     }
 
     const sessionId = session.sessionId
     logger.info(`Create ${sessionId} cwd=${cwd}`)
 
-    const managed = this.wrapSession(session, sessionId)
+    const managed = this.wrapSession(session, sessionId, extensionErrors, extensionsDisabled)
     this.sessions.set(sessionId, managed)
     logger.info(`Created ${sessionId}`)
     return sessionId
@@ -112,33 +137,76 @@ export class PiSessionManager {
       throw new Error(`Session not found on disk: ${sessionId}`)
     }
 
-    // Open the existing session file
-    const sdkSessionMgr = SdkSessionManager.open(match.path)
+    const primarySessionManager = SdkSessionManager.open(match.path)
+    const primaryAttempt = await this.createSdkSession(primarySessionManager, cwd, 'reconnect')
+    const primaryErrors = this.normalizeExtensionErrors(primaryAttempt.extensionsResult.errors)
 
-    // Create a new AgentSession wrapping the opened session manager
-    const { session, extensionsResult } = await createAgentSession({
-      cwd,
-      sessionManager: sdkSessionMgr,
-    })
+    let session = primaryAttempt.session
+    let extensionsResult = primaryAttempt.extensionsResult
+    let extensionErrors = primaryErrors
+    let extensionsDisabled = false
 
-    if (extensionsResult.errors.length > 0) {
-      logger.error(`[reconnect] Extension load errors (${extensionsResult.errors.length}):`, extensionsResult.errors)
+    if (this.shouldRetryWithoutExtensions(primaryErrors, primaryAttempt.extensionsResult.extensions.length)) {
+      if (!this.allowExtensionFallback) {
+        this.logExtensionErrors('reconnect', primaryErrors)
+        throw new Error(`[reconnect] Systemic extension loader failure (${primaryErrors.length}) - set NEKOCODE_ALLOW_EXTENSION_FALLBACK=1 to allow degraded reconnect/create without extensions`)
+      }
+      logger.warn('[reconnect] Detected systemic extension loader failure signature, retrying with extensions disabled')
+      const retrySessionManager = SdkSessionManager.open(match.path)
+      const retryAttempt = await this.createSdkSession(retrySessionManager, cwd, 'reconnect-noext', { noExtensions: true })
+      session = retryAttempt.session
+      extensionsResult = retryAttempt.extensionsResult
+      extensionsDisabled = retryAttempt.extensionsResult.errors.length === 0
+      if (extensionsDisabled) {
+        logger.warn(`[reconnect] Primary extension load failed (${primaryErrors.length}); fallback reconnect without extensions succeeded`)
+        extensionErrors = [
+          {
+            path: '__reconnect__',
+            message: `Reconnect fallback engaged: extensions disabled for this session due to systemic extension loader failure (primaryErrors=${primaryErrors.length})`,
+          },
+        ]
+      } else {
+        extensionErrors = [
+          ...primaryErrors,
+          ...this.normalizeExtensionErrors(retryAttempt.extensionsResult.errors),
+          {
+            path: '__reconnect__',
+            message: 'Reconnect fallback attempted with extensions disabled but still encountered extension load errors',
+          },
+        ]
+      }
     }
+
+    this.logExtensionErrors('reconnect', extensionErrors)
     logger.info(`[reconnect] Extensions loaded: ${extensionsResult.extensions.length}, errors: ${extensionsResult.errors.length}`)
     for (const ext of extensionsResult.extensions) {
-      logger.info(`[reconnect] Extension: ${ext.name || ext.path}`)
+      logger.info(`[reconnect] Extension: ${ext.path}`)
     }
 
     const stableId = session.sessionId
     logger.info(`Reconnected ${stableId} (requested: ${sessionId})`)
 
-    const managed = this.wrapSession(session, stableId)
+    const managed = this.wrapSession(session, stableId, extensionErrors, extensionsDisabled)
 
     // Populate message history from the SDK's persisted messages
     managed.messages = this.extractHistoryFromSdkMessages(session.messages)
 
     this.sessions.set(stableId, managed)
     return managed.messages
+  }
+
+  /** Get normalized extension load errors captured for the session. */
+  getExtensionLoadErrors(sessionId: string): ExtensionLoadError[] {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) return []
+    return managed.extensionErrors
+  }
+
+  /** Whether reconnect/create is currently running with extensions disabled for this session. */
+  getExtensionsDisabled(sessionId: string): boolean {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) return false
+    return managed.extensionsDisabled
   }
 
   /**
@@ -236,7 +304,7 @@ export class PiSessionManager {
       modelRegistry = ModelRegistry.create(authStorage)
     }
     const available = modelRegistry.getAvailable()
-    return available.map((m: import('@mariozechner/pi-ai').Model<any>) => ({ id: m.id, name: m.name, provider: m.provider }))
+    return available.map((m) => ({ id: m.id, name: m.name, provider: m.provider }))
   }
 
   /** Get the number of active sessions. */
@@ -256,7 +324,12 @@ export class PiSessionManager {
   /**
    * Wrap an AgentSession with event handling and message accumulation.
    */
-  private wrapSession(session: AgentSession, sessionId: string): ManagedSession {
+  private wrapSession(
+    session: AgentSession,
+    sessionId: string,
+    extensionErrors: ExtensionLoadError[],
+    extensionsDisabled: boolean,
+  ): ManagedSession {
     const batcher = new StreamBatcher((event) => {
       this.onEvent(sessionId, event)
     })
@@ -265,6 +338,8 @@ export class PiSessionManager {
       session,
       unsubscribe: () => {}, // placeholder, replaced below
       batcher,
+      extensionErrors,
+      extensionsDisabled,
       messages: [],
       currentAssistantId: null,
       currentAssistantContent: '',
@@ -276,6 +351,91 @@ export class PiSessionManager {
     })
 
     return managed
+  }
+
+  private async createSdkSession(
+    sessionManager: SessionManager,
+    cwd: string,
+    mode: 'create' | 'create-noext' | 'reconnect' | 'reconnect-noext',
+    loaderOptions?: { noExtensions?: boolean },
+  ): Promise<Awaited<ReturnType<typeof createAgentSession>>> {
+    const loader = this.createResourceLoader(cwd, loaderOptions)
+    logger.debug(`[${mode}] createSdkSession loaderCwd=${cwd} processCwd=${process.cwd()} NODE_PATH=${process.env.NODE_PATH ?? ''}`)
+    await loader.reload()
+    return createAgentSession({
+      resourceLoader: loader,
+      sessionManager,
+    })
+  }
+
+  private createResourceLoader(cwd: string, options?: { noExtensions?: boolean }): DefaultResourceLoader {
+    return new DefaultResourceLoader({
+      cwd,
+      agentDir: getAgentDir(),
+      settingsManager: SettingsManager.create(),
+      noExtensions: options?.noExtensions,
+    })
+  }
+
+  private shouldRetryWithoutExtensions(errors: ExtensionLoadError[], loadedExtensionsCount: number): boolean {
+    if (loadedExtensionsCount > 0 || errors.length === 0) return false
+    const uniqueMessages = new Set(errors.map(error => error.message))
+    if (uniqueMessages.size !== 1) return false
+    const onlyMessage = errors[0]?.message ?? ''
+    return onlyMessage.includes('(void 0) is not a function')
+  }
+
+  private normalizeExtensionErrors(errors: unknown[]): ExtensionLoadError[] {
+    return errors.map((error, index) => {
+      if (typeof error === 'string') {
+        return {
+          path: `unknown:${index}`,
+          message: error,
+        }
+      }
+
+      if (error && typeof error === 'object') {
+        const path = 'path' in error && typeof error.path === 'string' ? error.path : `unknown:${index}`
+        const message = 'error' in error && typeof error.error === 'string'
+          ? error.error
+          : 'message' in error && typeof error.message === 'string'
+            ? error.message
+            : String(error)
+        const stack = 'stack' in error && typeof error.stack === 'string' ? error.stack : undefined
+        return { path, message, stack }
+      }
+
+      return {
+        path: `unknown:${index}`,
+        message: String(error),
+      }
+    })
+  }
+
+  private logExtensionErrors(mode: 'create' | 'reconnect', errors: ExtensionLoadError[]): void {
+    if (errors.length === 0) return
+    const markerOnly = errors.every(error => error.path === '__reconnect__' || error.path === '__create__')
+    if (markerOnly) {
+      for (const extensionError of errors) {
+        logger.warn(`[${mode}] ${extensionError.message}`)
+      }
+      return
+    }
+    logger.error(`[${mode}] Extension load errors (${errors.length})`)
+    const uniqueMessages = new Set(errors.map(error => error.message))
+    if (uniqueMessages.size === 1) {
+      logger.error(`[${mode}] Extension error fingerprint: uniform-message across all failures -> ${errors[0].message}`)
+    }
+    const stackCount = errors.filter(error => !!error.stack).length
+    if (stackCount === 0) {
+      logger.error(`[${mode}] Extension diagnostics: no stack traces provided by SDK error payload`)
+    }
+    for (const extensionError of errors) {
+      logger.error(`[${mode}] Extension load error path=${extensionError.path} message=${extensionError.message}`)
+      if (extensionError.stack) {
+        logger.error(`[${mode}] Extension load stack path=${extensionError.path}\n${extensionError.stack}`)
+      }
+    }
   }
 
   /**

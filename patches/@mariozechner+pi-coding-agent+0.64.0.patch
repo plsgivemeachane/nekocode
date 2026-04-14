@@ -1,0 +1,89 @@
+diff --git a/node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/loader.js b/node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/loader.js
+index efcb7da..f4433d1 100644
+--- a/node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/loader.js
++++ b/node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/loader.js
+@@ -39,8 +39,30 @@ const require = createRequire(import.meta.url);
+  * In Bun binary mode, virtualModules is used instead.
+  */
+ let _aliases = null;
++let _aliasesKey = null;
+ function getAliases() {
+-    if (_aliases)
++    const contextKey = `${process.cwd()}|${process.env.NODE_PATH ?? ""}`;
++    if (_aliases && _aliasesKey === contextKey)
+         return _aliases;
+     const __dirname = path.dirname(fileURLToPath(import.meta.url));
+     const packageIndex = path.resolve(__dirname, "../..", "index.js");
+@@ -49,16 +71,31 @@ function getAliases() {
+     const typeboxEntry = require.resolve("@sinclair/typebox");
+     const typeboxRoot = typeboxEntry.replace(/[\\/]build[\\/]cjs[\\/]index\.js$/, "");
+     const packagesRoot = path.resolve(__dirname, "../../../../");
+-    const resolveWorkspaceOrImport = (workspaceRelativePath, specifier) => {
++    const resolveImportMeta = typeof import.meta.resolve === "function" ? import.meta.resolve.bind(import.meta) : null;
++    const resolveWorkspaceOrImport = (workspaceRelativePath, specifier, fallbackPath) => {
+         const workspacePath = path.join(packagesRoot, workspaceRelativePath);
+         if (fs.existsSync(workspacePath)) {
+             return workspacePath;
+         }
+-        return fileURLToPath(import.meta.resolve(specifier));
++        if (fallbackPath && fs.existsSync(fallbackPath)) {
++            return fallbackPath;
++        }
++        if (resolveImportMeta) {
++            try {
++                return fileURLToPath(resolveImportMeta(specifier));
++            }
++            catch {
++            }
++        }
++        try {
++            return require.resolve(specifier);
++        }
++        catch {
++            // As a last resort, keep unresolved specifier to avoid throwing in alias build.
++            return specifier;
++        }
+     };
+     _aliases = {
+         "@mariozechner/pi-coding-agent": packageIndex,
+-        "@mariozechner/pi-agent-core": resolveWorkspaceOrImport("agent/dist/index.js", "@mariozechner/pi-agent-core"),
+-        "@mariozechner/pi-tui": resolveWorkspaceOrImport("tui/dist/index.js", "@mariozechner/pi-tui"),
+-        "@mariozechner/pi-ai": resolveWorkspaceOrImport("ai/dist/index.js", "@mariozechner/pi-ai"),
+-        "@mariozechner/pi-ai/oauth": resolveWorkspaceOrImport("ai/dist/oauth.js", "@mariozechner/pi-ai/oauth"),
++        "@mariozechner/pi-agent-core": resolveWorkspaceOrImport("agent/dist/index.js", "@mariozechner/pi-agent-core", path.resolve(__dirname, "../../../../pi-agent-core/dist/index.js")),
++        "@mariozechner/pi-tui": resolveWorkspaceOrImport("tui/dist/index.js", "@mariozechner/pi-tui", path.resolve(__dirname, "../../../../pi-tui/dist/index.js")),
++        "@mariozechner/pi-ai": resolveWorkspaceOrImport("ai/dist/index.js", "@mariozechner/pi-ai", path.resolve(__dirname, "../../../../pi-ai/dist/index.js")),
++        "@mariozechner/pi-ai/oauth": resolveWorkspaceOrImport("ai/dist/oauth.js", "@mariozechner/pi-ai/oauth", path.resolve(__dirname, "../../../../pi-ai/dist/oauth.js")),
+         "@sinclair/typebox": typeboxRoot,
+     };
++    _aliasesKey = contextKey;
+     return _aliases;
+ }
+ const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g;
+@@ -223,10 +260,12 @@ function createExtensionAPI(extension, runtime, cwd, eventBus) {
+ async function loadExtensionModule(extensionPath) {
+     const jiti = createJiti(import.meta.url, {
+         moduleCache: false,
+-        // In Bun binary: use virtualModules for bundled packages (no filesystem resolution)
+-        // Also disable tryNative so jiti handles ALL imports (not just the entry point)
+-        // In Node.js/dev: use aliases to resolve to node_modules paths
+-        ...(isBunBinary ? { virtualModules: VIRTUAL_MODULES, tryNative: false } : { alias: getAliases() }),
++        // Always provide virtualModules so core packages resolve deterministically.
++        // In Node/dev we keep aliases for non-bundled paths, but disable tryNative so
++        // jiti resolves imports consistently instead of mixing native/module paths.
++        virtualModules: VIRTUAL_MODULES,
++        tryNative: false,
++        ...(isBunBinary ? {} : { alias: getAliases() }),
+     });
+     const module = await jiti.import(extensionPath, { default: true });
+     const factory = module;
+@@ -266,7 +305,8 @@ async function loadExtension(extensionPath, cwd, eventBus, runtime) {
+     }
+     catch (err) {
+         const message = err instanceof Error ? err.message : String(err);
+-        return { extension: null, error: `Failed to load extension: ${message}` };
++        const stack = err instanceof Error ? err.stack : "";
++        return { extension: null, error: `Failed to load extension: ${message}${stack ? `\n${stack}` : ""}` };
+     }
+ }
+ /**

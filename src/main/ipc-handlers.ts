@@ -38,8 +38,10 @@ export function registerIpcHandlers(
     logger.info(`SESSION_CREATE cwd=${payload.cwd}`)
     try {
       const sessionId = await sessionManager.create(payload.cwd)
+      const extensionErrors = sessionManager.getExtensionLoadErrors(sessionId)
+      const extensionsDisabled = sessionManager.getExtensionsDisabled(sessionId)
       logger.info(`SESSION_CREATE OK sessionId=${sessionId}`)
-      return { sessionId, stableId: sessionId }
+      return { sessionId, stableId: sessionId, extensionErrors, extensionsDisabled }
     } catch (err) {
       logger.error('SESSION_CREATE failed', err)
       throw err
@@ -70,8 +72,10 @@ export function registerIpcHandlers(
     logger.info(`SESSION_RECONNECT sessionId=${payload.sessionId} cwd=${payload.cwd}`)
     try {
       const history = await sessionManager.reconnect(payload.sessionId, payload.cwd)
+      const extensionErrors = sessionManager.getExtensionLoadErrors(payload.sessionId)
+      const extensionsDisabled = sessionManager.getExtensionsDisabled(payload.sessionId)
       logger.info(`SESSION_RECONNECT OK sessionId=${payload.sessionId} history=${history.length} messages`)
-      return { sessionId: payload.sessionId, stableId: payload.sessionId, history }
+      return { sessionId: payload.sessionId, stableId: payload.sessionId, history, extensionErrors, extensionsDisabled }
     } catch (err) {
       logger.error(`SESSION_RECONNECT failed sessionId=${payload.sessionId}`, err)
       throw err

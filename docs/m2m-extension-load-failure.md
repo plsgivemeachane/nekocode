@@ -363,3 +363,55 @@ Key characteristics:
 - The error only manifests during **reconnect** in the M2M pipeline
 - The error string `(void 0) is not a function` is the **minified V8 form** of `undefined is not a function`
 - The `[session-manager]` and `[reconnect]` log tags originate from the **external M2M pipeline**, not from pi itself
+
+---
+
+## 10. NekoCode Local Resolution (April 14, 2026)
+
+This repository now ships a local dependency patch via `patch-package` for `@mariozechner/pi-coding-agent@0.64.0`:
+
+- Patch file: `patches/@mariozechner+pi-coding-agent+0.64.0.patch`
+- Applied automatically by `postinstall` in `package.json`
+
+### What the local patch changes
+
+1. `getAliases()` no longer hard-depends on `import.meta.resolve`; it uses `import.meta.resolve` only when available and falls back safely otherwise.
+2. `resolveWorkspaceOrImport(...)` now has deterministic fallback dist paths for sibling packages before package resolution:
+    - `@mariozechner/pi-agent-core` -> `.../pi-agent-core/dist/index.js`
+    - `@mariozechner/pi-tui` -> `.../pi-tui/dist/index.js`
+    - `@mariozechner/pi-ai` -> `.../pi-ai/dist/index.js`
+    - `@mariozechner/pi-ai/oauth` -> `.../pi-ai/dist/oauth.js`
+3. Alias map construction no longer crashes on package export restrictions; `require.resolve(specifier)` is wrapped, and last-resort fallback returns the specifier instead of throwing.
+4. Alias cache is keyed by runtime context (`cwd` + `NODE_PATH`) to avoid stale resolver state reuse.
+5. Extension load errors now include stack traces to make root-cause analysis actionable.
+6. jiti is configured with `virtualModules` and `tryNative: false` for consistent resolver behavior.
+
+### Why this fixes the reported reconnect crash
+
+Your failing stack pointed to `resolveWorkspaceOrImport` -> `getAliases` with `ERR_PACKAGE_PATH_NOT_EXPORTED` while resolving `@mariozechner/pi-ai`. The local patch removes that failure path by:
+
+1. Avoiding unconditional `import.meta.resolve` calls.
+2. Trying explicit sibling-package dist file fallbacks first.
+3. Preventing alias-map build from throwing when package exports block direct resolution.
+
+### App-side hardening in this repo
+
+1. `create()` and `reconnect()` now use shared session bootstrap logic.
+2. Systemic extension loader failures can hard-fail by default (fallback is opt-in via `NEKOCODE_ALLOW_EXTENSION_FALLBACK=1`).
+
+### Current expected behavior
+
+- If SDK extension loading succeeds: normal mode.
+- If systemic extension loading fails and fallback env var is disabled: explicit hard failure with diagnostics.
+- If fallback env var is enabled: degraded mode with extensions disabled for that session.
+
+### Cleanup status in this repo
+
+1. No tool-level filtering/blocklist is applied in `PiSessionManager`; extension/tool availability is now controlled by SDK/runtime only.
+2. No local references to `create_reservation` or `correctconvo` remain under `src/` or `docs/`.
+
+### Verification snapshot
+
+- Targeted tests pass after cleanup:
+    - `src/tests/session-manager.test.ts`
+    - `src/tests/ipc-handlers.test.ts`

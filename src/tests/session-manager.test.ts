@@ -1,5 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+const sdkMocks = vi.hoisted(() => ({
+  createAgentSessionMock: vi.fn(),
+  loaderReloadMock: vi.fn(async () => {}),
+  loaderCtorCalls: [] as Array<{ cwd: string; agentDir: string; settingsManager: unknown; noExtensions?: boolean }>,
+  settingsCreateMock: vi.fn(() => ({ kind: 'settings' })),
+  getAgentDirMock: vi.fn(() => '/tmp/agent-dir'),
+  sessionInMemoryMock: vi.fn(() => ({ kind: 'in-memory' })),
+  sessionListMock: vi.fn(async () => []),
+  sessionOpenMock: vi.fn(),
+}))
+
 vi.mock('electron', () => ({
   app: { getPath: vi.fn(() => '/tmp/test-logs') },
 }))
@@ -25,8 +36,9 @@ function mockAssistantMessage(overrides: Partial<AssistantMessage> = {}): Assist
 }
 
 /** Create a mock AgentSession with controllable subscribe/prompt/abort/dispose */
-function createMockSession(id?: string) {
+function createMockSession(id?: string, initialActiveTools: string[] = ['read', 'write']) {
   const listeners: Array<(event: AgentSessionEvent) => void> = []
+  let activeTools = [...initialActiveTools]
   return {
     sessionId: id ?? `sdk-session-${Math.random().toString(36).slice(2, 10)}`,
     messages: [] as Message[],
@@ -40,6 +52,10 @@ function createMockSession(id?: string) {
     prompt: vi.fn(async () => {}),
     abort: vi.fn(),
     dispose: vi.fn(),
+    getActiveToolNames: vi.fn(() => [...activeTools]),
+    setActiveToolsByName: vi.fn((toolNames: string[]) => {
+      activeTools = [...toolNames]
+    }),
     /** Simulate the SDK emitting an event */
     emit(event: AgentSessionEvent) {
       for (const fn of listeners) fn(event)
@@ -52,11 +68,22 @@ let lastCreatedMockSession: ReturnType<typeof createMockSession> | null = null
 
 // Mock the SDK module so tests run without a real pi installation
 vi.mock('@mariozechner/pi-coding-agent', () => ({
-  createAgentSession: vi.fn(async () => {
-    const session = createMockSession()
-    lastCreatedMockSession = session
-    return { session, extensionsResult: { extensions: [], loadedExtensionIds: [], errors: [] } }
-  }),
+  createAgentSession: sdkMocks.createAgentSessionMock,
+  DefaultResourceLoader: class {
+    constructor(config: { cwd: string; agentDir: string; settingsManager: unknown; noExtensions?: boolean }) {
+      sdkMocks.loaderCtorCalls.push(config)
+    }
+    reload = sdkMocks.loaderReloadMock
+  },
+  getAgentDir: sdkMocks.getAgentDirMock,
+  SettingsManager: {
+    create: sdkMocks.settingsCreateMock,
+  },
+  SessionManager: {
+    inMemory: sdkMocks.sessionInMemoryMock,
+    list: sdkMocks.sessionListMock,
+    open: sdkMocks.sessionOpenMock,
+  },
 }))
 
 /** Helper: get the last created mock session, asserting it exists */
@@ -71,8 +98,22 @@ describe('PiSessionManager', () => {
 
   beforeEach(() => {
     vi.useFakeTimers()
+    delete process.env.NEKOCODE_ALLOW_EXTENSION_FALLBACK
     events = []
     lastCreatedMockSession = null
+    sdkMocks.loaderReloadMock.mockClear()
+    sdkMocks.loaderCtorCalls.length = 0
+    sdkMocks.settingsCreateMock.mockClear()
+    sdkMocks.getAgentDirMock.mockClear()
+    sdkMocks.sessionInMemoryMock.mockClear()
+    sdkMocks.sessionListMock.mockClear()
+    sdkMocks.sessionOpenMock.mockClear()
+    sdkMocks.createAgentSessionMock.mockReset()
+    sdkMocks.createAgentSessionMock.mockImplementation(async () => {
+      const session = createMockSession()
+      lastCreatedMockSession = session
+      return { session, extensionsResult: { extensions: [], loadedExtensionIds: [], errors: [] } }
+    })
     manager = new PiSessionManager((sessionId, event) => {
       events.push({ sessionId, event })
     })
@@ -93,9 +134,155 @@ describe('PiSessionManager', () => {
     expect(manager.sessionCount).toBe(2)
   })
 
+  it('should preserve normalized extension load errors for created sessions', async () => {
+    sdkMocks.createAgentSessionMock.mockResolvedValueOnce({
+      session: createMockSession('session-with-errors'),
+      extensionsResult: {
+        extensions: [],
+        loadedExtensionIds: [],
+        errors: [
+          { path: '/tmp/ext.ts', error: 'Failed to load extension: resolver failed', stack: 'TypeError: ...' },
+        ],
+      },
+    })
+
+    const id = await manager.create('/tmp/project')
+    const errors = manager.getExtensionLoadErrors(id)
+
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toEqual({
+      path: '/tmp/ext.ts',
+      message: 'Failed to load extension: resolver failed',
+      stack: 'TypeError: ...',
+    })
+    expect(manager.getExtensionsDisabled(id)).toBe(false)
+  })
+
+  it('should retry create with noExtensions on uniform systemic extension errors', async () => {
+    process.env.NEKOCODE_ALLOW_EXTENSION_FALLBACK = '1'
+    manager = new PiSessionManager((sessionId, event) => {
+      events.push({ sessionId, event })
+    })
+    const failedSession = createMockSession('failed-create')
+    const fallbackSession = createMockSession('fallback-create')
+    sdkMocks.createAgentSessionMock
+      .mockResolvedValueOnce({
+        session: failedSession,
+        extensionsResult: {
+          extensions: [],
+          loadedExtensionIds: [],
+          errors: [
+            { path: '/tmp/ext-a.ts', error: 'Failed to load extension: (void 0) is not a function' },
+            { path: '/tmp/ext-b.ts', error: 'Failed to load extension: (void 0) is not a function' },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({
+        session: fallbackSession,
+        extensionsResult: {
+          extensions: [],
+          loadedExtensionIds: [],
+          errors: [],
+        },
+      })
+
+    const id = await manager.create('/tmp/project')
+
+    expect(id).toBe('fallback-create')
+    expect(sdkMocks.createAgentSessionMock).toHaveBeenCalledTimes(2)
+    expect(sdkMocks.loaderCtorCalls[0]?.noExtensions).toBeUndefined()
+    expect(sdkMocks.loaderCtorCalls[1]?.noExtensions).toBe(true)
+    expect(manager.getExtensionsDisabled('fallback-create')).toBe(true)
+    const errors = manager.getExtensionLoadErrors('fallback-create')
+    expect(errors.some(error => error.path === '__create__')).toBe(true)
+  })
+
   it('should subscribe to session events on create', async () => {
     await manager.create('/tmp/project')
     expect(mockSession().subscribe).toHaveBeenCalled()
+  })
+
+  it('should use resourceLoader bootstrap on reconnect', async () => {
+    const reconnectSession = createMockSession('stable-reconnected')
+    sdkMocks.sessionListMock.mockResolvedValue([{ id: 'existing-session', path: '/tmp/session.json' }])
+    sdkMocks.sessionOpenMock.mockReturnValue({ kind: 'opened-manager' })
+    sdkMocks.createAgentSessionMock.mockResolvedValueOnce({
+      session: reconnectSession,
+      extensionsResult: { extensions: [], loadedExtensionIds: [], errors: [] },
+    })
+
+    await manager.reconnect('existing-session', '/tmp/project')
+
+    expect(sdkMocks.loaderReloadMock).toHaveBeenCalledTimes(1)
+    expect(sdkMocks.loaderCtorCalls[0]?.cwd).toBe('/tmp/project')
+    expect(sdkMocks.sessionListMock).toHaveBeenCalledWith('/tmp/project')
+    expect(sdkMocks.sessionOpenMock).toHaveBeenCalledWith('/tmp/session.json')
+    expect(sdkMocks.createAgentSessionMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resourceLoader: expect.any(Object),
+        sessionManager: { kind: 'opened-manager' },
+      }),
+    )
+    expect(manager.getExtensionsDisabled('stable-reconnected')).toBe(false)
+  })
+
+  it('should retry reconnect with noExtensions on uniform systemic extension errors', async () => {
+    process.env.NEKOCODE_ALLOW_EXTENSION_FALLBACK = '1'
+    manager = new PiSessionManager((sessionId, event) => {
+      events.push({ sessionId, event })
+    })
+    const failedSession = createMockSession('failed-reconnect')
+    const fallbackSession = createMockSession('fallback-reconnect')
+    sdkMocks.sessionListMock.mockResolvedValue([{ id: 'existing-session', path: '/tmp/session.json' }])
+    sdkMocks.sessionOpenMock
+      .mockReturnValueOnce({ kind: 'opened-manager-primary' })
+      .mockReturnValueOnce({ kind: 'opened-manager-retry' })
+    sdkMocks.createAgentSessionMock
+      .mockResolvedValueOnce({
+        session: failedSession,
+        extensionsResult: {
+          extensions: [],
+          loadedExtensionIds: [],
+          errors: [
+            { path: '/tmp/ext-a.ts', error: 'Failed to load extension: (void 0) is not a function' },
+            { path: '/tmp/ext-b.ts', error: 'Failed to load extension: (void 0) is not a function' },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({
+        session: fallbackSession,
+        extensionsResult: {
+          extensions: [],
+          loadedExtensionIds: [],
+          errors: [],
+        },
+      })
+
+    await manager.reconnect('existing-session', '/tmp/project')
+
+    expect(sdkMocks.createAgentSessionMock).toHaveBeenCalledTimes(2)
+    expect(sdkMocks.sessionOpenMock).toHaveBeenCalledTimes(2)
+    expect(sdkMocks.loaderCtorCalls[0]?.noExtensions).toBeUndefined()
+    expect(sdkMocks.loaderCtorCalls[1]?.noExtensions).toBe(true)
+    const errors = manager.getExtensionLoadErrors('fallback-reconnect')
+    expect(errors.some(error => error.path === '__reconnect__')).toBe(true)
+    expect(manager.getExtensionsDisabled('fallback-reconnect')).toBe(true)
+  })
+
+  it('should fail hard on systemic extension errors when fallback is disabled', async () => {
+    sdkMocks.createAgentSessionMock.mockResolvedValueOnce({
+      session: createMockSession('failed-create-hard'),
+      extensionsResult: {
+        extensions: [],
+        loadedExtensionIds: [],
+        errors: [
+          { path: '/tmp/ext-a.ts', error: 'Failed to load extension: (void 0) is not a function' },
+          { path: '/tmp/ext-b.ts', error: 'Failed to load extension: (void 0) is not a function' },
+        ],
+      },
+    })
+
+    await expect(manager.create('/tmp/project')).rejects.toThrow('Systemic extension loader failure')
   })
 
   it('should translate text_delta events through the batcher', async () => {

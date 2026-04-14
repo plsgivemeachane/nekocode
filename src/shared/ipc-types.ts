@@ -12,6 +12,8 @@ export interface SessionCreatePayload {
 export interface SessionCreateResult {
   sessionId: string
   stableId: string
+  extensionErrors?: ExtensionLoadError[]
+  extensionsDisabled?: boolean
 }
 
 /** Payload for sending a prompt */
@@ -41,6 +43,15 @@ export interface SessionReconnectResult {
   sessionId: string
   stableId: string
   history: ChatMessageIPC[]
+  extensionErrors?: ExtensionLoadError[]
+  extensionsDisabled?: boolean
+}
+
+/** Normalized extension load error details for UI diagnostics. */
+export interface ExtensionLoadError {
+  path: string
+  message: string
+  stack?: string
 }
 
 /** Payload for loading session history */

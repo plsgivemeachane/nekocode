@@ -10,6 +10,7 @@ import React, {
 import type {
   ProjectInfo,
   SessionInfoDisplay,
+  ExtensionLoadError,
 } from '../../../shared/ipc-types'
 import { createLogger } from '../logger'
 
@@ -164,6 +165,28 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE)
   const initializedRef = useRef(false)
 
+  const logExtensionLoadWarnings = useCallback((
+    mode: 'create' | 'reconnect',
+    sessionId: string,
+    errors?: ExtensionLoadError[],
+    extensionsDisabled?: boolean,
+  ) => {
+    if (!errors || errors.length === 0) return
+    if (extensionsDisabled) {
+      logger.warn(`[${mode}] sessionId=${sessionId.slice(0, 8)}... running in degraded mode (extensions disabled)`)
+    }
+    logger.warn(`[${mode}] sessionId=${sessionId.slice(0, 8)}... extension load errors=${errors.length}`)
+    for (const error of errors) {
+      logger.warn(`[${mode}] path=${error.path} message=${error.message}`)
+      if (error.stack) {
+        logger.debug(`[${mode}] stack for ${error.path}:\n${error.stack}`)
+      }
+    }
+    if (!extensionsDisabled) {
+      dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId, status: 'error' })
+    }
+  }, [])
+
   // Load persisted workspace on first mount
   useEffect(() => {
     if (initializedRef.current) return
@@ -184,10 +207,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             const project = projects.find(p => p.path === projectPath)
             if (project && project.sessions.some(s => s.id === sessionId)) {
               try {
-                await window.nekocode.session.reconnect(sessionId, projectPath)
+                const result = await window.nekocode.session.reconnect(sessionId, projectPath)
+                logExtensionLoadWarnings('reconnect', sessionId, result.extensionErrors, result.extensionsDisabled)
                 dispatch({ type: 'RECONNECT_SESSION', sessionId, projectPath })
               } catch (err) {
                 logger.error('Failed to reconnect restored session', err)
+                dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId, status: 'error' })
               }
             }
           }
@@ -196,7 +221,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         logger.error('Failed to load workspace', err)
       }
     })()
-  }, [])
+  }, [logExtensionLoadWarnings])
 
   // Persist active session changes to workspace
   useEffect(() => {
@@ -265,20 +290,23 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const reconnectSession = useCallback(
     async (sessionId: string, projectPath: string) => {
       try {
-        await window.nekocode.session.reconnect(sessionId, projectPath)
+        const result = await window.nekocode.session.reconnect(sessionId, projectPath)
+        logExtensionLoadWarnings('reconnect', sessionId, result.extensionErrors, result.extensionsDisabled)
         logger.info(`reconnectSession OK: ${sessionId.slice(0, 8)}...`)
         dispatch({ type: 'RECONNECT_SESSION', sessionId, projectPath })
       } catch (err) {
           logger.error('reconnectSession failed:', err)
+          dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId, status: 'error' })
       }
     },
-    [],
+    [logExtensionLoadWarnings],
   )
 
   const createSession = useCallback(
     async (projectPath: string) => {
       try {
         const result = await window.nekocode.session.create(projectPath)
+        logExtensionLoadWarnings('create', result.sessionId, result.extensionErrors, result.extensionsDisabled)
         logger.info(`createSession OK: ${result.sessionId.slice(0, 8)}... cwd=${projectPath}`)
         dispatch({ type: 'SET_ACTIVE_SESSION', sessionId: result.sessionId, projectPath })
         dispatch({
@@ -295,7 +323,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           logger.error('createSession failed:', err)
       }
     },
-    [],
+    [logExtensionLoadWarnings],
   )
 
   const refreshSessions = useCallback(async (projectId: string) => {

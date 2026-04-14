@@ -12,9 +12,8 @@
     "isolatedModules": true,
     "types": ["vitest/globals"],
     "noEmit": true,
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*"]
     }
   },
   "include": ["src"]
