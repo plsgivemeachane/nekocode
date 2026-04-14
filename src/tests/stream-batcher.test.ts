@@ -1,4 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+
+vi.mock('electron', () => ({
+  app: { getPath: vi.fn(() => '/tmp/test-logs') },
+}))
+
 import { StreamBatcher } from '../main/stream-batcher'
 import type { SessionStreamEvent } from '../shared/ipc-types'
 

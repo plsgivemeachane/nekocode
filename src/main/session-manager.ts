@@ -1,10 +1,18 @@
 import {
+  AuthStorage,
   createAgentSession,
+  createEventBus,
+  DefaultResourceLoader,
+  getAgentDir,
+  ModelRegistry,
   SessionManager as SdkSessionManager,
+  SessionManager,
+  SettingsManager,
   type AgentSession,
   type AgentSessionEvent,
   type SessionMessageEntry,
 } from '@mariozechner/pi-coding-agent'
+import {} from '@mariozechner/pi-coding-agent'
 import type { TextContent, ToolCall, Message } from '@mariozechner/pi-ai'
 import { StreamBatcher } from './stream-batcher'
 import type { SessionStreamEvent, ChatMessageIPC, ModelInfo } from '../shared/ipc-types'
@@ -52,8 +60,17 @@ export class PiSessionManager {
    * Returns the stable session ID from the SDK (persisted on disk).
    */
   async create(cwd: string): Promise<string> {
-    const { session, extensionsResult } = await createAgentSession({ cwd })
-
+    const loader = new DefaultResourceLoader({
+      cwd: process.cwd(),
+      agentDir: getAgentDir(),
+      settingsManager: SettingsManager.create(),
+    });
+    await loader.reload();
+    const { session,  extensionsResult } = await createAgentSession({
+      resourceLoader: loader,
+      sessionManager: SessionManager.inMemory(),
+    });
+    // const { session, extensionsResult } = await createAgentSession({ cwd });  
     if (extensionsResult.errors.length > 0) {
       logger.error(`[create] Extension load errors (${extensionsResult.errors.length}):`, extensionsResult.errors)
     }

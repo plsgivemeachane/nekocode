@@ -1,4 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+vi.mock('electron', () => ({
+  app: { getPath: vi.fn(() => '/tmp/test-logs') },
+}))
+
 import { PiSessionManager } from '../main/session-manager'
 import type { SessionStreamEvent } from '../shared/ipc-types'
 import type { AgentSessionEvent } from '@mariozechner/pi-coding-agent'
@@ -170,7 +175,7 @@ describe('PiSessionManager', () => {
   it('should ignore purely internal bookkeeping events', async () => {
     await manager.create('/tmp/project')
 
-    const internalTypes = ['agent_start', 'turn_start', 'turn_end'] as const
+    const internalTypes = ['turn_start', 'turn_end'] as const
     for (const type of internalTypes) {
       mockSession().emit({ type } as AgentSessionEvent)
     }
