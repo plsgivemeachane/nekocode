@@ -7,7 +7,7 @@ const sdkMocks = vi.hoisted(() => ({
   settingsCreateMock: vi.fn(() => ({ kind: 'settings' })),
   getAgentDirMock: vi.fn(() => '/tmp/agent-dir'),
   sessionInMemoryMock: vi.fn(() => ({ kind: 'in-memory' })),
-  sessionListMock: vi.fn(async () => []),
+  sessionListMock: vi.fn<(cwd: string) => Promise<SessionInfo[]>>(async () => []),
   sessionOpenMock: vi.fn(),
 }))
 
@@ -17,7 +17,7 @@ vi.mock('electron', () => ({
 
 import { PiSessionManager } from '../main/session-manager'
 import type { SessionStreamEvent } from '../shared/ipc-types'
-import type { AgentSessionEvent } from '@mariozechner/pi-coding-agent'
+import type { AgentSessionEvent, SessionInfo } from '@mariozechner/pi-coding-agent'
 import type { Message, AssistantMessage } from '@mariozechner/pi-ai'
 
 /** Create a minimal mock AssistantMessage for SDK events */
@@ -204,7 +204,7 @@ describe('PiSessionManager', () => {
 
   it('should use resourceLoader bootstrap on reconnect', async () => {
     const reconnectSession = createMockSession('stable-reconnected')
-    sdkMocks.sessionListMock.mockResolvedValue([{ id: 'existing-session', path: '/tmp/session.json' }])
+    sdkMocks.sessionListMock.mockResolvedValue([{ id: 'existing-session', path: '/tmp/session.json', cwd: '/tmp/project', created: new Date(), modified: new Date(), messageCount: 0, firstMessage: '', allMessagesText: '' }])
     sdkMocks.sessionOpenMock.mockReturnValue({ kind: 'opened-manager' })
     sdkMocks.createAgentSessionMock.mockResolvedValueOnce({
       session: reconnectSession,
@@ -233,7 +233,7 @@ describe('PiSessionManager', () => {
     })
     const failedSession = createMockSession('failed-reconnect')
     const fallbackSession = createMockSession('fallback-reconnect')
-    sdkMocks.sessionListMock.mockResolvedValue([{ id: 'existing-session', path: '/tmp/session.json' }])
+    sdkMocks.sessionListMock.mockResolvedValue([{ id: 'existing-session', path: '/tmp/session.json', cwd: '/tmp/project', created: new Date(), modified: new Date(), messageCount: 0, firstMessage: '', allMessagesText: '' }])
     sdkMocks.sessionOpenMock
       .mockReturnValueOnce({ kind: 'opened-manager-primary' })
       .mockReturnValueOnce({ kind: 'opened-manager-retry' })

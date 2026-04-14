@@ -149,6 +149,11 @@ export function registerIpcHandlers(
     return sessionManager.listModels()
   })
 
+  ipcMain.handle(IPC_CHANNELS.SESSION_SET_MODEL, async (_event, payload: { sessionId: string; provider: string; modelId: string }): Promise<ModelInfo> => {
+    logger.debug(`SESSION_SET_MODEL sessionId=${payload.sessionId} provider=${payload.provider} modelId=${payload.modelId}`)
+    return sessionManager.setModel(payload.sessionId, payload.provider, payload.modelId)
+  })
+
   ipcMain.handle(IPC_CHANNELS.PROJECT_LIST, async (): Promise<ProjectInfo[]> => {
     logger.debug('PROJECT_LIST')
     return projectManager.listProjects()

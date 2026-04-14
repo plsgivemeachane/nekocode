@@ -45,8 +45,8 @@ describe('registerIpcHandlers extension diagnostics', () => {
     }
 
     registerIpcHandlers(
-      sessionManager as RegisterParams[0],
-      projectManager as RegisterParams[1],
+      sessionManager as unknown as RegisterParams[0],
+      projectManager as unknown as RegisterParams[1],
     )
 
     const createHandler = handlers.get(IPC_CHANNELS.SESSION_CREATE)
@@ -80,8 +80,8 @@ describe('registerIpcHandlers extension diagnostics', () => {
     }
 
     registerIpcHandlers(
-      sessionManager as RegisterParams[0],
-      projectManager as RegisterParams[1],
+      sessionManager as unknown as RegisterParams[0],
+      projectManager as unknown as RegisterParams[1],
     )
 
     const reconnectHandler = handlers.get(IPC_CHANNELS.SESSION_RECONNECT)

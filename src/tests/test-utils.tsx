@@ -21,6 +21,7 @@ function createMockSessionAPI(): NekoCodeIPC['session'] {
     onEvent: vi.fn<() => () => void>().mockReturnValue(() => {}),
     getModel: vi.fn<(sessionId: string) => Promise<ModelInfo | null>>().mockResolvedValue(null),
     listModels: vi.fn<() => Promise<ModelInfo[]>>().mockResolvedValue([]),
+    setModel: vi.fn<(sessionId: string, provider: string, modelId: string) => Promise<ModelInfo>>().mockResolvedValue({ id: 'mock-model', name: 'Mock Model', provider: 'mock-provider' }),
   }
 }
 

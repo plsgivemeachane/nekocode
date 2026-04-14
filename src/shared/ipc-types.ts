@@ -143,6 +143,7 @@ export interface NekoCodeIPC {
     onEvent: (callback: (payload: { sessionId: string; event: SessionStreamEvent }) => void) => () => void
     getModel: (sessionId: string) => Promise<ModelInfo | null>
     listModels: () => Promise<ModelInfo[]>
+    setModel: (sessionId: string, provider: string, modelId: string) => Promise<ModelInfo>
   }
   dialog: {
     openFolder: () => Promise<string | null>

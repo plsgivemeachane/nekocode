@@ -11,7 +11,7 @@ function ipcToChatMessage(ipc: ChatMessageIPC): ChatMessage[] {
   const msgs: ChatMessage[] = []
   if (ipc.content) {
     if (ipc.role === 'user') {
-      msgs.push({ role: 'user', type: 'text', content: ipc.content, id: ipc.id })
+      msgs.push({ role: 'user', content: ipc.content, id: ipc.id })
     } else {
       msgs.push({ role: 'assistant', type: 'text', content: ipc.content, id: ipc.id })
     }
@@ -52,6 +52,7 @@ interface UseSessionOutput {
   sendPrompt: (text: string) => Promise<void>
   activeModel: ModelInfo | null
   modelList: ModelInfo[]
+  setModel: (provider: string, modelId: string) => Promise<void>
 }
 
 const INITIAL_MESSAGES: ChatMessage[] = []
@@ -267,5 +268,19 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
     [sessionId],
   )
 
-  return { messages, isStreaming, error, input, setInput, sendPrompt, activeModel, modelList }
+  const setModel = useCallback(
+    async (provider: string, modelId: string): Promise<void> => {
+      if (!sessionId) return
+      try {
+        const updated = await window.nekocode.session.setModel(sessionId, provider, modelId)
+        setActiveModel(updated)
+      } catch (err) {
+        logger.error(`setModel failed: ${err}`)
+        setError(`Failed to switch model: ${err}`)
+      }
+    },
+    [sessionId],
+  )
+
+  return { messages, isStreaming, error, input, setInput, sendPrompt, activeModel, modelList, setModel }
 }

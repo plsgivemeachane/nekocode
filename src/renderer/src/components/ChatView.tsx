@@ -17,7 +17,7 @@ interface ChatViewProps {
 }
 
 export function ChatView({ sessionId, className }: ChatViewProps) {
-  const { messages, isStreaming, error, input, setInput, sendPrompt, activeModel, modelList } =
+  const { messages, isStreaming, error, input, setInput, sendPrompt, activeModel, modelList, setModel } =
     useSession({ sessionId })
 
   const [showScrollBtn, setShowScrollBtn] = React.useState(false)
@@ -262,24 +262,28 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
                       <span>{activeModel ? activeModel.name : "Loading..."}</span>
                       <svg width="10" height="10" viewBox="0 0 10 10" className="text-text-tertiary"><path d="M3 4l2 2 2-2" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </button>
-                    {showModelDropdown && modelList.length > 0 && (
+                    {showModelDropdown && (() => {
+                      const visibleModels = modelList.filter(m => !["anthropic", "google", "openai"].includes(m.provider))
+                      return visibleModels.length > 0 ? (
                       <div className="absolute bottom-full left-0 mb-1 w-56 bg-surface-800 border border-surface-700 rounded-lg shadow-xl p-2 max-h-64 overflow-y-auto z-50">
-                        {modelList.map(m => (
+                        {visibleModels.map(m => (
                           <button
                             key={m.id}
                             type="button"
-                            onClick={() => setShowModelDropdown(false)}
+                            onClick={() => { setModel(m.provider, m.id); setShowModelDropdown(false) }}
                             className={`w-full text-left px-3 py-1.5 text-xs hover:bg-surface-700 transition-colors flex items-center justify-between ${activeModel?.id === m.id ? "text-accent-400" : "text-text-secondary"}`}
                           >
                             <span>{m.name}</span>
                             <span className="text-text-tertiary text-[10px] ml-2">{m.provider}</span>
                           </button>
                         ))}
-                        {modelList.length === 0 && (
-                          <div className="px-3 py-2 text-xs text-text-tertiary">No models configured</div>
-                        )}
                       </div>
-                    )}
+                      ) : (
+                        <div className="absolute bottom-full left-0 mb-1 w-56 bg-surface-800 border border-surface-700 rounded-lg shadow-xl p-2 z-50">
+                          <div className="px-3 py-2 text-xs text-text-tertiary">No models configured</div>
+                        </div>
+                      )
+                    })()}
                   </div>
                 </div>
                 <button

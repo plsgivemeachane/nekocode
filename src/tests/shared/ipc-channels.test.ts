@@ -6,7 +6,7 @@ describe('IPC_CHANNELS', () => {
   const allValues = Object.values(channels)
 
   it('has expected number of channels', () => {
-    expect(allValues).toHaveLength(16)
+    expect(allValues).toHaveLength(17)
   })
 
   it('has no duplicate values', () => {
@@ -55,7 +55,7 @@ describe('IPC_CHANNELS', () => {
 
   it('session channels all start with "session:"', () => {
     const sessionChannels = allValues.filter(v => v.startsWith('session:'))
-    expect(sessionChannels).toHaveLength(9)
+    expect(sessionChannels).toHaveLength(10)
   })
 
   it('IpcChannel type is a union of all values', () => {
@@ -78,6 +78,7 @@ describe('IPC_CHANNELS', () => {
       'WORKSPACE_GET_ACTIVE',
       'SESSION_GET_MODEL',
       'SESSION_LIST_MODELS',
+      'SESSION_SET_MODEL',
     ])
   })
 })

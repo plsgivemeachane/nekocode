@@ -307,6 +307,20 @@ export class PiSessionManager {
     return available.map((m) => ({ id: m.id, name: m.name, provider: m.provider }))
   }
 
+  /** Set the model for a session. */
+  async setModel(sessionId: string, provider: string, modelId: string): Promise<ModelInfo> {
+    const managed = this.getManaged(sessionId)
+    const modelRegistry = managed.session.modelRegistry
+    const model = modelRegistry.find(provider, modelId)
+    if (!model) {
+      throw new Error(`Model not found: ${provider}/${modelId}`)
+    }
+    await managed.session.setModel(model)
+    const updated = managed.session.model
+    if (!updated) throw new Error(`Failed to set model: ${provider}/${modelId}`)
+    return { id: updated.id, name: updated.name, provider: updated.provider }
+  }
+
   /** Get the number of active sessions. */
   get sessionCount(): number {
     return this.sessions.size

@@ -46,6 +46,9 @@ const sessionApi: NekoCodeIPC['session'] = {
 
   listModels: (): Promise<ModelInfo[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.SESSION_LIST_MODELS),
+
+  setModel: (sessionId: string, provider: string, modelId: string): Promise<ModelInfo> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SESSION_SET_MODEL, { sessionId, provider, modelId }),
 }
 
 const projectApi: NekoCodeIPC['project'] = {

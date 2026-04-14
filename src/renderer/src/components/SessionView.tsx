@@ -21,6 +21,7 @@ export function SessionView({ sessionId, cwd, onCreateSession, onDisposeSession 
     setInput,
     activeModel,
     modelList,
+    setModel,
   } = useSession({ sessionId })
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -150,7 +151,7 @@ export function SessionView({ sessionId, cwd, onCreateSession, onDisposeSession 
                           <button
                             key={m.id}
                             type="button"
-                            onClick={() => setShowModelDropdown(false)}
+                            onClick={() => { setModel(m.provider, m.id); setShowModelDropdown(false) }}
                             className={`w-full text-left px-3 py-1.5 text-xs hover:bg-surface-700 transition-colors flex items-center justify-between ${activeModel?.id === m.id ? "text-accent-400" : "text-text-secondary"}`}
                           >
                             <span>{m.name}</span>

@@ -19,6 +19,7 @@ export const IPC_CHANNELS = {
   WORKSPACE_GET_ACTIVE: 'workspace:getActive',
   SESSION_GET_MODEL: 'session:get-model',
   SESSION_LIST_MODELS: 'session:list-models',
+  SESSION_SET_MODEL: 'session:set-model',
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]

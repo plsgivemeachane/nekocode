@@ -11,3 +11,5 @@ bunx is a wrapper around npx
 ALWAYS use bun run <command> . NEVER USE npm run <command>
 
 DO NOT USE NPX. USE BUNX
+
+For EVERY Change before commit please run `bun run test` and `bun run lint` and `bun run type-check` and FIX ALL ERRORS before commit even it not related to your problems.
