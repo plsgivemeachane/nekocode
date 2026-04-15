@@ -1,15 +1,26 @@
-This project using bun NOT NPM
-Please run
-bun run <command>
-rather than
-npm run <command>
-bunx is a wrapper around npx
-## Testing
+# Agent Instructions for This Repository
 
-**WARNING:** Always use `bun run test` (with `run`). Never use `bun test` directly — that triggers bun's internal test runner, not vitest. The `"test"` script in `package.json` maps to `vitest run`.
+## Package Manager
 
-ALWAYS use bun run <command> . NEVER USE npm run <command>
+- This project uses Bun, not npm.
+- Always run scripts with `bun run <command>`.
+- Never use `npm run <command>`.
 
-DO NOT USE NPX. USE BUNX
+## Command Runners
 
-For EVERY Change before commit please run `bun run test` and `bun run lint` and `bun run type-check` and FIX ALL ERRORS before commit even it not related to your problems.
+- Use `bunx` instead of `npx`.
+- Never use `npx` in this repository.
+
+## Testing and Validation
+
+- Always run tests with `bun run test`.
+- Never run `bun test` directly. It invokes Bun's internal test runner, not the project test runner.
+- The `test` script in `package.json` maps to `vitest run`.
+
+## Required Checks Before Commit
+
+For every change, run all commands below and fix all errors before committing, even if they seem unrelated:
+
+- `bun run test`
+- `bun run lint`
+- `bun run type-check`

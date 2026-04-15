@@ -73,11 +73,20 @@ export interface ChatMessageIPC {
  * These are a simplified subset of the full AgentEvent type --
  * only the fields the renderer needs for display.
  */
+export interface UsageData {
+  inputTokens: number
+  outputTokens: number
+  totalCost: number
+  contextPercent: number
+  contextWindow: number
+}
+
 export type SessionStreamEvent =
   | { type: 'agent_start' }
   | { type: 'text_delta'; delta: string }
   | { type: 'tool_call'; toolCallId: string; toolName: string; args: unknown }
   | { type: 'tool_result'; toolCallId: string; toolName: string; result: unknown; isError: boolean }
+  | { type: 'usage_update'; usage: UsageData }
   | { type: 'error'; message: string }
   | { type: 'done' }
   | { type: 'user_message'; text: string }

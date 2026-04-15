@@ -39,6 +39,7 @@ type ProjectAction =
   | { type: 'RECONNECT_SESSION'; sessionId: string; projectPath: string }
   | { type: 'UPDATE_SESSION_STATUS'; sessionId: string; status: SessionStatus }
   | { type: 'CLEAR_ACTIVE_SESSION' }
+  | { type: 'UPDATE_SESSION_FIRST_MESSAGE'; sessionId: string; firstMessage: string }
 
 // ---------------------------------------------------------------------------
 // Reducer (pure)
@@ -134,6 +135,19 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
         ...state,
         activeSessionId: null,
         activeProjectPath: null,
+      }
+
+    case 'UPDATE_SESSION_FIRST_MESSAGE':
+      return {
+        ...state,
+        projects: state.projects.map(p => ({
+          ...p,
+          sessions: p.sessions.map(s =>
+            s.id === action.sessionId
+              ? { ...s, firstMessage: action.firstMessage }
+              : s,
+          ),
+        })),
       }
 
     default:
@@ -251,6 +265,16 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         case 'error':
           logger.debug(`[global] error sessionId=${sessionId.slice(0, 8)}... message=${event.message}`)
           dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId, status: 'error' })
+          break
+
+        case 'user_message':
+          dispatch({
+            type: 'UPDATE_SESSION_FIRST_MESSAGE',
+            sessionId,
+            firstMessage: event.text.length > 100
+              ? event.text.slice(0, 100) + '...'
+              : event.text,
+          })
           break
       }
     })

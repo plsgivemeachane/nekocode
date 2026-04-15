@@ -3,6 +3,7 @@ import { useSession } from '../hooks/useSession'
 import { UserMessage } from './chat/UserMessage'
 import { AssistantMessage } from './chat/AssistantMessage'
 import { ToolCallGroup } from './chat/ToolCallSection'
+import { StatusIndicator } from './StatusIndicator'
 import { createLogger } from '../logger'
 
 const logger = createLogger('ChatView')
@@ -17,7 +18,7 @@ interface ChatViewProps {
 }
 
 export function ChatView({ sessionId, className }: ChatViewProps) {
-  const { messages, isStreaming, error, input, setInput, sendPrompt, activeModel, modelList, setModel } =
+  const { messages, isStreaming, error, input, setInput, sendPrompt, activeModel, modelList, setModel, usage, streamStartTime } =
     useSession({ sessionId })
 
   const [showScrollBtn, setShowScrollBtn] = React.useState(false)
@@ -208,12 +209,12 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
               }
               return <div key={group.key}>{renderMessage(group.msg)}</div>
             })}
-            {isStreaming && (
-              <div className="flex items-center gap-2 py-1">
-                <span className="sr-only">Agent is working</span>
-                <span className="text-sm text-text-tertiary animate-pulse">thinking...</span>
-              </div>
-            )}
+            <StatusIndicator
+              isStreaming={isStreaming}
+              modelName={activeModel?.name ?? null}
+              usage={usage}
+              streamStartTime={streamStartTime}
+            />
           </div>
         )}
 

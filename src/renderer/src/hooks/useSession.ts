@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import type { SessionStreamEvent, ChatMessageIPC, ModelInfo } from '../../../shared/ipc-types'
+import type { SessionStreamEvent, ChatMessageIPC, ModelInfo, UsageData } from '../../../shared/ipc-types'
 import type { ChatMessage } from '../types/chat'
 import { generateId } from '../types/chat'
 import { createLogger } from '../logger'
@@ -53,6 +53,8 @@ interface UseSessionOutput {
   activeModel: ModelInfo | null
   modelList: ModelInfo[]
   setModel: (provider: string, modelId: string) => Promise<void>
+  usage: UsageData
+  streamStartTime: number
 }
 
 const INITIAL_MESSAGES: ChatMessage[] = []
@@ -69,6 +71,8 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
   const [input, setInput] = useState('')
   const [activeModel, setActiveModel] = useState<ModelInfo | null>(null)
   const [modelList, setModelList] = useState<ModelInfo[]>([])
+  const [usage, setUsage] = useState<UsageData>({ inputTokens: 0, outputTokens: 0, totalCost: 0, contextPercent: 0, contextWindow: 0 })
+  const streamStartTime = useRef<number>(0)
 
   // Draft preservation: save input text when switching away, restore when switching back
   const drafts = useRef<Map<string, string>>(new Map())
@@ -96,6 +100,8 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
     setMessages(INITIAL_MESSAGES)
     setIsStreaming(false)
     setError(null)
+    setUsage({ inputTokens: 0, outputTokens: 0, totalCost: 0, contextPercent: 0, contextWindow: 0 })
+    streamStartTime.current = 0
 
     // Restore draft for new session
     const draft = sessionId !== null ? drafts.current.get(sessionId) : null
@@ -169,6 +175,7 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
           logger.info('agent_start received — setting streaming=true')
           setIsStreaming(true)
           setError(null)
+          if (streamStartTime.current === 0) streamStartTime.current = Date.now()
           break
 
         case 'text_delta':
@@ -242,6 +249,10 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
           logger.info('done event received — streaming complete')
           setIsStreaming(false)
           break
+
+        case 'usage_update':
+          setUsage(event.usage)
+          break
       }
     })
 
@@ -282,5 +293,5 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
     [sessionId],
   )
 
-  return { messages, isStreaming, error, input, setInput, sendPrompt, activeModel, modelList, setModel }
+  return { messages, isStreaming, error, input, setInput, sendPrompt, activeModel, modelList, setModel, usage, streamStartTime: streamStartTime.current }
 }

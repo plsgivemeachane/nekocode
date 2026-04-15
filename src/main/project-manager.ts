@@ -153,12 +153,14 @@ export class ProjectManager {
     try {
       const sessions = await SessionManager.list(path)
       logger.debug(`discoverSessions ${path}: found ${sessions.length} session(s)`)
-      return sessions.map((s) => ({
-        id: s.id,
-        firstMessage: s.firstMessage,
-        created: s.created.toISOString(),
-        messageCount: s.messageCount,
-      }))
+      return sessions
+        .filter((s) => s.messageCount > 0)
+        .map((s) => ({
+          id: s.id,
+          firstMessage: s.firstMessage,
+          created: s.created.toISOString(),
+          messageCount: s.messageCount,
+        }))
     } catch (err) {
       logger.error(`Session discovery failed for ${path}`, err)
       return []

@@ -10,8 +10,9 @@ import {
   type SessionMessageEntry,
 } from '@mariozechner/pi-coding-agent'
 import type { TextContent, ToolCall, Message } from '@mariozechner/pi-ai'
+import { unlinkSync } from 'fs'
 import { StreamBatcher } from './stream-batcher'
-import type { SessionStreamEvent, ChatMessageIPC, ModelInfo, ExtensionLoadError } from '../shared/ipc-types'
+import type { SessionStreamEvent, ChatMessageIPC, ModelInfo, ExtensionLoadError, UsageData } from '../shared/ipc-types'
 import { createLogger } from './logger'
 const logger = createLogger('session-manager')
 
@@ -27,6 +28,10 @@ interface ManagedSession {
   /** Tracks the current assistant message being streamed */
   currentAssistantId: string | null
   currentAssistantContent: string
+  /** Whether the user has sent at least one prompt in this session */
+  hasPrompted: boolean
+  /** Tracks cumulative token usage across all assistant messages */
+  usageTotals: { input: number; output: number; totalCost: number }
   /** Tracks the current tool call being executed */
   currentToolCallId: string | null
 }
@@ -246,6 +251,10 @@ export class PiSessionManager {
     logger.info(`Prompt ${sessionId} text=${text.slice(0, 120)}${text.length > 120 ? '...' : ''}`)
     const managed = this.getManaged(sessionId)
     logger.debug(`Prompt ${sessionId} — streaming state: currentAssistantId=${managed.currentAssistantId ?? 'none'}, currentToolCallId=${managed.currentToolCallId ?? 'none'}`)
+    if (!managed.hasPrompted) {
+      this.onEvent(sessionId, { type: 'user_message', text })
+      managed.hasPrompted = true
+    }
     await managed.session.prompt(text, { streamingBehavior: 'steer' })
     logger.debug(`Prompt ${sessionId} — SDK prompt() returned (streaming initiated)`)
   }
@@ -270,6 +279,19 @@ export class PiSessionManager {
     const managed = this.getManaged(sessionId)
     managed.batcher.dispose()
     managed.unsubscribe()
+    // Clean up empty session files (never prompted)
+    try {
+      const sm = managed.session.sessionManager
+      if (sm.isPersisted()) {
+        const sessionFile = sm.getSessionFile()
+        if (sessionFile && sm.getEntries().length === 0) {
+          unlinkSync(sessionFile)
+          logger.info(`Dispose ${sessionId} — deleted empty session file`)
+        }
+      }
+    } catch (err) {
+      logger.warn(`Dispose ${sessionId} — failed to clean up session file:`, err)
+    }
     managed.session.dispose()
     this.sessions.delete(sessionId)
     logger.info(`Dispose ${sessionId}`)
@@ -358,6 +380,8 @@ export class PiSessionManager {
       currentAssistantId: null,
       currentAssistantContent: '',
       currentToolCallId: null,
+      hasPrompted: false,
+      usageTotals: { input: 0, output: 0, totalCost: 0 },
     }
 
     managed.unsubscribe = session.subscribe((agentEvent: AgentSessionEvent) => {
@@ -596,6 +620,22 @@ export class PiSessionManager {
         // Finalize the assistant message when the message ends
         if (managed.currentAssistantId) {
           this.finalizeAssistantMessage(managed)
+        }
+        // Emit usage update if this is an assistant message with usage data
+        if (event.message?.role === 'assistant' && 'usage' in event.message && event.message.usage) {
+          const usage = event.message.usage as { input: number; output: number; cost: { total: number } }
+          managed.usageTotals.input += usage.input
+          managed.usageTotals.output += usage.output
+          managed.usageTotals.totalCost += usage.cost.total
+          const ctxUsage = managed.session.getContextUsage()
+          const usageData: UsageData = {
+            inputTokens: managed.usageTotals.input,
+            outputTokens: managed.usageTotals.output,
+            totalCost: managed.usageTotals.totalCost,
+            contextPercent: ctxUsage?.percent ?? 0,
+            contextWindow: ctxUsage?.contextWindow ?? 0,
+          }
+          emit({ type: 'usage_update', usage: usageData })
         }
         break
       }
