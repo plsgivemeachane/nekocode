@@ -1,8 +1,8 @@
 diff --git a/node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/loader.js b/node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/loader.js
-index efcb7da..f4433d1 100644
+index efcb7da..5972977 100644
 --- a/node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/loader.js
 +++ b/node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/loader.js
-@@ -39,8 +39,30 @@ const require = createRequire(import.meta.url);
+@@ -39,29 +39,49 @@ const require = createRequire(import.meta.url);
   * In Bun binary mode, virtualModules is used instead.
   */
  let _aliases = null;
@@ -14,7 +14,6 @@ index efcb7da..f4433d1 100644
          return _aliases;
      const __dirname = path.dirname(fileURLToPath(import.meta.url));
      const packageIndex = path.resolve(__dirname, "../..", "index.js");
-@@ -49,16 +71,31 @@ function getAliases() {
      const typeboxEntry = require.resolve("@sinclair/typebox");
      const typeboxRoot = typeboxEntry.replace(/[\\/]build[\\/]cjs[\\/]index\.js$/, "");
      const packagesRoot = path.resolve(__dirname, "../../../../");
@@ -60,7 +59,7 @@ index efcb7da..f4433d1 100644
      return _aliases;
  }
  const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g;
-@@ -223,10 +260,12 @@ function createExtensionAPI(extension, runtime, cwd, eventBus) {
+@@ -223,10 +243,12 @@ function createExtensionAPI(extension, runtime, cwd, eventBus) {
  async function loadExtensionModule(extensionPath) {
      const jiti = createJiti(import.meta.url, {
          moduleCache: false,
@@ -77,7 +76,7 @@ index efcb7da..f4433d1 100644
      });
      const module = await jiti.import(extensionPath, { default: true });
      const factory = module;
-@@ -266,7 +305,8 @@ async function loadExtension(extensionPath, cwd, eventBus, runtime) {
+@@ -266,7 +288,8 @@ async function loadExtension(extensionPath, cwd, eventBus, runtime) {
      }
      catch (err) {
          const message = err instanceof Error ? err.message : String(err);

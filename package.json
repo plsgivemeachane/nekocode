@@ -5,14 +5,15 @@
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
-    "build": "electron-vite build",
+    "build": "bun run verify:patches && electron-vite build",
     "preview": "electron-vite preview",
-    "package": "electron-vite build && electron-builder --win",
-    "package:mac": "electron-vite build && electron-builder --mac",
-    "package:linux": "electron-vite build && electron-builder --linux",
-    "package:all": "electron-vite build && electron-builder -mwl",
-    "release": "electron-vite build && electron-builder --win --publish always",
+    "package": "bun run verify:patches && electron-vite build && electron-builder --win",
+    "package:mac": "bun run verify:patches && electron-vite build && electron-builder --mac",
+    "package:linux": "bun run verify:patches && electron-vite build && electron-builder --linux",
+    "package:all": "bun run verify:patches && electron-vite build && electron-builder -mwl",
+    "release": "bun run verify:patches && electron-vite build && electron-builder --win --publish always",
     "postinstall": "patch-package",
+    "verify:patches": "node ./scripts/verify-patches.cjs",
     "lint": "eslint --ext .ts,.tsx ./src",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -70,6 +71,11 @@
         "from": "resources",
         "to": "resources",
         "filter": ["**/*"]
+      },
+      {
+        "from": "patches",
+        "to": "patches",
+        "filter": ["**/*.patch"]
       }
     ],
     "win": {
