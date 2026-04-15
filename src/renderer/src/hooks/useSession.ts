@@ -3,6 +3,7 @@ import type { SessionStreamEvent, ChatMessageIPC, ModelInfo, UsageData } from '.
 import type { ChatMessage } from '../types/chat'
 import { generateId } from '../types/chat'
 import { createLogger } from '../logger'
+import { useProjectStore } from '../stores/project-store'
 
 const logger = createLogger('useSession')
 
@@ -65,14 +66,24 @@ const INITIAL_MESSAGES: ChatMessage[] = []
  * Manages its own message state and input draft per session.
  */
 export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
+  const { state: projectState } = useProjectStore()
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES)
-  const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [input, setInput] = useState('')
   const [activeModel, setActiveModel] = useState<ModelInfo | null>(null)
   const [modelList, setModelList] = useState<ModelInfo[]>([])
   const [usage, setUsage] = useState<UsageData>({ inputTokens: 0, outputTokens: 0, totalCost: 0, contextPercent: 0, contextWindow: 0 })
-  const streamStartTime = useRef<number>(0)
+
+  // Derive isStreaming from the global store — single source of truth for ALL sessions
+  const isStreaming = sessionId != null && projectState.sessionStatuses[sessionId] === 'streaming'
+
+  // Per-session caches: survive session switches (same pattern as drafts)
+  const streamStartTimes = useRef<Map<string, number>>(new Map())
+  const usages = useRef<Map<string, UsageData>>(new Map())
+  const errors = useRef<Map<string, string | null>>(new Map())
+  const streamStartTime = sessionId != null
+    ? (streamStartTimes.current.get(sessionId) ?? 0)
+    : 0
 
   // Draft preservation: save input text when switching away, restore when switching back
   const drafts = useRef<Map<string, string>>(new Map())
@@ -96,12 +107,11 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
       logger.debug(`draft saved for ${prev.slice(0, 8)}...`)
     }
 
-    // Reset state for new session
+    // Reset transient state, restore per-session cached state
     setMessages(INITIAL_MESSAGES)
-    setIsStreaming(false)
-    setError(null)
-    setUsage({ inputTokens: 0, outputTokens: 0, totalCost: 0, contextPercent: 0, contextWindow: 0 })
-    streamStartTime.current = 0
+    setError(sessionId !== null ? (errors.current.get(sessionId) ?? null) : null)
+    setUsage(sessionId !== null ? (usages.current.get(sessionId) ?? { inputTokens: 0, outputTokens: 0, totalCost: 0, contextPercent: 0, contextWindow: 0 }) : { inputTokens: 0, outputTokens: 0, totalCost: 0, contextPercent: 0, contextWindow: 0 })
+    // streamStartTime is derived from the ref map above — no separate reset needed
 
     // Restore draft for new session
     const draft = sessionId !== null ? drafts.current.get(sessionId) : null
@@ -172,10 +182,12 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
 
       switch (event.type) {
         case 'agent_start':
-          logger.info('agent_start received — setting streaming=true')
-          setIsStreaming(true)
+          logger.info('agent_start received — streaming state from global store')
           setError(null)
-          if (streamStartTime.current === 0) streamStartTime.current = Date.now()
+          errors.current.set(sessionId, null)
+          if (!streamStartTimes.current.has(sessionId) || streamStartTimes.current.get(sessionId) === 0) {
+            streamStartTimes.current.set(sessionId, Date.now())
+          }
           break
 
         case 'text_delta':
@@ -191,8 +203,6 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
             }
             return msgs
           })
-          setIsStreaming(true)
-          setError(null)
           break
 
         case 'tool_call':
@@ -241,17 +251,18 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
 
         case 'error':
           logger.error(`session error: ${event.message}`)
-          setIsStreaming(false)
           setError(event.message)
+          errors.current.set(sessionId, event.message)
           break
 
         case 'done':
           logger.info('done event received — streaming complete')
-          setIsStreaming(false)
+          streamStartTimes.current.set(sessionId, 0)
           break
 
         case 'usage_update':
           setUsage(event.usage)
+          usages.current.set(sessionId, event.usage)
           break
       }
     })
@@ -293,5 +304,5 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
     [sessionId],
   )
 
-  return { messages, isStreaming, error, input, setInput, sendPrompt, activeModel, modelList, setModel, usage, streamStartTime: streamStartTime.current }
+  return { messages, isStreaming, error, input, setInput, sendPrompt, activeModel, modelList, setModel, usage, streamStartTime }
 }

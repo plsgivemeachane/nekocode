@@ -401,6 +401,7 @@ export class PiSessionManager {
     logger.debug(`[${mode}] createSdkSession loaderCwd=${cwd} processCwd=${process.cwd()} NODE_PATH=${process.env.NODE_PATH ?? ''}`)
     await loader.reload()
     return createAgentSession({
+      cwd,
       resourceLoader: loader,
       sessionManager,
     })
