@@ -23,21 +23,39 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
 
   const [showScrollBtn, setShowScrollBtn] = React.useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const messageContentRef = useRef<HTMLDivElement>(null)
   const isAtBottomRef = useRef(true)
+  const programmaticScrollRef = useRef(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [showModelDropdown, setShowModelDropdown] = React.useState(false)
   const modelDropdownRef = useRef<HTMLDivElement>(null)
+
+  const getDistanceFromBottom = useCallback((el: HTMLDivElement) => {
+    return el.scrollHeight - el.scrollTop - el.clientHeight
+  }, [])
 
   // Instant scroll to bottom (no smooth — avoids jank during streaming)
   const scrollToBottom = useCallback((smooth = false) => {
     const el = scrollContainerRef.current
     if (!el) return
+    programmaticScrollRef.current = true
+    isAtBottomRef.current = true
+    setShowScrollBtn(false)
     if (smooth) {
       el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
     } else {
       el.scrollTop = el.scrollHeight
     }
-  }, [])
+    requestAnimationFrame(() => {
+      const current = scrollContainerRef.current
+      if (current) {
+        const atBottom = getDistanceFromBottom(current) < SCROLL_THRESHOLD_PX
+        isAtBottomRef.current = atBottom
+        setShowScrollBtn(!atBottom && messages.length > 0)
+      }
+      programmaticScrollRef.current = false
+    })
+  }, [getDistanceFromBottom, messages.length])
 
   // Close model dropdown on outside click
   useEffect(() => {
@@ -53,12 +71,13 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
 
   // Track scroll position — update isAtBottomRef and button visibility
   const handleScroll = useCallback(() => {
+    if (programmaticScrollRef.current) return
     const el = scrollContainerRef.current
     if (!el) return
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_THRESHOLD_PX
+    const atBottom = getDistanceFromBottom(el) < SCROLL_THRESHOLD_PX
     isAtBottomRef.current = atBottom
     setShowScrollBtn(!atBottom && messages.length > 0)
-  }, [messages.length])
+  }, [getDistanceFromBottom, messages.length])
 
   // Auto-scroll when messages or streaming state change — only if user hasn't scrolled up
   useEffect(() => {
@@ -67,12 +86,53 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
     }
   }, [messages, isStreaming, scrollToBottom])
 
+  // Keep auto-scroll stable when content height changes after render (e.g. markdown/code highlighting)
+  useEffect(() => {
+    const container = scrollContainerRef.current
+    const content = messageContentRef.current
+    if (!container || !content) return
+
+    const observer = new ResizeObserver(() => {
+      if (isAtBottomRef.current) {
+        scrollToBottom(false)
+      }
+    })
+
+    observer.observe(content)
+    return () => observer.disconnect()
+  }, [scrollToBottom])
+
+  // While streaming, keep the viewport locked to bottom unless the user scrolls away.
+  useEffect(() => {
+    if (!isStreaming) return
+
+    let rafId = 0
+    const tick = () => {
+      if (isAtBottomRef.current) {
+        scrollToBottom(false)
+      }
+      rafId = requestAnimationFrame(tick)
+    }
+
+    rafId = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(rafId)
+  }, [isStreaming, scrollToBottom])
+
   // Scroll to bottom on initial session (when first messages arrive)
   useEffect(() => {
     if (messages.length === 1) {
       scrollToBottom(false)
     }
   }, [messages.length, scrollToBottom])
+
+  // Reset scroll lock on session switch so each session opens at latest messages
+  useEffect(() => {
+    isAtBottomRef.current = true
+    setShowScrollBtn(false)
+    if (sessionId) {
+      requestAnimationFrame(() => scrollToBottom(false))
+    }
+  }, [sessionId, scrollToBottom])
 
   // Log session changes
   useEffect(() => {
@@ -180,43 +240,45 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
       <main
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-6 py-4 relative"
+        className="flex-1 overflow-y-auto px-6 pt-4 pb-10 relative"
       >
-        {!sessionId ? (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-text-tertiary">Select a session from the sidebar</p>
-          </div>
-        ) : messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-text-tertiary">Session ready. Type a prompt below.</p>
-          </div>
-        ) : (
-          <div className="space-y-5 max-w-3xl mx-auto">
-            {messageGroups.map((group) => {
-              if (group.type === 'tool-group') {
-                return (
-                  <ToolCallGroup
-                    key={group.key}
-                    toolCalls={group.msgs.map(m => ({
-                      id: m.id,
-                      toolName: m.toolName,
-                      status: m.status,
-                      isError: m.isError,
-                      args: m.args,
-                    }))}
-                  />
-                )
-              }
-              return <div key={group.key}>{renderMessage(group.msg)}</div>
-            })}
-            <StatusIndicator
-              isStreaming={isStreaming}
-              modelName={activeModel?.name ?? null}
-              usage={usage}
-              streamStartTime={streamStartTime}
-            />
-          </div>
-        )}
+        <div ref={messageContentRef}>
+          {!sessionId ? (
+            <div className="flex items-center justify-center h-full">
+              <p className="text-text-tertiary">Select a session from the sidebar</p>
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="flex items-center justify-center h-full">
+              <p className="text-text-tertiary">Session ready. Type a prompt below.</p>
+            </div>
+          ) : (
+            <div className="space-y-5 max-w-3xl mx-auto">
+              {messageGroups.map((group) => {
+                if (group.type === 'tool-group') {
+                  return (
+                    <ToolCallGroup
+                      key={group.key}
+                      toolCalls={group.msgs.map(m => ({
+                        id: m.id,
+                        toolName: m.toolName,
+                        status: m.status,
+                        isError: m.isError,
+                        args: m.args,
+                      }))}
+                    />
+                  )
+                }
+                return <div key={group.key}>{renderMessage(group.msg)}</div>
+              })}
+              <StatusIndicator
+                isStreaming={isStreaming}
+                modelName={activeModel?.name ?? null}
+                usage={usage}
+                streamStartTime={streamStartTime}
+              />
+            </div>
+          )}
+        </div>
 
         {/* Scroll-to-bottom button */}
         {showScrollBtn && (

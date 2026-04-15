@@ -140,6 +140,28 @@ export interface ModelInfo {
   provider: string
 }
 
+/** Information about an available update */
+export interface UpdateAvailableInfo {
+  version: string
+  releaseDate: string
+  releaseNotes?: string
+  currentVersion: string
+}
+
+/** Download progress for an update */
+export interface UpdateProgress {
+  percent: number
+  bytesPerSecond: number
+  transferred: number
+  total: number
+}
+
+/** Update error info */
+export interface UpdateErrorInfo {
+  message: string
+  code?: string
+}
+
 /** API exposed to the renderer via contextBridge */
 export interface NekoCodeIPC {
   session: {
@@ -166,5 +188,15 @@ export interface NekoCodeIPC {
   workspace: {
     setActive: (sessionId: string, projectPath: string) => Promise<void>
     getActive: () => Promise<WorkspaceActiveResult>
+  }
+  update: {
+    check: () => Promise<UpdateAvailableInfo | null>
+    download: () => Promise<void>
+    install: () => Promise<void>
+    onAvailable: (callback: (info: UpdateAvailableInfo) => void) => () => void
+    onNotAvailable: (callback: () => void) => () => void
+    onProgress: (callback: (progress: UpdateProgress) => void) => () => void
+    onDownloaded: (callback: (info: { version: string }) => void) => () => void
+    onError: (callback: (error: UpdateErrorInfo) => void) => () => void
   }
 }

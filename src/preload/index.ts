@@ -10,6 +10,9 @@ import type {
   WorkspaceSetActivePayload,
   WorkspaceActiveResult,
   ModelInfo,
+  UpdateAvailableInfo,
+  UpdateProgress,
+  UpdateErrorInfo,
 } from '../shared/ipc-types'
 
 const sessionApi: NekoCodeIPC['session'] = {
@@ -81,5 +84,45 @@ contextBridge.exposeInMainWorld('nekocode', {
   dialog: {
     openFolder: (): Promise<string | null> =>
       ipcRenderer.invoke(IPC_CHANNELS.DIALOG_OPEN_FOLDER),
+  },
+  update: {
+    check: (): Promise<UpdateAvailableInfo | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.UPDATE_CHECK),
+
+    download: (): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.UPDATE_DOWNLOAD),
+
+    install: (): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.UPDATE_INSTALL),
+
+    onAvailable: (callback: (info: UpdateAvailableInfo) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, info: UpdateAvailableInfo) => callback(info)
+      ipcRenderer.on(IPC_CHANNELS.UPDATE_AVAILABLE, handler)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_AVAILABLE, handler)
+    },
+
+    onNotAvailable: (callback: () => void): (() => void) => {
+      const handler = () => callback()
+      ipcRenderer.on(IPC_CHANNELS.UPDATE_NOT_AVAILABLE, handler)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_NOT_AVAILABLE, handler)
+    },
+
+    onProgress: (callback: (progress: UpdateProgress) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, progress: UpdateProgress) => callback(progress)
+      ipcRenderer.on(IPC_CHANNELS.UPDATE_PROGRESS, handler)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_PROGRESS, handler)
+    },
+
+    onDownloaded: (callback: (info: { version: string }) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, info: { version: string }) => callback(info)
+      ipcRenderer.on(IPC_CHANNELS.UPDATE_DOWNLOADED, handler)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_DOWNLOADED, handler)
+    },
+
+    onError: (callback: (error: UpdateErrorInfo) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, error: UpdateErrorInfo) => callback(error)
+      ipcRenderer.on(IPC_CHANNELS.UPDATE_ERROR, handler)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_ERROR, handler)
+    },
   },
 })

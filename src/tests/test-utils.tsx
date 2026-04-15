@@ -1,5 +1,5 @@
 import type { NekoCodeIPC } from '@/shared/ipc-types'
-import type { SessionStreamEvent, ChatMessageIPC, ProjectInfo, SessionCreateResult, SessionReconnectResult, WorkspaceActiveResult, ModelInfo } from '@/shared/ipc-types'
+import type { SessionStreamEvent, ChatMessageIPC, ProjectInfo, SessionCreateResult, SessionReconnectResult, WorkspaceActiveResult, ModelInfo, UpdateAvailableInfo } from '@/shared/ipc-types'
 
 // ── Mock IPC factory ──────────────────────────────────────────────
 
@@ -60,12 +60,26 @@ function createMockWorkspaceAPI(): NekoCodeIPC['workspace'] {
   }
 }
 
+function createMockUpdateAPI(): NekoCodeIPC['update'] {
+  return {
+    check: vi.fn<() => Promise<UpdateAvailableInfo | null>>().mockResolvedValue(null),
+    download: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    install: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    onAvailable: vi.fn<() => () => void>().mockReturnValue(() => {}),
+    onNotAvailable: vi.fn<() => () => void>().mockReturnValue(() => {}),
+    onProgress: vi.fn<() => () => void>().mockReturnValue(() => {}),
+    onDownloaded: vi.fn<() => () => void>().mockReturnValue(() => {}),
+    onError: vi.fn<() => () => void>().mockReturnValue(() => {}),
+  }
+}
+
 export function createMockIPC(): NekoCodeIPC {
   return {
     session: createMockSessionAPI(),
     dialog: createMockDialogAPI(),
     project: createMockProjectAPI(),
     workspace: createMockWorkspaceAPI(),
+    update: createMockUpdateAPI(),
   }
 }
 

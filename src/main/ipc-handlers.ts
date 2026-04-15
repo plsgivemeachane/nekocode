@@ -17,10 +17,12 @@ import type {
   ProjectInfo,
   WorkspaceSetActivePayload,
   ModelInfo,
+  UpdateAvailableInfo,
 } from '../shared/ipc-types'
 import { PiSessionManager } from './session-manager'
 import type { ProjectManager } from './project-manager'
 import { createLogger } from './logger'
+import { checkForUpdate, downloadUpdate, quitAndInstall } from './updater'
 
 const logger = createLogger('ipc-handlers')
 
@@ -167,6 +169,33 @@ export function registerIpcHandlers(
       logger.error(`PROJECT_SESSIONS failed projectId=${payload.projectId}`, err)
       throw err
     }
+  })
+
+  // --- Update handlers ---
+
+  ipcMain.handle(IPC_CHANNELS.UPDATE_CHECK, async (): Promise<UpdateAvailableInfo | null> => {
+    logger.info('UPDATE_CHECK')
+    try {
+      return await checkForUpdate()
+    } catch (err) {
+      logger.error('UPDATE_CHECK failed', err)
+      throw err
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.UPDATE_DOWNLOAD, async (): Promise<void> => {
+    logger.info('UPDATE_DOWNLOAD')
+    try {
+      await downloadUpdate()
+    } catch (err) {
+      logger.error('UPDATE_DOWNLOAD failed', err)
+      throw err
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.UPDATE_INSTALL, async (): Promise<void> => {
+    logger.info('UPDATE_INSTALL')
+    quitAndInstall()
   })
 }
 

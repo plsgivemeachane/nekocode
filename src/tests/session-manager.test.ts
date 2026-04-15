@@ -534,15 +534,15 @@ describe('PiSessionManager', () => {
     })
     vi.advanceTimersByTime(16)
 
-    // The event from session B should arrive with session B's ID
+    // user_message events are emitted on first prompt; assert only text stream isolation here
     expect(events.length).toBeGreaterThanOrEqual(1)
-    const bEvents = events.filter(e => e.sessionId === idB)
-    expect(bEvents).toHaveLength(1)
-    expect(bEvents[0].event).toEqual({ type: 'text_delta', delta: 'response B' })
+    const bTextEvents = events.filter(e => e.sessionId === idB && e.event.type === 'text_delta')
+    expect(bTextEvents).toHaveLength(1)
+    expect(bTextEvents[0].event).toEqual({ type: 'text_delta', delta: 'response B' })
 
-    // Session A should have no events (we only emitted to session B)
-    const aEvents = events.filter(e => e.sessionId === idA)
-    expect(aEvents).toHaveLength(0)
+    // Session A should have no text delta events (we only emitted to session B)
+    const aTextEvents = events.filter(e => e.sessionId === idA && e.event.type === 'text_delta')
+    expect(aTextEvents).toHaveLength(0)
 
     // Both sessions should still be alive and independently operable
     manager.abort(idA)

@@ -6,7 +6,7 @@ describe('IPC_CHANNELS', () => {
   const allValues = Object.values(channels)
 
   it('has expected number of channels', () => {
-    expect(allValues).toHaveLength(17)
+    expect(allValues).toHaveLength(25)
   })
 
   it('has no duplicate values', () => {
@@ -53,6 +53,22 @@ describe('IPC_CHANNELS', () => {
     expect(channels).toHaveProperty('WORKSPACE_GET_ACTIVE')
   })
 
+  it('has all update channels', () => {
+    expect(channels).toHaveProperty('UPDATE_CHECK')
+    expect(channels).toHaveProperty('UPDATE_DOWNLOAD')
+    expect(channels).toHaveProperty('UPDATE_INSTALL')
+    expect(channels).toHaveProperty('UPDATE_AVAILABLE')
+    expect(channels).toHaveProperty('UPDATE_NOT_AVAILABLE')
+    expect(channels).toHaveProperty('UPDATE_PROGRESS')
+    expect(channels).toHaveProperty('UPDATE_DOWNLOADED')
+    expect(channels).toHaveProperty('UPDATE_ERROR')
+  })
+
+  it('update channels all start with "update:"', () => {
+    const updateChannels = allValues.filter(v => v.startsWith('update:'))
+    expect(updateChannels).toHaveLength(8)
+  })
+
   it('session channels all start with "session:"', () => {
     const sessionChannels = allValues.filter(v => v.startsWith('session:'))
     expect(sessionChannels).toHaveLength(10)
@@ -79,6 +95,14 @@ describe('IPC_CHANNELS', () => {
       'SESSION_GET_MODEL',
       'SESSION_LIST_MODELS',
       'SESSION_SET_MODEL',
+      'UPDATE_CHECK',
+      'UPDATE_DOWNLOAD',
+      'UPDATE_INSTALL',
+      'UPDATE_AVAILABLE',
+      'UPDATE_NOT_AVAILABLE',
+      'UPDATE_PROGRESS',
+      'UPDATE_DOWNLOADED',
+      'UPDATE_ERROR',
     ])
   })
 })

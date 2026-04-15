@@ -4,12 +4,14 @@ import { PiSessionManager } from './session-manager'
 import { ProjectManager } from './project-manager'
 import { registerIpcHandlers, sendEventToRenderer } from './ipc-handlers'
 import { createLogger } from './logger'
+import { initAutoUpdater } from './updater'
 
 const logger = createLogger('main')
 
 const sessionManager = new PiSessionManager(sendEventToRenderer)
 const projectManager = new ProjectManager()
 let isQuitting = false
+let mainWindowRef: BrowserWindow | null = null
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -28,6 +30,7 @@ function createWindow(): BrowserWindow {
   })
 
   logger.info('BrowserWindow created')
+  mainWindowRef = mainWindow
   logger.debug(`preload path: ${join(__dirname, '../preload/index.js')}`)
   logger.debug(`icon path: ${join(__dirname, '../../resources/icon.ico')}`)
 
@@ -63,6 +66,7 @@ app.whenReady().then(async () => {
   logger.info(`Workspace loaded, ${projectManager.listProjects().length} project(s)`)
   registerIpcHandlers(sessionManager, projectManager)
   createWindow()
+  initAutoUpdater(() => mainWindowRef)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
