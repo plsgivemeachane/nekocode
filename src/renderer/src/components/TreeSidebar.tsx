@@ -22,6 +22,76 @@ function StatusDot({ status }: { status: SessionStatus }) {
   return <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${color}`} />
 }
 
+const VISIBLE_SESSIONS = 6
+
+function SessionList({
+  sessions,
+  activeSessionId,
+  sessionStatuses,
+  onReconnect,
+  onContextMenu,
+  onCreateSession,
+}: {
+  sessions: { id: string; firstMessage?: string }[]
+  activeSessionId: string | null
+  sessionStatuses: Record<string, SessionStatus>
+  onReconnect: (sessionId: string) => void
+  onContextMenu: (e: React.MouseEvent, sessionId: string) => void
+  onCreateSession: () => void
+}) {
+  const [showAll, setShowAll] = useState(false)
+  const hasMore = sessions.length > VISIBLE_SESSIONS
+  const visibleSessions = showAll ? sessions : sessions.slice(0, VISIBLE_SESSIONS)
+
+  return (
+    <div className="ml-3 mt-0.5 space-y-px">
+      {/* New Session — at the top */}
+      <button
+        onClick={onCreateSession}
+        className="flex items-center gap-2 px-2.5 py-[6px] w-full text-left text-[12px] text-text-tertiary/70 hover:text-accent-400 hover:bg-surface-800/40 rounded-lg transition-colors duration-150 pl-5"
+      >
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" className="shrink-0">
+          <path d="M6 2.5v7M2.5 6h7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+        New Session
+      </button>
+
+      {visibleSessions.map(session => {
+        const isActiveSession = activeSessionId === session.id
+        const status = sessionStatuses[session.id] ?? 'idle'
+
+        return (
+          <div
+            key={session.id}
+            className={`flex items-center gap-2 px-2.5 py-[6px] cursor-pointer rounded-lg transition-colors duration-150 text-[13px] ${
+              isActiveSession
+                ? 'bg-accent-500/15 text-text-primary'
+                : 'text-text-secondary/70 hover:bg-surface-800/40 hover:text-text-secondary'
+            }`}
+            onClick={() => onReconnect(session.id)}
+            onContextMenu={(e) => onContextMenu(e, session.id)}
+          >
+            <span className={`truncate flex-1 ${isActiveSession ? '' : 'pl-3'}`}>
+              {session.firstMessage ? truncate(session.firstMessage, 26) : 'Untitled'}
+            </span>
+
+            <StatusDot status={status} />
+          </div>
+        )
+      })}
+
+      {hasMore && (
+        <button
+          onClick={() => setShowAll(prev => !prev)}
+          className="flex items-center gap-2 px-2.5 py-[6px] w-full text-left text-[12px] text-text-tertiary/70 hover:text-text-secondary hover:bg-surface-800/40 rounded-lg transition-colors duration-150 pl-5"
+        >
+          {showAll ? 'Show less' : `Show more (${sessions.length - VISIBLE_SESSIONS})`}
+        </button>
+      )}
+    </div>
+  )
+}
+
 export function TreeSidebar() {
   const { state, addProject, removeProject, reconnectSession, createSession, refreshSessions } =
     useProjectStore()
@@ -193,42 +263,14 @@ export function TreeSidebar() {
 
               {/* Sessions */}
               {isExpanded && (
-                <div className="ml-3 mt-0.5 space-y-px">
-                  {project.sessions.map(session => {
-                    const isActiveSession = state.activeSessionId === session.id
-                    const status = state.sessionStatuses[session.id] ?? 'idle'
-
-                    return (
-                      <div
-                        key={session.id}
-                        className={`flex items-center gap-2 px-2.5 py-[6px] cursor-pointer rounded-lg transition-colors duration-150 text-[13px] ${
-                          isActiveSession
-                            ? 'bg-accent-500/15 text-text-primary'
-                            : 'text-text-secondary/70 hover:bg-surface-800/40 hover:text-text-secondary'
-                        }`}
-                        onClick={() => reconnectSession(session.id, project.path)}
-                        onContextMenu={(e) => openSessionMenu(e, session.id)}
-                      >
-                        <span className={`truncate flex-1 ${isActiveSession ? '' : 'pl-3'}`}>
-                          {session.firstMessage ? truncate(session.firstMessage, 26) : 'Untitled'}
-                        </span>
-
-                        <StatusDot status={status} />
-                      </div>
-                    )
-                  })}
-
-                  {/* New Session */}
-                  <button
-                    onClick={() => createSession(project.path)}
-                    className="flex items-center gap-2 px-2.5 py-[6px] w-full text-left text-[12px] text-text-tertiary/70 hover:text-accent-400 hover:bg-surface-800/40 rounded-lg transition-colors duration-150 pl-5"
-                  >
-                    <svg width="11" height="11" viewBox="0 0 12 12" fill="none" className="shrink-0">
-                      <path d="M6 2.5v7M2.5 6h7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-                    </svg>
-                    New Session
-                  </button>
-                </div>
+                <SessionList
+                  sessions={project.sessions}
+                  activeSessionId={state.activeSessionId}
+                  sessionStatuses={state.sessionStatuses}
+                  onReconnect={(sessionId) => reconnectSession(sessionId, project.path)}
+                  onContextMenu={openSessionMenu}
+                  onCreateSession={() => createSession(project.path)}
+                />
               )}
             </div>
           )
