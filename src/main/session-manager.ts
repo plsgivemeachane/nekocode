@@ -127,11 +127,21 @@ export class PiSessionManager {
     logger.info(`Reconnect ${sessionId} cwd=${cwd}`)
 
     // If the session is still in memory (never disposed), return its existing messages
-    // immediately, but kick off a background disk refresh as a failsafe.
+    // after reconciling with disk to avoid returning stale/empty caches.
     const existing = this.sessions.get(sessionId)
     if (existing) {
       logger.info(`Reconnect ${sessionId} — already in memory`)
-      this.tryRefreshFromDisk(sessionId, cwd).catch(() => {})
+      // Reconcile synchronously so reconnect callers get the best available history now.
+      try {
+        const diskMessages = await this.loadHistoryFromDisk(sessionId, cwd, 0)
+        if (diskMessages.length > existing.messages.length) {
+          logger.info(`Reconnect ${sessionId} — refreshed in-memory history ${existing.messages.length} -> ${diskMessages.length}`)
+          existing.messages = diskMessages
+        }
+      } catch (err) {
+        // Best-effort reconciliation; keep using in-memory history if disk read fails.
+        logger.debug(`Reconnect ${sessionId} — disk reconciliation failed: ${err}`)
+      }
       return existing.messages
     }
 

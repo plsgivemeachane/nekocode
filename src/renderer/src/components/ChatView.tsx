@@ -15,6 +15,7 @@ import type { ChatMessage } from '../types/chat'
 
 const SCROLL_THRESHOLD_PX = 40
 const TEXTAREA_MAX_HEIGHT_PX = 200
+const SESSION_SELECTED_EVENT = 'nekocode:session-selected'
 
 interface ChatViewProps {
   sessionId: string | null
@@ -37,6 +38,14 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
   const modelDropdownRef = useRef<HTMLDivElement>(null)
   const wasAgentConnectingRef = useRef(isAgentConnecting)
   const wasHistoryLoadingRef = useRef(isHistoryLoading)
+
+  const focusInput = useCallback(() => {
+    const ta = textareaRef.current
+    if (!ta || ta.disabled) return
+    ta.focus()
+    const length = ta.value.length
+    ta.setSelectionRange(length, length)
+  }, [])
 
   const getDistanceFromBottom = useCallback((el: HTMLDivElement) => {
     return el.scrollHeight - el.scrollTop - el.clientHeight
@@ -141,6 +150,28 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
       requestAnimationFrame(() => scrollToBottom(false))
     }
   }, [sessionId, scrollToBottom])
+
+  // Keep the prompt focused when a session is selected.
+  useEffect(() => {
+    if (!sessionId) return
+    requestAnimationFrame(() => {
+      focusInput()
+    })
+  }, [focusInput, sessionId])
+
+  // Sidebar can emit this when re-selecting an already active session.
+  useEffect(() => {
+    const handleSessionSelected = () => {
+      requestAnimationFrame(() => {
+        focusInput()
+      })
+    }
+
+    window.addEventListener(SESSION_SELECTED_EVENT, handleSessionSelected)
+    return () => {
+      window.removeEventListener(SESSION_SELECTED_EVENT, handleSessionSelected)
+    }
+  }, [focusInput])
 
   // When connection finishes, force viewport to latest messages so loaded content
   // does not shift the view downward.

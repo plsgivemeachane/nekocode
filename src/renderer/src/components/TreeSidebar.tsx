@@ -45,6 +45,12 @@ function SessionList({
   const hasMore = sessions.length > VISIBLE_SESSIONS
   const visibleSessions = showAll ? sessions : sessions.slice(0, VISIBLE_SESSIONS)
 
+  const handleSessionClick = (sessionId: string) => {
+    onReconnect(sessionId)
+    // Notify ChatView so the prompt input can be focused even when re-selecting the current session.
+    window.dispatchEvent(new Event('nekocode:session-selected'))
+  }
+
   return (
     <div className="ml-3 mt-0.5 space-y-px">
       {/* New Session — at the top */}
@@ -70,7 +76,7 @@ function SessionList({
                 ? 'bg-surface-800/80 text-text-primary border-surface-600'
                 : 'text-text-secondary/80 border-transparent hover:bg-surface-800/60 hover:text-text-primary hover:border-surface-600'
             }`}
-            onClick={() => onReconnect(session.id)}
+            onClick={() => handleSessionClick(session.id)}
             onMouseEnter={() => onHoverSession(session.id)}
             onContextMenu={(e) => onContextMenu(e, session.id)}
           >

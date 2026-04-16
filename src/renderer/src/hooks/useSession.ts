@@ -40,6 +40,28 @@ function ipcToChatMessages(ipcMessages: ChatMessageIPC[]): ChatMessage[] {
   return ipcMessages.flatMap(ipcToChatMessage)
 }
 
+function messageSignature(messages: ChatMessage[]): string {
+  return messages
+    .map((msg) => {
+      if (msg.role === 'user') {
+        return `u:${msg.content}`
+      }
+      if (msg.type === 'text') {
+        return `a:t:${msg.content}`
+      }
+      return [
+        'a:c',
+        msg.toolId,
+        msg.toolName,
+        msg.status,
+        JSON.stringify(msg.args),
+        JSON.stringify(msg.result),
+        msg.isError ? '1' : '0',
+      ].join(':')
+    })
+    .join('\n')
+}
+
 interface UseSessionInput {
   sessionId: string | null
 }
@@ -144,6 +166,23 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
       if (cachedMessages) {
         setMessages(cachedMessages)
         setIsHistoryLoading(false)
+
+        // Reconcile cached view with canonical session history to prevent stale
+        // messages from previous reconnect/cache state.
+        window.nekocode.session.loadHistory(sessionId).then((ipcMessages) => {
+          if (cancelled) return
+          const canonicalMessages = ipcToChatMessages(ipcMessages)
+          const canonicalSig = messageSignature(canonicalMessages)
+          setMessages((prev) => {
+            const prevSig = messageSignature(prev)
+            if (prevSig === canonicalSig) return prev
+            logger.info(`history reconciled: ${prev.length} -> ${canonicalMessages.length} messages for ${sessionId.slice(0, 8)}...`)
+            return canonicalMessages
+          })
+          messagesBySession.current.set(sessionId, canonicalMessages)
+        }).catch((err) => {
+          if (!cancelled) logger.warn('Failed to reconcile cached history', err)
+        })
       } else {
         // First time opening this session with no preload — full load
         setMessages(INITIAL_MESSAGES)
