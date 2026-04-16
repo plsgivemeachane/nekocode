@@ -1,11 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ProjectManager } from '../main/project-manager'
 
+const fsState = {
+  readData: '' as string,
+  readError: null as Error | null,
+}
+
 // Mock Electron's app module
 vi.mock('electron', () => ({
   app: {
     getPath: vi.fn(() => '/tmp/test-userdata'),
   },
+}))
+
+vi.mock('fs/promises', () => ({
+  readFile: vi.fn(async () => {
+    if (fsState.readError) throw fsState.readError
+    return fsState.readData
+  }),
+  writeFile: vi.fn(async () => undefined),
+  mkdir: vi.fn(async () => undefined),
 }))
 
 // Mock SessionManager.list to return controlled data
@@ -17,8 +31,12 @@ vi.mock('@mariozechner/pi-coding-agent', () => ({
 
 // Import the mocked module so we can control return values
 import { SessionManager } from '@mariozechner/pi-coding-agent'
+import { readFile, writeFile, mkdir } from 'fs/promises'
 
 const mockedList = vi.mocked(SessionManager.list)
+const mockedReadFile = vi.mocked(readFile)
+const mockedWriteFile = vi.mocked(writeFile)
+const mockedMkdir = vi.mocked(mkdir)
 
 function makeSession(overrides: Partial<{ id: string; firstMessage: string; messageCount: number; created: Date }> = {}) {
   return {
@@ -39,6 +57,65 @@ describe('ProjectManager', () => {
   beforeEach(() => {
     pm = new ProjectManager()
     vi.clearAllMocks()
+    fsState.readData = ''
+    fsState.readError = null
+  })
+
+  describe('workspace persistence', () => {
+    it('restores projects and active session from workspace file', async () => {
+      fsState.readData = JSON.stringify({
+        projectPaths: ['/p/a', '/p/b'],
+        activeSessionId: 'sess-1',
+        activeProjectPath: '/p/a',
+      })
+      mockedList.mockResolvedValue([])
+
+      await pm.loadWorkspace()
+
+      const projects = pm.listProjects()
+      expect(projects).toHaveLength(2)
+      expect(projects.map((p) => p.path)).toEqual(['/p/a', '/p/b'])
+      expect(pm.getActiveSession()).toEqual({ sessionId: 'sess-1', projectPath: '/p/a' })
+      const [readPath, readEncoding] = mockedReadFile.mock.calls[0] as [string, string]
+      expect(readEncoding).toBe('utf-8')
+      expect(readPath.replaceAll('\\', '/')).toBe('/tmp/test-userdata/workspace.json')
+    })
+
+    it('ignores missing workspace file (ENOENT)', async () => {
+      const err = new Error('missing') as NodeJS.ErrnoException
+      err.code = 'ENOENT'
+      fsState.readError = err
+
+      await expect(pm.loadWorkspace()).resolves.toBeUndefined()
+      expect(pm.listProjects()).toEqual([])
+    })
+
+    it('handles corrupt workspace json safely', async () => {
+      fsState.readData = '{not-json'
+
+      await expect(pm.loadWorkspace()).resolves.toBeUndefined()
+      expect(pm.listProjects()).toEqual([])
+    })
+
+    it('persists active session and project via setActiveSession', async () => {
+      await pm.setActiveSession('s-active', '/p/active')
+
+      expect(pm.getActiveSession()).toEqual({ sessionId: 's-active', projectPath: '/p/active' })
+      const [mkdirPath, mkdirOpts] = mockedMkdir.mock.calls[0] as [string, { recursive: boolean }]
+      expect(mkdirPath.replaceAll('\\', '/')).toBe('/tmp/test-userdata')
+      expect(mkdirOpts).toEqual({ recursive: true })
+      expect(mockedWriteFile).toHaveBeenCalledTimes(1)
+    })
+
+    it('clears active session when removing active project', async () => {
+      mockedList.mockResolvedValue([])
+      const project = await pm.addProject('/active-project')
+      await pm.setActiveSession('s-1', '/active-project')
+
+      const removed = await pm.removeProject(project.id)
+      expect(removed).toBe(true)
+      expect(pm.getActiveSession()).toEqual({ sessionId: null, projectPath: null })
+    })
   })
 
   describe('addProject', () => {

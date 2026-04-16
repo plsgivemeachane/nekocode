@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, Menu, shell } from 'electron'
 import { join } from 'path'
 import { PiSessionManager } from './session-manager'
 import { ProjectManager } from './project-manager'
@@ -18,11 +18,14 @@ function createWindow(): BrowserWindow {
     width: 1200,
     height: 800,
     icon: join(__dirname, '../../resources/icon.ico'),
+    autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
     }
   })
+
+  mainWindow.setMenuBarVisibility(false)
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
@@ -62,6 +65,7 @@ function performShutdown(): void {
 
 app.whenReady().then(async () => {
   logger.info('App ready, loading workspace')
+  Menu.setApplicationMenu(null)
   await projectManager.loadWorkspace()
   logger.info(`Workspace loaded, ${projectManager.listProjects().length} project(s)`)
   registerIpcHandlers(sessionManager, projectManager)

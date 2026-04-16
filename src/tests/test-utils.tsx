@@ -1,5 +1,7 @@
 import type { NekoCodeIPC } from '@/shared/ipc-types'
 import type { SessionStreamEvent, ChatMessageIPC, ProjectInfo, SessionCreateResult, SessionReconnectResult, WorkspaceActiveResult, ModelInfo, UpdateAvailableInfo } from '@/shared/ipc-types'
+import type { PiSessionManager } from '../main/session-manager'
+import type { ProjectManager } from '../main/project-manager'
 
 // ── Mock IPC factory ──────────────────────────────────────────────
 
@@ -80,6 +82,50 @@ export function createMockIPC(): NekoCodeIPC {
     project: createMockProjectAPI(),
     workspace: createMockWorkspaceAPI(),
     update: createMockUpdateAPI(),
+  }
+}
+
+// ── Main-process manager mock helpers ─────────────────────────────
+
+type SessionManagerMock = {
+  [K in 'create' | 'prompt' | 'abort' | 'dispose' | 'reconnect' | 'getHistory' | 'getModel' | 'listModels' | 'setModel' | 'getExtensionLoadErrors' | 'getExtensionsDisabled']: PiSessionManager[K]
+}
+
+type ProjectManagerMock = {
+  [K in 'addProject' | 'removeProject' | 'setActiveSession' | 'getActiveSession' | 'listProjects' | 'refreshSessions' | 'loadWorkspace']: ProjectManager[K]
+}
+
+export function createSessionManagerMock(
+  overrides: Partial<SessionManagerMock> = {},
+): SessionManagerMock {
+  return {
+    create: vi.fn(async () => 'session-1'),
+    prompt: vi.fn(async () => undefined),
+    abort: vi.fn(() => undefined),
+    dispose: vi.fn(() => undefined),
+    reconnect: vi.fn(async () => []),
+    getHistory: vi.fn(() => []),
+    getModel: vi.fn(() => null),
+    listModels: vi.fn(async () => []),
+    setModel: vi.fn(async () => ({ id: 'model-1', name: 'Model 1', provider: 'mock' })),
+    getExtensionLoadErrors: vi.fn(() => []),
+    getExtensionsDisabled: vi.fn(() => false),
+    ...overrides,
+  }
+}
+
+export function createProjectManagerMock(
+  overrides: Partial<ProjectManagerMock> = {},
+): ProjectManagerMock {
+  return {
+    addProject: vi.fn(async () => ({ id: 'project-1', path: '/tmp/project', name: 'project', sessions: [] })),
+    removeProject: vi.fn(async () => true),
+    setActiveSession: vi.fn(async () => undefined),
+    getActiveSession: vi.fn(() => ({ sessionId: null, projectPath: null })),
+    listProjects: vi.fn(() => []),
+    refreshSessions: vi.fn(async () => ({ id: 'project-1', path: '/tmp/project', name: 'project', sessions: [] })),
+    loadWorkspace: vi.fn(async () => undefined),
+    ...overrides,
   }
 }
 

@@ -13,13 +13,14 @@ export default defineConfig({
     include: ['src/tests/**/*.test.{ts,tsx}'],
     coverage: {
       provider: 'v8',
-      include: ['src/**/*.{ts,tsx}'],
+      include: ['src/main/**/*.ts', 'src/shared/**/*.ts'],
       exclude: [
         'node_modules/**',
         'src/tests/**',
         '**/*.d.ts',
         'src/main/index.ts',
         'src/preload/**',
+        'src/shared/ipc-types.ts',
       ],
     },
   },

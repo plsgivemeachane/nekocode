@@ -3,6 +3,7 @@ import { useSession } from '../hooks/useSession'
 import { UserMessage } from './chat/UserMessage'
 import { AssistantMessage } from './chat/AssistantMessage'
 import { ToolCallGroup } from './chat/ToolCallSection'
+import { MessagesTimeline } from './chat/MessagesTimeline'
 import { StatusIndicator } from './StatusIndicator'
 import { createLogger } from '../logger'
 
@@ -189,8 +190,11 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
 
   // Group consecutive tool_call messages into clusters
   type ToolCallMsg = Extract<ChatMessage, { role: 'assistant'; type: 'tool_call' }>
+  type MessageGroup =
+    | { key: string; type: 'single'; msg: ChatMessage }
+    | { key: string; type: 'tool-group'; msgs: ToolCallMsg[] }
   const isToolCall = (msg: ChatMessage): msg is ToolCallMsg => msg.role === 'assistant' && msg.type === 'tool_call'
-  const messageGroups: Array<{ key: string; type: 'single'; msg: ChatMessage } | { key: string; type: 'tool-group'; msgs: ToolCallMsg[] }> = []
+  const messageGroups: MessageGroup[] = []
   let i = 0
   while (i < messages.length) {
     const msg = messages[i]
@@ -252,24 +256,29 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
               <p className="text-text-tertiary">Session ready. Type a prompt below.</p>
             </div>
           ) : (
-            <div className="space-y-5 max-w-3xl mx-auto">
-              {messageGroups.map((group) => {
-                if (group.type === 'tool-group') {
-                  return (
-                    <ToolCallGroup
-                      key={group.key}
-                      toolCalls={group.msgs.map(m => ({
-                        id: m.id,
-                        toolName: m.toolName,
-                        status: m.status,
-                        isError: m.isError,
-                        args: m.args,
-                      }))}
-                    />
-                  )
-                }
-                return <div key={group.key}>{renderMessage(group.msg)}</div>
-              })}
+            <div className="max-w-3xl mx-auto">
+              <MessagesTimeline
+                rows={messageGroups}
+                isStreaming={isStreaming}
+                scrollContainerRef={scrollContainerRef}
+                getRowKey={(group) => group.key}
+                renderRow={(group) => {
+                  if (group.type === 'tool-group') {
+                    return (
+                      <ToolCallGroup
+                        toolCalls={group.msgs.map((m) => ({
+                          id: m.id,
+                          toolName: m.toolName,
+                          status: m.status,
+                          isError: m.isError,
+                          args: m.args,
+                        }))}
+                      />
+                    )
+                  }
+                  return <div>{renderMessage(group.msg)}</div>
+                }}
+              />
               <StatusIndicator
                 isStreaming={isStreaming}
                 modelName={activeModel?.name ?? null}
