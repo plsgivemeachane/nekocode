@@ -34,6 +34,9 @@ const sessionApi: NekoCodeIPC['session'] = {
   loadHistory: (sessionId: string): Promise<ChatMessageIPC[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.SESSION_LOAD_HISTORY, { sessionId }),
 
+  loadHistoryFromDisk: (sessionId: string, cwd: string, limit: number): Promise<ChatMessageIPC[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SESSION_LOAD_HISTORY_DISK, { sessionId, cwd, limit }),
+
   onEvent: (callback: (payload: { sessionId: string; event: SessionStreamEvent }) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, payload: { sessionId: string; event: SessionStreamEvent }) => {
       callback(payload)

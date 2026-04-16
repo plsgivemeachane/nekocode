@@ -98,70 +98,100 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
     messagesBySession.current.set(sessionId, messages)
   }, [sessionId, messages])
 
-  // Save draft and reset on sessionId change
-  useEffect(() => {
-    // Save current input under the *previous* sessionId (captured via cleanup)
-    return () => {
-      // This runs before the next effect with the new sessionId
-    }
-  }, [sessionId])
+  // Track whether current session used preloaded (truncated) data
+  const usedPreloadedRef = useRef(false)
 
-  // Handle draft save/restore around sessionId changes
+  // Handle draft save/restore + preload check on sessionId change.
+  // This is the SINGLE effect that sets messages on session switch — no flash.
   const prevSessionRef = useRef<string | null>(null)
   useEffect(() => {
+    let cancelled = false
     const prev = prevSessionRef.current
-
     // Save draft for previous session
     if (prev !== null) {
       drafts.current.set(prev, input)
       logger.debug(`draft saved for ${prev.slice(0, 8)}...`)
     }
-
-    // Reset transient state, restore per-session cached state
-    const cachedMessages = sessionId !== null ? (messagesBySession.current.get(sessionId) ?? INITIAL_MESSAGES) : INITIAL_MESSAGES
-    setMessages(cachedMessages)
+    usedPreloadedRef.current = false
+    // Reset transient state
+    const DEFAULT_USAGE = { inputTokens: 0, outputTokens: 0, totalCost: 0, contextPercent: 0, contextWindow: 0 }
     setError(sessionId !== null ? (errors.current.get(sessionId) ?? null) : null)
-    setUsage(sessionId !== null ? (usages.current.get(sessionId) ?? { inputTokens: 0, outputTokens: 0, totalCost: 0, contextPercent: 0, contextWindow: 0 }) : { inputTokens: 0, outputTokens: 0, totalCost: 0, contextPercent: 0, contextWindow: 0 })
-    // streamStartTime is derived from the ref map above — no separate reset needed
-
+    setUsage(sessionId !== null ? (usages.current.get(sessionId) ?? DEFAULT_USAGE) : DEFAULT_USAGE)
     // Restore draft for new session
     const draft = sessionId !== null ? drafts.current.get(sessionId) : null
     if (draft) {
       logger.debug(`draft restored for ${sessionId!.slice(0, 8)}...`)
     }
     setInput(draft ?? '')
-
-    prevSessionRef.current = sessionId
-  }, [sessionId])
-
-  // Load message history from main process on mount / sessionId change
-  // This enables session persistence: reconnecting to an existing session
-  // loads its prior messages instead of starting empty.
-  useEffect(() => {
     if (!sessionId) {
+      setMessages(INITIAL_MESSAGES)
       setIsHistoryLoading(false)
-      return
+      prevSessionRef.current = sessionId
+      return () => { cancelled = true }
     }
-    let cancelled = false
-    setIsHistoryLoading(true)
-    logger.debug(`loading history for ${sessionId.slice(0, 8)}...`)
-    window.nekocode.session.loadHistory(sessionId).then((ipcMessages) => {
-      if (cancelled) return
-      logger.info(`history loaded: ${ipcMessages.length} messages for ${sessionId.slice(0, 8)}...`)
-      const chatMessages = ipcToChatMessages(ipcMessages)
+    // Check for preloaded history FIRST (instant, no flash)
+    const preloaded = projectState.preloadedHistory[sessionId]
+    if (preloaded && preloaded.length > 0) {
+      logger.info(`using preloaded history: ${preloaded.length} messages for ${sessionId.slice(0, 8)}...`)
+      const chatMessages = ipcToChatMessages(preloaded)
       setMessages(chatMessages)
       messagesBySession.current.set(sessionId, chatMessages)
-    }).catch((err) => {
-      if (!cancelled) {
-        logger.warn('Failed to load history', err)
-      }
-    }).finally(() => {
-      if (!cancelled) {
+      usedPreloadedRef.current = true
+      setIsHistoryLoading(false)
+    } else {
+      // No preloaded data — restore from cache or trigger full load
+      const cachedMessages = messagesBySession.current.get(sessionId)
+      if (cachedMessages) {
+        setMessages(cachedMessages)
         setIsHistoryLoading(false)
+      } else {
+        // First time opening this session with no preload — full load
+        setMessages(INITIAL_MESSAGES)
+        setIsHistoryLoading(true)
+        logger.debug(`loading history for ${sessionId.slice(0, 8)}...`)
+        window.nekocode.session.loadHistory(sessionId).then((ipcMessages) => {
+          if (cancelled) return
+          logger.info(`history loaded: ${ipcMessages.length} messages for ${sessionId.slice(0, 8)}...`)
+          const chatMessages = ipcToChatMessages(ipcMessages)
+          setMessages(chatMessages)
+          messagesBySession.current.set(sessionId, chatMessages)
+        }).catch((err) => {
+          if (!cancelled) logger.warn('Failed to load history', err)
+        }).finally(() => {
+          if (!cancelled) setIsHistoryLoading(false)
+        })
       }
+    }
+    prevSessionRef.current = sessionId
+    return () => { cancelled = true }
+  }, [sessionId]) // Intentionally NOT depending on projectState.preloadedHistory
+
+  // When agent becomes ready, silently fill in older messages from full history.
+  // Only runs if we used preloaded (truncated) data — prepends without replacing.
+  useEffect(() => {
+    if (!sessionId || !projectState.agentReady) return
+    if (!usedPreloadedRef.current) return
+    let cancelled = false
+    logger.debug(`agent ready — loading full history for ${sessionId.slice(0, 8)}...`)
+    window.nekocode.session.loadHistory(sessionId).then((ipcMessages) => {
+      if (cancelled) return
+      const fullChatMessages = ipcToChatMessages(ipcMessages)
+      const currentMessages = messagesBySession.current.get(sessionId)
+      if (currentMessages && fullChatMessages.length > currentMessages.length) {
+        const olderCount = fullChatMessages.length - currentMessages.length
+        const mergedMessages = [...fullChatMessages.slice(0, olderCount), ...currentMessages]
+        logger.info(`full history: prepended ${olderCount} older messages for ${sessionId.slice(0, 8)}...`)
+        setMessages(mergedMessages)
+        messagesBySession.current.set(sessionId, mergedMessages)
+      } else {
+        logger.debug(`full history: no additional messages for ${sessionId.slice(0, 8)}...`)
+      }
+      usedPreloadedRef.current = false
+    }).catch((err) => {
+      if (!cancelled) logger.warn('Failed to load full history after agent ready', err)
     })
     return () => { cancelled = true }
-  }, [sessionId])
+  }, [sessionId, projectState.agentReady])
 
   // Fetch the active model for the current session
   useEffect(() => {

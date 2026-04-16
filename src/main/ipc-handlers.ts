@@ -9,6 +9,7 @@ import type {
   SessionReconnectPayload,
   SessionReconnectResult,
   SessionLoadHistoryPayload,
+  SessionLoadHistoryDiskPayload,
   ChatMessageIPC,
   SessionStreamEvent,
   ProjectAddPayload,
@@ -87,6 +88,11 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.SESSION_LOAD_HISTORY, async (_event, payload: SessionLoadHistoryPayload): Promise<ChatMessageIPC[]> => {
     logger.debug(`SESSION_LOAD_HISTORY sessionId=${payload.sessionId}`)
     return sessionManager.getHistory(payload.sessionId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SESSION_LOAD_HISTORY_DISK, async (_event, payload: SessionLoadHistoryDiskPayload): Promise<ChatMessageIPC[]> => {
+    logger.debug(`SESSION_LOAD_HISTORY_DISK sessionId=${payload.sessionId} cwd=${payload.cwd} limit=${payload.limit}`)
+    return sessionManager.loadHistoryFromDisk(payload.sessionId, payload.cwd, payload.limit)
   })
 
   // --- Dialog handlers ---

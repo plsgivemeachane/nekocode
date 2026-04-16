@@ -7,6 +7,7 @@ import { MessagesTimeline } from './chat/MessagesTimeline'
 import { StatusIndicator } from './StatusIndicator'
 import { WelcomeScreen } from './WelcomeScreen'
 import { NavBar } from './NavBar'
+import { useProjectStore } from '../stores/project-store'
 import { createLogger } from '../logger'
 
 const logger = createLogger('ChatView')
@@ -21,8 +22,10 @@ interface ChatViewProps {
 }
 
 export function ChatView({ sessionId, className }: ChatViewProps) {
+  const { state: projectState } = useProjectStore()
   const { messages, isHistoryLoading, isStreaming, error, input, setInput, sendPrompt, abortPrompt, activeModel, modelList, setModel, usage, streamStartTime } =
     useSession({ sessionId })
+  const isAgentConnecting = sessionId != null && !projectState.agentReady
 
   const [showScrollBtn, setShowScrollBtn] = React.useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -32,6 +35,8 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [showModelDropdown, setShowModelDropdown] = React.useState(false)
   const modelDropdownRef = useRef<HTMLDivElement>(null)
+  const wasAgentConnectingRef = useRef(isAgentConnecting)
+  const wasHistoryLoadingRef = useRef(isHistoryLoading)
 
   const getDistanceFromBottom = useCallback((el: HTMLDivElement) => {
     return el.scrollHeight - el.scrollTop - el.clientHeight
@@ -136,6 +141,36 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
       requestAnimationFrame(() => scrollToBottom(false))
     }
   }, [sessionId, scrollToBottom])
+
+  // When connection finishes, force viewport to latest messages so loaded content
+  // does not shift the view downward.
+  useEffect(() => {
+    const wasConnecting = wasAgentConnectingRef.current
+    if (wasConnecting && !isAgentConnecting) {
+      isAtBottomRef.current = true
+      setShowScrollBtn(false)
+      requestAnimationFrame(() => {
+        scrollToBottom(false)
+        requestAnimationFrame(() => scrollToBottom(false))
+      })
+    }
+    wasAgentConnectingRef.current = isAgentConnecting
+  }, [isAgentConnecting, scrollToBottom])
+
+  // Reconnect can complete before large history batches fully render.
+  // Snap to bottom when history loading flips to completed.
+  useEffect(() => {
+    const wasHistoryLoading = wasHistoryLoadingRef.current
+    if (wasHistoryLoading && !isHistoryLoading && sessionId && messages.length > 0) {
+      isAtBottomRef.current = true
+      setShowScrollBtn(false)
+      requestAnimationFrame(() => {
+        scrollToBottom(false)
+        requestAnimationFrame(() => scrollToBottom(false))
+      })
+    }
+    wasHistoryLoadingRef.current = isHistoryLoading
+  }, [isHistoryLoading, messages.length, scrollToBottom, sessionId])
 
   // Log session changes
   useEffect(() => {
@@ -321,6 +356,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
               />
               <StatusIndicator
                 isStreaming={isStreaming}
+                isAgentConnecting={isAgentConnecting}
                 modelName={activeModel?.name ?? null}
                 usage={usage}
                 streamStartTime={streamStartTime}

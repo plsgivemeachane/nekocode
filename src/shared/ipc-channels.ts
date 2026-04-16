@@ -10,6 +10,7 @@ export const IPC_CHANNELS = {
   SESSION_DISPOSE: 'session:dispose',
   SESSION_RECONNECT: 'session:reconnect',
   SESSION_LOAD_HISTORY: 'session:load-history',
+  SESSION_LOAD_HISTORY_DISK: 'session:load-history-disk',
   DIALOG_OPEN_FOLDER: 'dialog:openFolder',
   PROJECT_ADD: 'project:add',
   PROJECT_REMOVE: 'project:remove',

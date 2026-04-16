@@ -28,17 +28,18 @@ function pctColor(pct: number): string {
 
 interface StatusIndicatorProps {
   isStreaming: boolean
+  isAgentConnecting: boolean
   modelName: string | null
   usage: UsageData
   streamStartTime: number
 }
 
-export function StatusIndicator({ isStreaming, modelName, usage, streamStartTime }: StatusIndicatorProps) {
+export function StatusIndicator({ isStreaming, isAgentConnecting, modelName, usage, streamStartTime }: StatusIndicatorProps) {
   const [frame, setFrame] = useState(0)
   const [elapsed, setElapsed] = useState(0)
 
   useEffect(() => {
-    if (!isStreaming && streamStartTime === 0) return
+    if (!isStreaming && !isAgentConnecting && streamStartTime === 0) return
     const spinInterval = setInterval(() => {
       setFrame(prev => (prev + 1) % SPINNER_FRAMES.length)
     }, 80)
@@ -51,7 +52,7 @@ export function StatusIndicator({ isStreaming, modelName, usage, streamStartTime
       clearInterval(spinInterval)
       clearInterval(timeInterval)
     }
-  }, [isStreaming, streamStartTime])
+  }, [isStreaming, isAgentConnecting, streamStartTime])
 
     const hasUsage = usage.inputTokens > 0 || usage.outputTokens > 0
 
@@ -108,7 +109,12 @@ export function StatusIndicator({ isStreaming, modelName, usage, streamStartTime
 
       {/* Status */}
       <span className="flex-1" />
-      {isStreaming ? (
+      {isAgentConnecting ? (
+        <span className="text-warning-400">
+          <span className="inline-block w-[1ch] text-center">{SPINNER_FRAMES[frame]}</span>
+          <span className="text-text-tertiary ml-1">Connecting</span>
+        </span>
+      ) : isStreaming ? (
         <span className="text-accent-400">
           <span className="inline-block w-[1ch] text-center">{SPINNER_FRAMES[frame]}</span>
           <span className="text-text-tertiary ml-1">Working</span>

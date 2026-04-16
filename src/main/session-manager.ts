@@ -274,6 +274,34 @@ export class PiSessionManager {
     return [...managed.messages]
   }
 
+  /**
+   * Load message history from disk WITHOUT creating an agent session.
+   * Lightweight alternative to reconnect() — just reads the session file and extracts messages.
+   * Used for preloading session timelines in the sidebar.
+   * @param limit Max number of recent messages to return (0 = all)
+   */
+  async loadHistoryFromDisk(sessionId: string, cwd: string, limit: number = 0): Promise<ChatMessageIPC[]> {
+    logger.info(`loadHistoryFromDisk ${sessionId} cwd=${cwd} limit=${limit}`)
+    const infos = await SdkSessionManager.list(cwd)
+    const match = infos.find(info => info.id === sessionId)
+    if (!match?.path) {
+      logger.debug(`loadHistoryFromDisk ${sessionId} — not found on disk, returning empty`)
+      return []
+    }
+
+    const sdkSessionMgr = SdkSessionManager.open(match.path)
+    const allMessages = this.extractHistoryFromSdkMessages(
+      sdkSessionMgr.getEntries()
+        .filter((e): e is SessionMessageEntry => e.type === "message")
+        .map(e => e.message)
+    )
+    const diskMessages = limit > 0 && allMessages.length > limit
+      ? allMessages.slice(-limit)
+      : allMessages
+    logger.debug(`loadHistoryFromDisk ${sessionId} — ${diskMessages.length}/${allMessages.length} message(s) returned`)
+    return diskMessages
+  }
+
   /** Dispose a session, cleaning up subscriptions and SDK resources. */
   dispose(sessionId: string): void {
     const managed = this.getManaged(sessionId)

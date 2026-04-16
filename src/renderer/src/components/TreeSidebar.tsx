@@ -29,6 +29,7 @@ function SessionList({
   activeSessionId,
   sessionStatuses,
   onReconnect,
+  onHoverSession,
   onContextMenu,
   onCreateSession,
 }: {
@@ -36,6 +37,7 @@ function SessionList({
   activeSessionId: string | null
   sessionStatuses: Record<string, SessionStatus>
   onReconnect: (sessionId: string) => void
+  onHoverSession: (sessionId: string) => void
   onContextMenu: (e: React.MouseEvent, sessionId: string) => void
   onCreateSession: () => void
 }) {
@@ -69,6 +71,7 @@ function SessionList({
                 : 'text-text-secondary/80 border-transparent hover:bg-surface-800/60 hover:text-text-primary hover:border-surface-600'
             }`}
             onClick={() => onReconnect(session.id)}
+            onMouseEnter={() => onHoverSession(session.id)}
             onContextMenu={(e) => onContextMenu(e, session.id)}
           >
             <span className={`truncate flex-1 ${isActiveSession ? '' : 'pl-3'}`}>
@@ -93,7 +96,7 @@ function SessionList({
 }
 
 export function TreeSidebar() {
-  const { state, addProject, removeProject, reconnectSession, createSession, refreshSessions } =
+  const { state, addProject, removeProject, reconnectSession, createSession, refreshSessions, preloadSession } =
     useProjectStore()
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -268,6 +271,7 @@ export function TreeSidebar() {
                   activeSessionId={state.activeSessionId}
                   sessionStatuses={state.sessionStatuses}
                   onReconnect={(sessionId) => reconnectSession(sessionId, project.path)}
+                  onHoverSession={(sessionId) => preloadSession(sessionId, project.path)}
                   onContextMenu={openSessionMenu}
                   onCreateSession={() => createSession(project.path)}
                 />

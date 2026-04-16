@@ -6,7 +6,7 @@ describe('IPC_CHANNELS', () => {
   const allValues = Object.values(channels)
 
   it('has expected number of channels', () => {
-    expect(allValues).toHaveLength(25)
+    expect(allValues).toHaveLength(26)
   })
 
   it('has no duplicate values', () => {
@@ -35,6 +35,7 @@ describe('IPC_CHANNELS', () => {
     expect(channels).toHaveProperty('SESSION_DISPOSE')
     expect(channels).toHaveProperty('SESSION_RECONNECT')
     expect(channels).toHaveProperty('SESSION_LOAD_HISTORY')
+    expect(channels).toHaveProperty('SESSION_LOAD_HISTORY_DISK')
   })
 
   it('has all dialog channels', () => {
@@ -71,7 +72,7 @@ describe('IPC_CHANNELS', () => {
 
   it('session channels all start with "session:"', () => {
     const sessionChannels = allValues.filter(v => v.startsWith('session:'))
-    expect(sessionChannels).toHaveLength(10)
+    expect(sessionChannels).toHaveLength(11)
   })
 
   it('IpcChannel type is a union of all values', () => {
@@ -85,6 +86,7 @@ describe('IPC_CHANNELS', () => {
       'SESSION_DISPOSE',
       'SESSION_RECONNECT',
       'SESSION_LOAD_HISTORY',
+      'SESSION_LOAD_HISTORY_DISK',
       'DIALOG_OPEN_FOLDER',
       'PROJECT_ADD',
       'PROJECT_REMOVE',

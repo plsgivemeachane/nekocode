@@ -59,6 +59,14 @@ export interface SessionLoadHistoryPayload {
   sessionId: string
 }
 
+/** Payload for loading session history from disk (no agent creation) */
+export interface SessionLoadHistoryDiskPayload {
+  sessionId: string
+  cwd: string
+  /** Max number of recent messages to return (0 = all) */
+  limit: number
+}
+
 /** A chat message suitable for IPC transfer (no circular refs, plain data) */
 export interface ChatMessageIPC {
   id: string
@@ -171,6 +179,7 @@ export interface NekoCodeIPC {
     dispose: (sessionId: string) => Promise<void>
     reconnect: (sessionId: string, cwd: string) => Promise<SessionReconnectResult>
     loadHistory: (sessionId: string) => Promise<ChatMessageIPC[]>
+    loadHistoryFromDisk: (sessionId: string, cwd: string, limit: number) => Promise<ChatMessageIPC[]>
     onEvent: (callback: (payload: { sessionId: string; event: SessionStreamEvent }) => void) => () => void
     getModel: (sessionId: string) => Promise<ModelInfo | null>
     listModels: () => Promise<ModelInfo[]>

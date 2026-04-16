@@ -20,6 +20,7 @@ function createMockSessionAPI(): NekoCodeIPC['session'] {
       history: [],
     }),
     loadHistory: vi.fn<() => Promise<ChatMessageIPC[]>>().mockResolvedValue([]),
+    loadHistoryFromDisk: vi.fn<(sessionId: string, cwd: string, limit: number) => Promise<ChatMessageIPC[]>>().mockResolvedValue([]),
     onEvent: vi.fn<() => () => void>().mockReturnValue(() => {}),
     getModel: vi.fn<(sessionId: string) => Promise<ModelInfo | null>>().mockResolvedValue(null),
     listModels: vi.fn<() => Promise<ModelInfo[]>>().mockResolvedValue([]),

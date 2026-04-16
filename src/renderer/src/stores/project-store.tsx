@@ -11,6 +11,7 @@ import type {
   ProjectInfo,
   SessionInfoDisplay,
   ExtensionLoadError,
+  ChatMessageIPC,
 } from '../../../shared/ipc-types'
 import { createLogger } from '../logger'
 
@@ -27,6 +28,10 @@ interface ProjectState {
   activeSessionId: string | null
   activeProjectPath: string | null
   sessionStatuses: Record<string, SessionStatus>
+  /** Preloaded message history keyed by sessionId (lightweight disk read, no agent) */
+  preloadedHistory: Record<string, ChatMessageIPC[]>
+  /** Whether the agent for the active session is fully connected and ready */
+  agentReady: boolean
 }
 
 type ProjectAction =
@@ -40,6 +45,9 @@ type ProjectAction =
   | { type: 'UPDATE_SESSION_STATUS'; sessionId: string; status: SessionStatus }
   | { type: 'CLEAR_ACTIVE_SESSION' }
   | { type: 'UPDATE_SESSION_FIRST_MESSAGE'; sessionId: string; firstMessage: string }
+  | { type: 'PRELOAD_HISTORY'; sessionId: string; messages: ChatMessageIPC[] }
+  | { type: 'SET_AGENT_CONNECTING' }
+  | { type: 'SET_AGENT_READY'; sessionId: string }
 
 // ---------------------------------------------------------------------------
 // Reducer (pure)
@@ -50,6 +58,8 @@ const INITIAL_STATE: ProjectState = {
   activeSessionId: null,
   activeProjectPath: null,
   sessionStatuses: {},
+  preloadedHistory: {},
+  agentReady: true,
 }
 
 function reducer(state: ProjectState, action: ProjectAction): ProjectState {
@@ -114,6 +124,11 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
       }
 
     case 'RECONNECT_SESSION':
+      // Guard: ignore stale reconnect if user already switched to a different session
+      if (state.activeSessionId !== action.sessionId) {
+        logger.debug(`stale RECONNECT_SESSION ignored: expected ${state.activeSessionId?.slice(0, 8)}, got ${action.sessionId.slice(0, 8)}`)
+        return state
+      }
       return {
         ...state,
         activeSessionId: action.sessionId,
@@ -150,6 +165,26 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
         })),
       }
 
+    case 'PRELOAD_HISTORY':
+      return {
+        ...state,
+        preloadedHistory: {
+          ...state.preloadedHistory,
+          [action.sessionId]: action.messages,
+        },
+      }
+
+    case 'SET_AGENT_CONNECTING':
+      return { ...state, agentReady: false }
+
+    case 'SET_AGENT_READY':
+      // Guard: only mark ready if this is for the currently active session
+      if (state.activeSessionId !== action.sessionId) {
+        logger.debug(`stale SET_AGENT_READY ignored: expected ${state.activeSessionId?.slice(0, 8)}, got ${action.sessionId.slice(0, 8)}`)
+        return state
+      }
+      return { ...state, agentReady: true }
+
     default:
       return state
   }
@@ -167,6 +202,7 @@ interface ProjectStoreAPI {
   reconnectSession: (sessionId: string, projectPath: string) => Promise<void>
   createSession: (projectPath: string) => Promise<void>
   refreshSessions: (projectId: string) => Promise<void>
+  preloadSession: (sessionId: string, projectPath: string) => void
 }
 
 const ProjectStoreContext = createContext<ProjectStoreAPI | null>(null)
@@ -313,14 +349,22 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   const reconnectSession = useCallback(
     async (sessionId: string, projectPath: string) => {
+      // Set active session immediately with "connecting" status
+      dispatch({ type: 'SET_ACTIVE_SESSION', sessionId, projectPath })
+      dispatch({ type: 'SET_AGENT_CONNECTING' })
+
+      // Kick off full reconnect in background (agent creation happens here)
+      // DO NOT dispatch RECONNECT_SESSION — it re-sets activeSessionId causing a flash.
+      // DO NOT dispatch CLEAR_PRELOADED_HISTORY — it triggers the load effect to re-fire.
       try {
         const result = await window.nekocode.session.reconnect(sessionId, projectPath)
         logExtensionLoadWarnings('reconnect', sessionId, result.extensionErrors, result.extensionsDisabled)
         logger.info(`reconnectSession OK: ${sessionId.slice(0, 8)}...`)
-        dispatch({ type: 'RECONNECT_SESSION', sessionId, projectPath })
+        dispatch({ type: 'SET_AGENT_READY', sessionId })
       } catch (err) {
           logger.error('reconnectSession failed:', err)
           dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId, status: 'error' })
+          dispatch({ type: 'SET_AGENT_READY', sessionId })
       }
     },
     [logExtensionLoadWarnings],
@@ -369,6 +413,33 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  /**
+   * Preload message history for a single session (hover-triggered).
+   * Lightweight disk read — does not create agent session.
+   * Only loads the last N messages to keep cache small.
+   * Skips if already preloaded.
+   */
+  const PRELOAD_LIMIT = 15
+  const preloadSession = useCallback(
+    (sessionId: string, projectPath: string) => {
+      // Skip if already preloaded
+      if (state.preloadedHistory[sessionId]) return
+
+      window.nekocode.session.loadHistoryFromDisk(sessionId, projectPath, PRELOAD_LIMIT)
+        .then(messages => {
+          if (messages.length > 0) {
+            logger.debug(`preloadSession: ${sessionId.slice(0, 8)}... — ${messages.length} message(s)`)
+            dispatch({ type: 'PRELOAD_HISTORY', sessionId, messages })
+          }
+        })
+        .catch(err => {
+          // Best-effort preload — log but don't throw
+          logger.debug(`preloadSession failed for ${sessionId.slice(0, 8)}...: ${err}`)
+        })
+    },
+    [state.preloadedHistory],
+  )
+
   const api: ProjectStoreAPI = {
     state,
     addProject,
@@ -377,6 +448,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     reconnectSession,
     createSession,
     refreshSessions,
+    preloadSession,
   }
 
   return (
