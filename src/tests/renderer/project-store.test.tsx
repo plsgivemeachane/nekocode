@@ -81,7 +81,7 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
         ...state,
         projects: state.projects.map(p =>
           p.path === action.projectPath
-            ? { ...p, sessions: [...p.sessions, action.session] }
+            ? { ...p, sessions: [action.session, ...p.sessions] }
             : p,
         ),
       }
@@ -256,14 +256,14 @@ describe('project-store reducer', () => {
   })
 
   describe('ADD_SESSION_TO_PROJECT', () => {
-    it('appends session to matching project by path', () => {
+    it('prepends session to matching project by path', () => {
       const project = makeProject({ id: 'p1', path: '/my/project', sessions: [makeSession({ id: 's1' })] })
       const s1 = reducer(INITIAL_STATE, { type: 'ADD_PROJECT', project })
       const newSession = makeSession({ id: 's2', firstMessage: 'New' })
       const s2 = reducer(s1, { type: 'ADD_SESSION_TO_PROJECT', projectPath: '/my/project', session: newSession })
 
       expect(s2.projects[0].sessions).toHaveLength(2)
-      expect(s2.projects[0].sessions[1].id).toBe('s2')
+      expect(s2.projects[0].sessions[0].id).toBe('s2')
     })
 
     it('does not affect other projects', () => {

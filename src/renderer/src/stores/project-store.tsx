@@ -101,7 +101,7 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
         ...state,
         projects: state.projects.map(p =>
           p.path === action.projectPath
-            ? { ...p, sessions: [...p.sessions, action.session] }
+            ? { ...p, sessions: [action.session, ...p.sessions] }
             : p,
         ),
       }
@@ -329,6 +329,15 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const createSession = useCallback(
     async (projectPath: string) => {
       try {
+        // Reuse existing empty session (0 messages) instead of creating a duplicate
+        const project = state.projects.find(p => p.path === projectPath)
+        const emptySession = project?.sessions.find(s => s.messageCount === 0)
+        if (emptySession) {
+          logger.info(`createSession: reusing empty session ${emptySession.id.slice(0, 8)}... cwd=${projectPath}`)
+          dispatch({ type: 'SET_ACTIVE_SESSION', sessionId: emptySession.id, projectPath })
+          return
+        }
+
         const result = await window.nekocode.session.create(projectPath)
         logExtensionLoadWarnings('create', result.sessionId, result.extensionErrors, result.extensionsDisabled)
         logger.info(`createSession OK: ${result.sessionId.slice(0, 8)}... cwd=${projectPath}`)
@@ -347,7 +356,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           logger.error('createSession failed:', err)
       }
     },
-    [logExtensionLoadWarnings],
+    [logExtensionLoadWarnings, state.projects],
   )
 
   const refreshSessions = useCallback(async (projectId: string) => {

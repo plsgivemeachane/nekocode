@@ -1,91 +1,96 @@
-# Apply T3 Code Rendering Pipeline
+# Preload Hover Sessions with Desync Agent Creation
 
 ## Context
 
-NekoCode's chat markdown rendering currently uses `highlight.js` + `rehype-highlight` for syntax highlighting, with a basic always-visible copy button and no language label. The `MARKDOWN_BREAKDOWN.md` spec describes T3Code's production-grade approach: **Shiki** for highlighting, theme-bridged backgrounds, hover-reveal copy button with language label header, GFM support, and completion dividers between turns. This plan upgrades the rendering to match that quality bar.
+Currently, clicking a session in the sidebar triggers a full `reconnect()` call that does everything synchronously: open session file from disk, load extensions, create agent session, extract messages, return history. This makes session switching feel slow (~0.5-1s) because the agent must be fully spun up before any messages appear.
 
-**Current state:**
-- `react-markdown` v10.1.0 + `rehype-highlight` + `highlight.js`
-- Copy button: always visible, top-right absolute positioned, no language label
-- No `remark-gfm` (tables, task lists, strikethrough won't render)
-- No completion dividers between chat turns
-- Inline code uses `bg-surface-800` -- fine, but no explicit font-size normalization
-- Code blocks use `bg-surface-900` with `border border-surface-850`
-
-**Target state (T3):**
-- `shiki` for syntax highlighting (replaces highlight.js + rehype-highlight)
-- Code block header bar: language label (left) + hover-reveal copy button (right)
-- Theme-bridged background using existing surface design tokens
-- `remark-gfm` for full GFM support
-- CSS: `tab-size: 2`, `cursor: text`, consistent line-height, scroll handling
+The goal is to **decouple message display from agent creation**:
+1. Preload message history for all visible sidebar sessions (lightweight disk read)
+2. On click, show preloaded messages instantly
+3. Spin up the agent in the background (~0.5-1s)
+4. Status bar shows "Connecting..." until agent is ready, then "Ready"
 
 ## Approach
 
-Replace the syntax highlighting pipeline (highlight.js → shiki), restructure the `CodeBlock` component to include a header bar with language label and hover-reveal copy, add `remark-gfm`. Keep all styling within the existing Tailwind + CSS custom property system — no new color tokens needed.
+### Backend: Lightweight History-Only Load
+
+Add a new `loadHistoryFromDisk(sessionId, cwd)` method to `PiSessionManager` that reads the session file from disk and extracts messages **without** loading extensions or creating an agent session. This reuses the existing pattern found in `tryRefreshFromDisk()` (line 235-236 of session-manager.ts):
+
+- `SdkSessionManager.open(match.path)` -> `.getEntries()` -> filter -> `extractHistoryFromSdkMessages()`
+
+This is fast because it skips: `createResourceLoader()`, `loader.reload()`, `createAgentSession()`.
+
+### Frontend: Preload on Sidebar Expand
+
+When the TreeSidebar renders session items, trigger background prefetch of message history for all listed sessions. Store preloaded history in a `Map<sessionId, ChatMessageIPC[]>` in the project store.
+
+### Frontend: Desync Click Flow
+
+On session click:
+1. Set `activeSessionId` immediately
+2. If preloaded history exists, dispatch `SET_PRELOADED_HISTORY` so messages render instantly
+3. Kick off full `reconnect()` in background (tracked via state)
+4. Status bar shows "Connecting..." spinner
+5. When reconnect completes, dispatch `AGENT_READY` so status bar switches to "Ready"
+6. Subscribe to streaming events only after agent is ready
+
+### Status Bar Enhancement
+
+Extend `StatusIndicator` to show a three-state indicator:
+- **No session selected**: hidden/neutral
+- **Agent spinning up**: spinner + "Connecting..."
+- **Agent ready**: "Ready" (current behavior)
 
 ## Files to Modify
 
-| File | Change |
-|------|--------|
-| `package.json` | Add `shiki`, `remark-gfm`. Remove `highlight.js`, `rehype-highlight` |
-| `src/renderer/src/index.css` | Remove `@import "highlight.js/..."`. Remove `.hljs` overrides. Add `.shiki` base styles, code block CSS, completion divider gradient styles |
-| `src/renderer/src/components/chat/MarkdownContent.tsx` | **Major rewrite**: Replace `rehype-highlight` plugin with a custom Shiki-based `code` component. Add header bar to `CodeBlock`. Make copy button hover-reveal. Add language label. Update inline code styling. Add `remark-gfm` to plugins |
+### Backend
+- `src/main/session-manager.ts` — Add `loadHistoryFromDisk(sessionId, cwd): Promise<ChatMessageIPC[]>`
+- `src/main/ipc-handlers.ts` — Add handler for new `SESSION_LOAD_HISTORY_DISK` channel
+- `src/shared/ipc-channels.ts` — Add `SESSION_LOAD_HISTORY_DISK` channel
+- `src/shared/ipc-types.ts` — Add `SessionLoadHistoryDiskPayload` type
+- `src/preload/index.ts` — Expose `loadHistoryFromDisk()` on session API
 
-| `bun.lock` / `package-lock.json` | Regenerated after dependency changes (via `bun install`) |
+### Frontend
+- `src/renderer/src/stores/project-store.tsx` — Add preloaded history map, new actions (`PRELOAD_HISTORY`, `SET_PRELOADED_HISTORY`, `AGENT_READY`, `CLEAR_PRELOADED_HISTORY`), `preloadAllSessions()` thunk, desync `reconnectSession()`
+- `src/renderer/src/hooks/useSession.ts` — Handle preloaded history (skip loadHistory if preloaded), defer event subscription until agent ready
+- `src/renderer/src/components/ChatView.tsx` — Pass agent-ready state to StatusIndicator
+- `src/renderer/src/components/StatusIndicator.tsx` — Add "Connecting..." state with spinner
+- `src/renderer/src/components/TreeSidebar.tsx` — Trigger `preloadAllSessions()` when session list is available
 
 ## Reuse
 
-- **`extractText()`** in `MarkdownContent.tsx` (line 62) -- keep as-is for extracting code text for clipboard
-- **`CopyButton`** concept -- keep but restructure: move from always-visible top-right to header-bar right-side with hover reveal
-- **Design tokens** in `index.css` -- reuse `--color-surface-900`, `--color-surface-850`, `--color-surface-800`, `--color-text-secondary`, `--color-text-tertiary` for code block backgrounds, header, and labels
-- **`--font-mono`** -- already set to JetBrains Mono, use for code blocks and language labels
-- **`--ease-out-expo`** -- reuse for hover transitions on copy button
-- **`animate-fade-in`** -- reuse for code block appearance
-- **Prose overrides** in `index.css` `.prose {}` block -- keep, these handle non-code markdown styling
-- **`AssistantMessage`** wrapper `max-w-[80%]` -- keep as-is
-- **`messageGroups`** grouping logic in `ChatView.tsx` (lines 116-137) -- no changes needed
+- `extractHistoryFromSdkMessages()` (session-manager.ts ~line 506) — Reused by new `loadHistoryFromDisk()` for message conversion
+- `SdkSessionManager.open()` + `.getEntries()` pattern (session-manager.ts lines 235-236) — Reused for lightweight disk read
+- `StreamBatcher` (stream-batcher.ts) — No change needed, still used in full reconnect
+- `StatusIndicator` spinner animation (`SPINNER_FRAMES`) — Reused for "Connecting..." state
+- `ChatMessageIPC` type — Shared format for both preloaded and live history
 
 ## Steps
 
-- [ ] **Step 1: Update dependencies** -- Add `shiki` and `remark-gfm` to `package.json` dependencies. Remove `highlight.js` and `rehype-highlight`. Run `bun install` to update lockfiles
-- [ ] **Step 2: Remove highlight.js CSS and overrides** -- In `src/renderer/src/index.css`: delete `@import "highlight.js/styles/github-dark.css"`, delete the `.hljs` and `pre code.hljs` override blocks in the components layer
-- [ ] **Step 3: Add Shiki + code block CSS** -- In `src/renderer/src/index.css` components layer, add: `.shiki` base styles (background transparent, padding 0), code block container styles (border-radius, overflow handling), header bar styles (language label left, copy area right), `tab-size: 2`, `cursor: text`
-- [ ] **Step 4: Rewrite MarkdownContent.tsx** -- Replace `rehype-highlight` plugin with a custom Shiki-based `code` component that: (a) detects language from className, (b) async-highlights via `shiki.highlighter.load()` with `github-dark` theme and a broad language set (python, typescript, javascript, bash, json, css, html, tsx, jsx, rust, go, sql, yaml, markdown), (c) renders a header bar with language label + hover-reveal copy button, (d) renders pre/code with Shiki HTML output. Add `remarkGfm` to plugins. Keep `extractText()` and inline code handling. Use a lazy singleton pattern for the Shiki highlighter (create once, reuse across all code blocks)
-- [ ] **Step 5: Verify and test** -- Run `bun run dev`, send prompts that produce code blocks, verify: Shiki highlighting works, language labels appear, copy button reveals on hover, GFM tables render, no highlight.js artifacts remain
-
-## Detailed: MarkdownContent.tsx Rewrite
-
-The new component tree:
-
-  MarkdownContent
-    Markdown remarkPlugins={[remarkGfm]} components={...}
-    code -> CodeBlock (handles both inline and block)
-      Inline: code with bg-surface-800, text-accent-400
-      Block: CodeBlockWithShiki
-        Header bar
-          Language label (left, text-text-tertiary, font-mono, text-xs)
-          Copy button (right, opacity-0 group-hover:opacity-100)
-        pre > code with Shiki HTML (bg-surface-900, border, rounded-lg)
-    a -> external link (keep existing)
-    pre -> wrapper (simplify - no duplicate bg/border since CodeBlock handles it)
-
-**Shiki integration pattern** (preferred: lazy singleton):
-- Create a module-level cached promise for the Shiki highlighter
-- On first code block mount, call `shiki.createHighlighter()` with `github-dark` theme and a broad language set (python, typescript, javascript, bash, json, css, html, tsx, jsx, rust, go, sql, yaml, markdown)
-- In component `useEffect`, await the cached promise, call `highlighter.codeToHtml(code, { lang, theme: 'github-dark' })`, set HTML state
-- Render via `dangerouslySetInnerHTML` inside <code> (Shiki output is safe, pre-escaped)
-
-**Language detection from className:**
-- react-markdown passes `className="language-python"` for fenced blocks
-- Extract: `className?.replace(/^language-/, '') ?? 'text'`
+- [ ] Add `SESSION_LOAD_HISTORY_DISK` to `ipc-channels.ts` and `SessionLoadHistoryDiskPayload` to `ipc-types.ts`
+- [ ] Add `loadHistoryFromDisk(sessionId, cwd)` to `PiSessionManager` — lightweight disk-only read using `SdkSessionManager.open()` + `.getEntries()` + `extractHistoryFromSdkMessages()`
+- [ ] Add IPC handler for `SESSION_LOAD_HISTORY_DISK` in `ipc-handlers.ts`
+- [ ] Expose `loadHistoryFromDisk()` in `preload/index.ts` and update `NekoCodeIPC` type
+- [ ] Add preload state to project-store: `preloadedHistory: Map<string, ChatMessageIPC[]>`, `agentReady: boolean`
+- [ ] Add `PRELOAD_HISTORY`, `SET_PRELOADED_HISTORY`, `AGENT_READY`, `CLEAR_PRELOADED_HISTORY` actions to project-store
+- [ ] Add `preloadAllSessions(projectPath, sessionIds)` async thunk that calls `loadHistoryFromDisk()` for each session
+- [ ] Modify `reconnectSession()` in project-store to: (a) set activeSessionId + preloaded history immediately, (b) kick off full reconnect in background, (c) dispatch AGENT_READY when complete
+- [ ] Modify `useSession.ts` to use preloaded history when available, defer event subscription until agent ready
+- [ ] Add `isAgentConnecting` prop to `StatusIndicator`, show "Connecting..." spinner when true
+- [ ] Trigger `preloadAllSessions()` from `TreeSidebar` when session list is available
+- [ ] Handle edge case: user clicks a different session while agent is still spinning up for previous one (cancel/ignore stale reconnect)
+- [ ] Handle edge case: session has no messages (empty session) — skip preload, show WelcomeScreen
+- [ ] Handle edge case: preload fails (session file corrupt) — fall back to full reconnect on click
 
 ## Verification
 
-1. `bun run dev` -- app starts without errors
-2. Send a prompt asking for Python code -- code block renders with Shiki highlighting, "python" label in header, copy button hidden until hover
-3. Send a prompt asking for a markdown table -- table renders correctly (GFM support)
-4. Inline code renders with accent color on dark background
-5. Copy button copies full code text, shows checkmark for 2s, then resets
-6. No `highlight.js` CSS or classes remain in devtools
-7. `bun run type-check` passes
-8. `bun run lint` passes
+1. Open a project with multiple existing sessions in the sidebar
+2. Hover/expand sidebar — verify no blocking UI, preloads happen in background
+3. Click a session — messages should appear instantly (no "Loading session messages..." flash)
+4. Status bar should show "Connecting..." spinner immediately after click
+5. After ~0.5-1s, status bar should switch to "Ready"
+6. Send a prompt — should work normally (agent is ready)
+7. Click a different session while first is still connecting — first reconnect should be discarded, new session's preloaded messages shown
+8. Click a session that wasn't preloaded (e.g., just created) — should fall back to full reconnect with loading state
+9. Run existing tests: `npm test` — all should pass
+10. Manual: check main process logs for `loadHistoryFromDisk` calls and timing

@@ -1,5 +1,6 @@
-import React, { useRef, useEffect } from 'react'
+import React, { useRef, useEffect, useCallback } from 'react'
 import { useSession } from '../hooks/useSession'
+import { WelcomeScreen } from './WelcomeScreen'
 import { createLogger } from '../logger'
 
 const logger = createLogger('SessionView')
@@ -17,6 +18,7 @@ export function SessionView({ sessionId, cwd, onCreateSession, onDisposeSession 
     messages,
     error,
     sendPrompt,
+    abortPrompt,
     input,
     setInput,
     activeModel,
@@ -25,6 +27,7 @@ export function SessionView({ sessionId, cwd, onCreateSession, onDisposeSession 
   } = useSession({ sessionId })
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const [showModelDropdown, setShowModelDropdown] = React.useState(false)
   const modelDropdownRef = useRef<HTMLDivElement>(null)
 
@@ -44,6 +47,11 @@ export function SessionView({ sessionId, cwd, onCreateSession, onDisposeSession 
     return () => document.removeEventListener("mousedown", handler)
   }, [showModelDropdown])
 
+  const handleSuggestionFromWelcome = useCallback((prompt: string) => {
+    setInput(prompt)
+    sendPrompt(prompt)
+  }, [sendPrompt])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const text = input.trim()
@@ -59,6 +67,13 @@ export function SessionView({ sessionId, cwd, onCreateSession, onDisposeSession 
       await onDisposeSession()
     }
     await onCreateSession()
+  }
+
+  const handleInputContainerMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement
+    if (target.closest('button, input, textarea, a, select, option, [role="button"]')) return
+    e.preventDefault()
+    inputRef.current?.focus()
   }
 
   return (
@@ -87,9 +102,7 @@ export function SessionView({ sessionId, cwd, onCreateSession, onDisposeSession 
             <p className="text-text-tertiary">Click &quot;New Session&quot; to select a project folder.</p>
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-text-tertiary">Session ready. Type a prompt below.</p>
-          </div>
+          <WelcomeScreen onSuggestionClick={handleSuggestionFromWelcome} />
         ) : (
           <div className="space-y-4 max-w-3xl mx-auto">
             {messages.map((msg) => {
@@ -125,8 +138,12 @@ export function SessionView({ sessionId, cwd, onCreateSession, onDisposeSession 
       <footer className="px-6 py-4 bg-surface-950">
         <div className="max-w-3xl mx-auto">
           <form onSubmit={handleSubmit}>
-            <div className="rounded-[1.25rem] border border-accent-500/70 bg-surface-900 p-4 shadow-[0_0_30px_oklch(0.75_0.15_195/0.06)]">
+            <div
+              onMouseDown={handleInputContainerMouseDown}
+              className="rounded-[1.25rem] border border-surface-700 bg-surface-900 p-4 shadow-[0_0_20px_rgba(0,0,0,0.2)] cursor-text"
+            >
               <input
+                ref={inputRef}
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -137,7 +154,7 @@ export function SessionView({ sessionId, cwd, onCreateSession, onDisposeSession 
               <div className="flex items-center justify-between mt-2 pt-2">
                 <div className="flex items-center gap-0 text-xs text-text-secondary">
                   <div ref={modelDropdownRef} className="relative">
-                    <button type="button" onClick={() => setShowModelDropdown(v => !v)} className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-surface-800 transition-colors duration-150">
+                    <button type="button" onClick={() => setShowModelDropdown(v => !v)} className="flex items-center gap-1.5 px-3.5 py-2 rounded-md hover:bg-surface-800 transition-colors duration-150 border border-transparent hover:border-surface-600">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-accent-400">
                         <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5"/>
                         <path d="M8 12h8M12 8v8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
@@ -152,7 +169,7 @@ export function SessionView({ sessionId, cwd, onCreateSession, onDisposeSession 
                             key={m.id}
                             type="button"
                             onClick={() => { setModel(m.provider, m.id); setShowModelDropdown(false) }}
-                            className={`w-full text-left px-3 py-1.5 text-xs hover:bg-surface-700 transition-colors flex items-center justify-between ${activeModel?.id === m.id ? "text-accent-400" : "text-text-secondary"}`}
+                            className={`w-full text-left px-3.5 py-2 text-xs hover:bg-surface-700 transition-colors flex items-center justify-between rounded-md border border-transparent hover:border-surface-600 ${activeModel?.id === m.id ? "text-accent-400" : "text-text-secondary"}`}
                           >
                             <span>{m.name}</span>
                             <span className="text-text-tertiary text-[10px] ml-2">{m.provider}</span>
@@ -165,15 +182,32 @@ export function SessionView({ sessionId, cwd, onCreateSession, onDisposeSession 
                     )}
                   </div>
                 </div>
-                <button
-                  type="submit"
-                  disabled={!sessionId || isStreaming || !input.trim()}
-                  className="w-9 h-9 flex items-center justify-center rounded-full bg-accent-700 text-white hover:bg-accent-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-accent-700/25 hover:shadow-accent-600/35"
-                >
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path d="M8 3v10M4 7l4-4 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
+                {isStreaming ? (
+                  <button
+                    type="button"
+                    onClick={() => void abortPrompt()}
+                    disabled={!sessionId}
+                    className="w-9 h-9 flex items-center justify-center rounded-full bg-error text-white hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-black/25"
+                    aria-label="Stop response"
+                    title="Stop"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                      <rect x="3" y="3" width="8" height="8" rx="1.2" fill="currentColor" />
+                    </svg>
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={!sessionId || !input.trim()}
+                    className="w-9 h-9 flex items-center justify-center rounded-full bg-accent-700 text-white hover:bg-accent-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-accent-700/25 hover:shadow-accent-600/35"
+                    aria-label="Send message"
+                    title="Send"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                      <path d="M8 3v10M4 7l4-4 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                )}
               </div>
             </div>
           </form>

@@ -5,6 +5,8 @@ import { AssistantMessage } from './chat/AssistantMessage'
 import { ToolCallGroup } from './chat/ToolCallSection'
 import { MessagesTimeline } from './chat/MessagesTimeline'
 import { StatusIndicator } from './StatusIndicator'
+import { WelcomeScreen } from './WelcomeScreen'
+import { NavBar } from './NavBar'
 import { createLogger } from '../logger'
 
 const logger = createLogger('ChatView')
@@ -19,7 +21,7 @@ interface ChatViewProps {
 }
 
 export function ChatView({ sessionId, className }: ChatViewProps) {
-  const { messages, isStreaming, error, input, setInput, sendPrompt, activeModel, modelList, setModel, usage, streamStartTime } =
+  const { messages, isHistoryLoading, isStreaming, error, input, setInput, sendPrompt, abortPrompt, activeModel, modelList, setModel, usage, streamStartTime } =
     useSession({ sessionId })
 
   const [showScrollBtn, setShowScrollBtn] = React.useState(false)
@@ -149,6 +151,11 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
     }
   }, [error])
 
+  const handleSuggestionFromWelcome = useCallback((prompt: string) => {
+    setInput(prompt)
+    sendPrompt(prompt)
+  }, [sendPrompt])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const text = input.trim()
@@ -184,6 +191,13 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
       ta.style.height = 'auto'
       ta.style.height = `${Math.min(ta.scrollHeight, TEXTAREA_MAX_HEIGHT_PX)}px`
     }
+  }
+
+  const handleInputContainerMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement
+    if (target.closest('button, input, textarea, a, select, option, [role="button"]')) return
+    e.preventDefault()
+    textareaRef.current?.focus()
   }
 
   const lastMessageId = messages.length > 0 ? messages[messages.length - 1].id : null
@@ -239,24 +253,50 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
 
   return (
     <div className={`bg-surface-950 text-text-primary flex flex-col h-full ${className ?? ""}`}>
-      {/* No header — sidebar has the title */}
+      <NavBar />
 
       <main
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-6 pt-4 pb-10 relative"
+        className="flex-1 overflow-y-auto px-6 pt-8 pb-10 relative"
       >
         <div ref={messageContentRef}>
           {!sessionId ? (
             <div className="flex items-center justify-center h-full">
-              <p className="text-text-tertiary">Select a session from the sidebar</p>
+              <div className="w-full max-w-xl rounded-2xl border border-surface-700/70 bg-surface-900/75 px-8 py-10 shadow-[0_16px_44px_rgba(0,0,0,0.28)] backdrop-blur-sm">
+                <div className="mb-5 inline-flex items-center gap-2 rounded-lg border border-surface-600 bg-surface-800/70 px-3 py-1.5 text-xs text-text-secondary">
+                  <span className="inline-block h-2 w-2 rounded-full bg-accent-400" />
+                  Workspace Ready
+                </div>
+
+                <h2 className="text-xl font-display font-semibold tracking-tight text-text-primary">
+                  Select a session from the sidebar
+                </h2>
+
+                <p className="mt-2 text-sm leading-relaxed text-text-secondary">
+                  Open an existing conversation or create a new session to start chatting with your project context.
+                </p>
+
+                <div className="mt-6 grid grid-cols-1 gap-2.5 text-sm text-text-secondary sm:grid-cols-2">
+                  <div className="rounded-lg border border-surface-700/70 bg-surface-800/45 px-3 py-2.5">
+                    Resume a previous session
+                  </div>
+                  <div className="rounded-lg border border-surface-700/70 bg-surface-800/45 px-3 py-2.5">
+                    Create a new focused thread
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : isHistoryLoading && messages.length === 0 ? (
+            <div className="max-w-3xl mx-auto pt-8">
+              <div className="rounded-xl border border-surface-700/70 bg-surface-900/60 px-4 py-3 text-sm text-text-secondary">
+                Loading session messages...
+              </div>
             </div>
           ) : messages.length === 0 ? (
-            <div className="flex items-center justify-center h-full">
-              <p className="text-text-tertiary">Session ready. Type a prompt below.</p>
-            </div>
+            <WelcomeScreen onSuggestionClick={handleSuggestionFromWelcome} />
           ) : (
-            <div className="max-w-3xl mx-auto">
+            <div className="max-w-3xl mx-auto pt-4">
               <MessagesTimeline
                 rows={messageGroups}
                 isStreaming={isStreaming}
@@ -312,7 +352,10 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
       <footer className="px-6 py-4 bg-surface-950">
         <div className="max-w-3xl mx-auto">
           <form onSubmit={handleSubmit}>
-            <div className="rounded-[1.25rem] border border-accent-500/70 bg-surface-900 p-4 shadow-[0_0_30px_oklch(0.75_0.15_195/0.06)]">
+            <div
+              onMouseDown={handleInputContainerMouseDown}
+              className="rounded-[1.25rem] border border-surface-700 bg-surface-900 p-4 shadow-[0_0_20px_rgba(0,0,0,0.2)] cursor-text"
+            >
               <textarea
                 ref={textareaRef}
                 value={input}
@@ -326,7 +369,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
               <div className="flex items-center justify-between mt-2 pt-2">
                 <div className="flex items-center gap-0 text-xs text-text-secondary">
                   <div ref={modelDropdownRef} className="relative">
-                    <button type="button" onClick={() => setShowModelDropdown(v => !v)} className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-surface-800 transition-colors duration-150">
+                    <button type="button" onClick={() => setShowModelDropdown(v => !v)} className="flex items-center gap-1.5 px-3.5 py-2 rounded-md hover:bg-surface-800 transition-colors duration-150 border border-transparent hover:border-surface-600">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-accent-400">
                         <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5"/>
                         <path d="M8 12h8M12 8v8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
@@ -343,7 +386,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
                             key={m.id}
                             type="button"
                             onClick={() => { setModel(m.provider, m.id); setShowModelDropdown(false) }}
-                            className={`w-full text-left px-3 py-1.5 text-xs hover:bg-surface-700 transition-colors flex items-center justify-between ${activeModel?.id === m.id ? "text-accent-400" : "text-text-secondary"}`}
+                            className={`w-full text-left px-3.5 py-2 text-xs hover:bg-surface-700 transition-colors flex items-center justify-between rounded-md border border-transparent hover:border-surface-600 ${activeModel?.id === m.id ? "text-accent-400" : "text-text-secondary"}`}
                           >
                             <span>{m.name}</span>
                             <span className="text-text-tertiary text-[10px] ml-2">{m.provider}</span>
@@ -358,15 +401,32 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
                     })()}
                   </div>
                 </div>
-                <button
-                  type="submit"
-                  disabled={!sessionId || isStreaming || !input.trim()}
-                  className="w-9 h-9 flex items-center justify-center rounded-full bg-accent-700 text-white hover:bg-accent-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-accent-700/25 hover:shadow-accent-600/35"
-                >
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path d="M8 3v10M4 7l4-4 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
+                {isStreaming ? (
+                  <button
+                    type="button"
+                    onClick={() => void abortPrompt()}
+                    disabled={!sessionId}
+                    className="w-9 h-9 flex items-center justify-center rounded-full bg-error text-white hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-black/25"
+                    aria-label="Stop response"
+                    title="Stop"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                      <rect x="3" y="3" width="8" height="8" rx="1.2" fill="currentColor" />
+                    </svg>
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={!sessionId || !input.trim()}
+                    className="w-9 h-9 flex items-center justify-center rounded-full bg-accent-700 text-white hover:bg-accent-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-accent-700/25 hover:shadow-accent-600/35"
+                    aria-label="Send message"
+                    title="Send"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                      <path d="M8 3v10M4 7l4-4 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                )}
               </div>
             </div>
           </form>

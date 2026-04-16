@@ -48,7 +48,7 @@ function SessionList({
       {/* New Session — at the top */}
       <button
         onClick={onCreateSession}
-        className="flex items-center gap-2 px-2.5 py-[6px] w-full text-left text-[12px] text-text-tertiary/70 hover:text-accent-400 hover:bg-surface-800/40 rounded-lg transition-colors duration-150 pl-5"
+        className="flex items-center gap-2 px-2.5 py-[6px] w-full text-left text-[12px] text-text-tertiary/80 hover:text-text-primary hover:bg-surface-800/70 rounded-lg border border-transparent hover:border-surface-600 transition-colors duration-150 pl-5"
       >
         <svg width="11" height="11" viewBox="0 0 12 12" fill="none" className="shrink-0">
           <path d="M6 2.5v7M2.5 6h7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
@@ -63,10 +63,10 @@ function SessionList({
         return (
           <div
             key={session.id}
-            className={`flex items-center gap-2 px-2.5 py-[6px] cursor-pointer rounded-lg transition-colors duration-150 text-[13px] ${
+            className={`flex items-center gap-2 px-2.5 py-[6px] cursor-pointer rounded-lg transition-colors duration-150 text-[13px] border ${
               isActiveSession
-                ? 'bg-accent-500/15 text-text-primary'
-                : 'text-text-secondary/70 hover:bg-surface-800/40 hover:text-text-secondary'
+                ? 'bg-surface-800/80 text-text-primary border-surface-600'
+                : 'text-text-secondary/80 border-transparent hover:bg-surface-800/60 hover:text-text-primary hover:border-surface-600'
             }`}
             onClick={() => onReconnect(session.id)}
             onContextMenu={(e) => onContextMenu(e, session.id)}
@@ -83,7 +83,7 @@ function SessionList({
       {hasMore && (
         <button
           onClick={() => setShowAll(prev => !prev)}
-          className="flex items-center gap-2 px-2.5 py-[6px] w-full text-left text-[12px] text-text-tertiary/70 hover:text-text-secondary hover:bg-surface-800/40 rounded-lg transition-colors duration-150 pl-5"
+          className="flex items-center gap-2 px-2.5 py-[6px] w-full text-left text-[12px] text-text-tertiary/80 hover:text-text-primary hover:bg-surface-800/60 rounded-lg border border-transparent hover:border-surface-600 transition-colors duration-150 pl-5"
         >
           {showAll ? 'Show less' : `Show more (${sessions.length - VISIBLE_SESSIONS})`}
         </button>
@@ -199,14 +199,14 @@ export function TreeSidebar() {
   }, [])
 
   return (
-    <aside className="w-60 bg-surface-950/95 h-screen flex flex-col shrink-0 border-r border-surface-800/40">
+    <aside className="w-60 bg-surface-900 h-screen flex flex-col shrink-0 text-text-primary shadow-[inset_-1px_0_0_rgba(255,255,255,0.06)]">
       {/* Header */}
       <div className="px-5 pt-5 pb-4">
         <div className="flex items-center justify-between">
           <span className="text-xl font-display font-semibold tracking-tight"><span className="text-pink-400">Neko</span><span className="text-white">code</span></span>
           <button
             onClick={handleAddProject}
-            className="p-1 text-text-secondary hover:text-text-primary hover:bg-surface-800/80 rounded-md transition-colors duration-200"
+            className="p-1 text-text-secondary hover:text-text-primary hover:bg-surface-800/80 rounded-md border border-transparent hover:border-surface-600 transition-colors duration-200"
             title="Add Project"
           >
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
@@ -234,8 +234,8 @@ export function TreeSidebar() {
             <div key={project.id} className="mb-0.5">
               {/* Project row */}
               <div
-                className={`group flex items-center gap-2 px-2.5 py-[7px] cursor-pointer rounded-lg transition-colors duration-150 border border-transparent ${
-                  isActive ? 'bg-surface-800/80 border-surface-700/50' : 'hover:bg-surface-800/50 hover:border-surface-700/30'
+                className={`group flex items-center gap-2 px-2.5 py-[7px] cursor-pointer rounded-lg transition-colors duration-150 border ${
+                  isActive ? 'bg-surface-800/80 border-surface-600' : 'border-transparent hover:bg-surface-800/60 hover:border-surface-600'
                 }`}
                 onClick={() => toggleExpand(project.id)}
                 onContextMenu={(e) => openProjectMenu(e, project)}

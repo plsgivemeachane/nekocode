@@ -46,11 +46,13 @@ interface UseSessionInput {
 
 interface UseSessionOutput {
   messages: ChatMessage[]
+  isHistoryLoading: boolean
   isStreaming: boolean
   error: string | null
   input: string
   setInput: (text: string) => void
   sendPrompt: (text: string) => Promise<void>
+  abortPrompt: () => Promise<void>
   activeModel: ModelInfo | null
   modelList: ModelInfo[]
   setModel: (provider: string, modelId: string) => Promise<void>
@@ -68,6 +70,7 @@ const INITIAL_MESSAGES: ChatMessage[] = []
 export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
   const { state: projectState } = useProjectStore()
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES)
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [input, setInput] = useState('')
   const [activeModel, setActiveModel] = useState<ModelInfo | null>(null)
@@ -87,6 +90,13 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
 
   // Draft preservation: save input text when switching away, restore when switching back
   const drafts = useRef<Map<string, string>>(new Map())
+  const messagesBySession = useRef<Map<string, ChatMessage[]>>(new Map())
+
+  // Keep a snapshot of each session's latest rendered messages for instant restore on switch.
+  useEffect(() => {
+    if (!sessionId) return
+    messagesBySession.current.set(sessionId, messages)
+  }, [sessionId, messages])
 
   // Save draft and reset on sessionId change
   useEffect(() => {
@@ -108,7 +118,8 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
     }
 
     // Reset transient state, restore per-session cached state
-    setMessages(INITIAL_MESSAGES)
+    const cachedMessages = sessionId !== null ? (messagesBySession.current.get(sessionId) ?? INITIAL_MESSAGES) : INITIAL_MESSAGES
+    setMessages(cachedMessages)
     setError(sessionId !== null ? (errors.current.get(sessionId) ?? null) : null)
     setUsage(sessionId !== null ? (usages.current.get(sessionId) ?? { inputTokens: 0, outputTokens: 0, totalCost: 0, contextPercent: 0, contextWindow: 0 }) : { inputTokens: 0, outputTokens: 0, totalCost: 0, contextPercent: 0, contextWindow: 0 })
     // streamStartTime is derived from the ref map above — no separate reset needed
@@ -127,18 +138,26 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
   // This enables session persistence: reconnecting to an existing session
   // loads its prior messages instead of starting empty.
   useEffect(() => {
-    if (!sessionId) return
+    if (!sessionId) {
+      setIsHistoryLoading(false)
+      return
+    }
     let cancelled = false
+    setIsHistoryLoading(true)
     logger.debug(`loading history for ${sessionId.slice(0, 8)}...`)
     window.nekocode.session.loadHistory(sessionId).then((ipcMessages) => {
       if (cancelled) return
-      if (ipcMessages.length > 0) {
-        logger.info(`history loaded: ${ipcMessages.length} messages for ${sessionId.slice(0, 8)}...`)
-        setMessages(ipcToChatMessages(ipcMessages))
-      }
+      logger.info(`history loaded: ${ipcMessages.length} messages for ${sessionId.slice(0, 8)}...`)
+      const chatMessages = ipcToChatMessages(ipcMessages)
+      setMessages(chatMessages)
+      messagesBySession.current.set(sessionId, chatMessages)
     }).catch((err) => {
       if (!cancelled) {
         logger.warn('Failed to load history', err)
+      }
+    }).finally(() => {
+      if (!cancelled) {
+        setIsHistoryLoading(false)
       }
     })
     return () => { cancelled = true }
@@ -290,6 +309,16 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
     [sessionId],
   )
 
+  const abortPrompt = useCallback(async (): Promise<void> => {
+    if (!sessionId) return
+    try {
+      await window.nekocode.session.abort(sessionId)
+    } catch (err) {
+      logger.error(`abortPrompt failed: ${err}`)
+      setError(`Failed to stop response: ${err}`)
+    }
+  }, [sessionId])
+
   const setModel = useCallback(
     async (provider: string, modelId: string): Promise<void> => {
       if (!sessionId) return
@@ -304,5 +333,5 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
     [sessionId],
   )
 
-  return { messages, isStreaming, error, input, setInput, sendPrompt, activeModel, modelList, setModel, usage, streamStartTime }
+  return { messages, isHistoryLoading, isStreaming, error, input, setInput, sendPrompt, abortPrompt, activeModel, modelList, setModel, usage, streamStartTime }
 }

@@ -16,9 +16,9 @@
   --color-accent-900: oklch(0.37 0.06 195);
 
   /* Surface: neutral cool grays */
-  --color-surface-950: oklch(0.15 0.007 260);
-  --color-surface-900: oklch(0.19 0.008 260);
-  --color-surface-850: oklch(0.22 0.008 260);
+  --color-surface-950: #171717;
+  --color-surface-900: #262626;
+  --color-surface-850: #2d2d2d;
   --color-surface-800: oklch(0.25 0.009 260);
   --color-surface-700: oklch(0.30 0.008 260);
   --color-surface-600: oklch(0.40 0.008 260);
