@@ -1,16 +1,16 @@
 {
   "name": "nekocode",
-  "version": "0.2.5",
+  "version": "0.2.7",
   "description": "AI-powered coding assistant desktop app",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "bun run verify:patches && electron-vite build",
     "preview": "electron-vite preview",
-    "package": "bun run verify:patches && electron-vite build && electron-builder --win",
+    "package": "bun run version:up && bun run verify:patches && electron-vite build && electron-builder --win",
     "package:mac": "bun run verify:patches && electron-vite build && electron-builder --mac",
     "package:linux": "bun run verify:patches && electron-vite build && electron-builder --linux",
-    "package:all": "bun run verify:patches && electron-vite build && electron-builder -mwl",
+    "package:all": "bun run version:up && bun run verify:patches && electron-vite build && electron-builder -mwl",
     "release": "bun run verify:patches && electron-vite build && electron-builder --win --publish always",
     "postinstall": "patch-package",
     "verify:patches": "node ./scripts/verify-patches.cjs",
@@ -73,23 +73,31 @@
       {
         "from": "resources",
         "to": "resources",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "patches",
         "to": "patches",
-        "filter": ["**/*.patch"]
+        "filter": [
+          "**/*.patch"
+        ]
       }
     ],
     "win": {
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "resources/icon.ico",
@@ -116,11 +124,17 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         },
         {
           "target": "zip",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
       "category": "public.app-category.developer-tools",
@@ -128,7 +142,9 @@
       "gatekeeperAssess": false
     },
     "linux": {
-      "target": ["AppImage"],
+      "target": [
+        "AppImage"
+      ],
       "category": "Development"
     },
     "publish": {
