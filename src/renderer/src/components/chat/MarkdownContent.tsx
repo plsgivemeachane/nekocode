@@ -174,7 +174,7 @@ function CodeBlockWithShiki({ code, language }: CodeBlockWithShikiProps) {
 
   if (!html) {
     return (
-      <div className="code-block-container animate-fade-in">
+      <div className="code-block-container">
         <CopyButton text={code} />
         <pre className="bg-surface-900 p-4 text-sm font-mono text-text-tertiary">
           <code>{code}</code>
@@ -184,7 +184,7 @@ function CodeBlockWithShiki({ code, language }: CodeBlockWithShikiProps) {
   }
 
   return (
-    <div className="code-block-container animate-fade-in">
+    <div className="code-block-container">
       <CopyButton text={code} />
       <div
         className="shiki-wrapper"
@@ -227,7 +227,7 @@ interface MarkdownContentProps {
 export const MarkdownContent = React.memo(function MarkdownContent({ content }: MarkdownContentProps) {
   const cleaned = stripThinkingTokens(content)
   return (
-    <div className="chat-markdown animate-fade-in">
+    <div className="chat-markdown">
       <Markdown
         remarkPlugins={[remarkGfm]}
         components={{

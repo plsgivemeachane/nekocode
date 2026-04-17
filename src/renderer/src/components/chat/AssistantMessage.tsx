@@ -9,7 +9,7 @@ interface AssistantMessageProps {
 export function AssistantMessage({ content, isStreaming }: AssistantMessageProps) {
   if (isStreaming) {
     return (
-      <div className="max-w-[80%] animate-fade-in">
+      <div className="max-w-[80%]">
         <p className="text-sm font-mono text-text-primary whitespace-pre-wrap break-words">
           {content}
           <span className="inline-block w-2 h-4 bg-accent-400 animate-glow-pulse ml-0.5 align-text-bottom" />
@@ -19,7 +19,7 @@ export function AssistantMessage({ content, isStreaming }: AssistantMessageProps
   }
 
   return (
-    <div className="max-w-[80%] animate-fade-in">
+    <div className="max-w-[80%]">
       <MarkdownContent content={content} />
     </div>
   )
