@@ -108,7 +108,7 @@ export function createSessionManagerMock(
     dispose: vi.fn(() => undefined),
     reconnect: vi.fn(async () => []),
     getHistory: vi.fn(() => []),
-    getModel: vi.fn(() => null),
+    getModel: vi.fn(() => ({ id: 'model-1', name: 'Model 1', provider: 'mock' })),
     listModels: vi.fn(async () => []),
     setModel: vi.fn(async () => ({ id: 'model-1', name: 'Model 1', provider: 'mock' })),
     getExtensionLoadErrors: vi.fn(() => []),
