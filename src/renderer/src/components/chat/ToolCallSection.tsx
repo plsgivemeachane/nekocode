@@ -12,16 +12,16 @@ interface ToolCallData {
 function StatusDot({ status, isError }: { status: 'running' | 'done'; isError?: boolean }) {
   if (status === 'running') {
     return (
-      <span className="relative flex h-[7px] w-[7px] flex-shrink-0">
+      <span className="relative flex h-[7px] w-[7px] shrink-0">
         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent-400 opacity-60" />
         <span className="relative inline-flex rounded-full h-[7px] w-[7px] bg-accent-400" />
       </span>
     )
   }
   if (isError) {
-    return <span className="h-[7px] w-[7px] rounded-full bg-error flex-shrink-0" />
+    return <span className="h-[7px] w-[7px] rounded-full bg-error shrink-0" />
   }
-  return <span className="h-[7px] w-[7px] rounded-full bg-success flex-shrink-0" />
+  return <span className="h-[7px] w-[7px] rounded-full bg-success shrink-0" />
 }
 
 function ToolCallRow({ toolName, status, isError, summary }: {
@@ -35,7 +35,7 @@ function ToolCallRow({ toolName, status, isError, summary }: {
   return (
     <div className="flex items-center gap-2.5 px-3 py-[5px] hover:bg-surface-800/30 transition-colors">
       <StatusDot status={status} isError={isError} />
-      <span className="text-[12px] font-mono font-medium text-text-secondary w-[88px] flex-shrink-0 truncate">{shortName}</span>
+      <span className="text-[12px] font-mono font-medium text-text-secondary w-[88px] shrink-0 truncate">{shortName}</span>
       <span className="text-[12px] font-mono text-text-tertiary truncate">{summary}</span>
     </div>
   )

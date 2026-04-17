@@ -204,6 +204,9 @@ export interface NekoCodeIPC {
     setActive: (sessionId: string, projectPath: string) => Promise<void>
     getActive: () => Promise<WorkspaceActiveResult>
   }
+  git: {
+    getBranch: (cwd: string) => Promise<string | null>
+  }
   update: {
     check: () => Promise<UpdateAvailableInfo | null>
     download: () => Promise<void>

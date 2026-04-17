@@ -86,6 +86,10 @@ contextBridge.exposeInMainWorld('nekocode', {
   session: sessionApi,
   project: projectApi,
   workspace: workspaceApi,
+  git: {
+    getBranch: (cwd: string): Promise<string | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_GET_BRANCH, { cwd }),
+  },
   dialog: {
     openFolder: (): Promise<string | null> =>
       ipcRenderer.invoke(IPC_CHANNELS.DIALOG_OPEN_FOLDER),

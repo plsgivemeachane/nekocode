@@ -164,7 +164,7 @@ export function WelcomeScreen({ onSuggestionClick }: WelcomeScreenProps) {
             onClick={() => handleClick(s.prompt)}
             className="group flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-surface-900/80 border border-surface-800 hover:border-accent-500/30 hover:bg-surface-850 text-left transition-all duration-200 cursor-pointer"
           >
-            <span className="text-[#9CA3AF] group-hover:text-accent-400 transition-colors duration-200 flex-shrink-0">
+            <span className="text-[#9CA3AF] group-hover:text-accent-400 transition-colors duration-200 shrink-0">
               {s.svg}
             </span>
             <span className="text-[#B0B8C4] group-hover:text-text-primary text-sm transition-colors duration-200">

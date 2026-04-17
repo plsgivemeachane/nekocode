@@ -56,7 +56,7 @@ function SessionList({
       {/* New Session — at the top */}
       <button
         onClick={onCreateSession}
-        className="flex items-center gap-2 px-2.5 py-[6px] w-full text-left text-[12px] text-text-tertiary/80 hover:text-text-primary hover:bg-surface-800/70 rounded-lg border border-transparent hover:border-surface-600 transition-colors duration-150 pl-5"
+        className="flex items-center gap-2 px-2.5 py-1.5 w-full text-left text-[12px] text-text-tertiary/80 hover:text-text-primary hover:bg-surface-800/70 rounded-lg border border-transparent hover:border-surface-600 transition-colors duration-150 pl-5"
       >
         <svg width="11" height="11" viewBox="0 0 12 12" fill="none" className="shrink-0">
           <path d="M6 2.5v7M2.5 6h7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
@@ -71,7 +71,7 @@ function SessionList({
         return (
           <div
             key={session.id}
-            className={`flex items-center gap-2 px-2.5 py-[6px] cursor-pointer rounded-lg transition-colors duration-150 text-[13px] border ${
+            className={`flex items-center gap-2 px-2.5 py-1.5 cursor-pointer rounded-lg transition-colors duration-150 text-[13px] border ${
               isActiveSession
                 ? 'bg-surface-800/80 text-text-primary border-surface-600'
                 : 'text-text-secondary/80 border-transparent hover:bg-surface-800/60 hover:text-text-primary hover:border-surface-600'
@@ -220,7 +220,7 @@ export function TreeSidebar() {
       {/* Header */}
       <div className="px-5 pt-5 pb-4">
         <div className="flex items-center justify-between">
-          <span className="text-xl font-display font-semibold tracking-tight"><span className="text-pink-400">Neko</span><span className="text-white">code</span></span>
+          <span className="text-2xl font-display font-semibold tracking-tight"><span className="text-pink-400">Neko</span><span className="text-white">code</span></span>
           <button
             onClick={handleAddProject}
             className="p-1 text-text-secondary hover:text-text-primary hover:bg-surface-800/80 rounded-md border border-transparent hover:border-surface-600 transition-colors duration-200"

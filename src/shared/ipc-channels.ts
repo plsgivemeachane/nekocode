@@ -30,6 +30,7 @@ export const IPC_CHANNELS = {
   UPDATE_PROGRESS: 'update:progress',
   UPDATE_DOWNLOADED: 'update:downloaded',
   UPDATE_ERROR: 'update:error',
+  GIT_GET_BRANCH: 'git:get-branch',
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]

@@ -62,6 +62,16 @@ function messageSignature(messages: ChatMessage[]): string {
     .join('\n')
 }
 
+function isSessionNotReadyError(err: unknown): boolean {
+  if (!err) return false
+  const text = typeof err === 'string'
+    ? err
+    : err instanceof Error
+      ? err.message
+      : String(err)
+  return text.includes('Session not found')
+}
+
 interface UseSessionInput {
   sessionId: string | null
 }
@@ -169,7 +179,13 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
 
         // Reconcile cached view with canonical session history to prevent stale
         // messages from previous reconnect/cache state.
-        window.nekocode.session.loadHistory(sessionId).then((ipcMessages) => {
+        window.nekocode.session.loadHistory(sessionId).catch((err) => {
+          if (isSessionNotReadyError(err) && projectState.activeProjectPath) {
+            logger.debug(`reconcile fallback to disk for ${sessionId.slice(0, 8)}...`)
+            return window.nekocode.session.loadHistoryFromDisk(sessionId, projectState.activeProjectPath, 0)
+          }
+          throw err
+        }).then((ipcMessages) => {
           if (cancelled) return
           const canonicalMessages = ipcToChatMessages(ipcMessages)
           const canonicalSig = messageSignature(canonicalMessages)
@@ -188,7 +204,23 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
         setMessages(INITIAL_MESSAGES)
         setIsHistoryLoading(true)
         logger.debug(`loading history for ${sessionId.slice(0, 8)}...`)
-        window.nekocode.session.loadHistory(sessionId).then((ipcMessages) => {
+
+        // When the agent is not yet connected (e.g. startup auto-resume),
+        // the in-memory loadHistory will throw. Fall back to disk read.
+        const doLoad = (projectState.agentReady
+          ? window.nekocode.session.loadHistory(sessionId)
+          : projectState.activeProjectPath
+            ? window.nekocode.session.loadHistoryFromDisk(sessionId, projectState.activeProjectPath, 0)
+            : Promise.reject(new Error('no project path available')))
+          .catch((err) => {
+            if (isSessionNotReadyError(err) && projectState.activeProjectPath) {
+              logger.debug(`history fallback to disk for ${sessionId.slice(0, 8)}...`)
+              return window.nekocode.session.loadHistoryFromDisk(sessionId, projectState.activeProjectPath, 0)
+            }
+            throw err
+          })
+
+        doLoad.then((ipcMessages) => {
           if (cancelled) return
           logger.info(`history loaded: ${ipcMessages.length} messages for ${sessionId.slice(0, 8)}...`)
           const chatMessages = ipcToChatMessages(ipcMessages)

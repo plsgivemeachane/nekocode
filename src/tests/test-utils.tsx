@@ -84,6 +84,7 @@ export function createMockIPC(): NekoCodeIPC {
     project: createMockProjectAPI(),
     workspace: createMockWorkspaceAPI(),
     update: createMockUpdateAPI(),
+    git: { getBranch: vi.fn().mockResolvedValue(null) },
   }
 }
 

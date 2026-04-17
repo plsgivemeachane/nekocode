@@ -1,4 +1,6 @@
 import { ipcMain, BrowserWindow, dialog } from 'electron'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
 import { IPC_CHANNELS } from '../shared/ipc-channels'
 import type {
   SessionCreatePayload,
@@ -27,6 +29,7 @@ import { createLogger } from './logger'
 import { checkForUpdate, downloadUpdate, quitAndInstall } from './updater'
 
 const logger = createLogger('ipc-handlers')
+const execFileAsync = promisify(execFile)
 
 /**
  * Register IPC handlers that bridge the renderer to the session and project managers.
@@ -208,6 +211,17 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.UPDATE_INSTALL, async (): Promise<void> => {
     logger.info('UPDATE_INSTALL')
     quitAndInstall()
+  })
+
+  // --- Git handlers ---
+
+  ipcMain.handle(IPC_CHANNELS.GIT_GET_BRANCH, async (_event, payload: { cwd: string }): Promise<string | null> => {
+    try {
+      const { stdout } = await execFileAsync('git', ['branch', '--show-current'], { cwd: payload.cwd })
+      return stdout.trim() || null
+    } catch {
+      return null
+    }
   })
 }
 

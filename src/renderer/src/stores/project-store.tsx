@@ -280,12 +280,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             // Verify the session still exists in the restored projects
             const project = projects.find(p => p.path === projectPath)
             if (project && project.sessions.some(s => s.id === sessionId)) {
-              dispatch({ type: 'SET_ACTIVE_SESSION', sessionId, projectPath })
               dispatch({ type: 'SET_AGENT_CONNECTING' })
+              dispatch({ type: 'SET_ACTIVE_SESSION', sessionId, projectPath })
               try {
                 const result = await window.nekocode.session.reconnect(sessionId, projectPath)
                 logExtensionLoadWarnings('reconnect', sessionId, result.extensionErrors, result.extensionsDisabled)
                 dispatch({ type: 'SET_SESSION_MESSAGE_COUNT', sessionId, messageCount: result.history.length })
+                // Preload history so useSession finds it even if its effect
+                // already fired before reconnect completed (startup race).
+                if (result.history.length > 0) {
+                  dispatch({ type: 'PRELOAD_HISTORY', sessionId, messages: result.history })
+                }
                 dispatch({ type: 'SET_AGENT_READY', sessionId })
               } catch (err) {
                 logger.error('Failed to reconnect restored session', err)

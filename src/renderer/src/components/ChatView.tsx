@@ -35,6 +35,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
   const programmaticScrollRef = useRef(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [showModelDropdown, setShowModelDropdown] = React.useState(false)
+  const [gitBranch, setGitBranch] = React.useState<string | null>(null)
   const modelDropdownRef = useRef<HTMLDivElement>(null)
   const wasAgentConnectingRef = useRef(isAgentConnecting)
   const wasHistoryLoadingRef = useRef(isHistoryLoading)
@@ -50,6 +51,20 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
   const getDistanceFromBottom = useCallback((el: HTMLDivElement) => {
     return el.scrollHeight - el.scrollTop - el.clientHeight
   }, [])
+
+  // Fetch git branch when project path changes
+  React.useEffect(() => {
+    const path = projectState.activeProjectPath
+    if (!path) {
+      setGitBranch(null)
+      return
+    }
+    let cancelled = false
+    window.nekocode.git.getBranch(path).then((branch) => {
+      if (!cancelled) setGitBranch(branch)
+    })
+    return () => { cancelled = true }
+  }, [projectState.activeProjectPath])
 
   // Instant scroll to bottom (no smooth — avoids jank during streaming)
   const scrollToBottom = useCallback((smooth = false) => {
@@ -88,7 +103,6 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
 
   // Track scroll position — update isAtBottomRef and button visibility
   const handleScroll = useCallback(() => {
-    if (programmaticScrollRef.current) return
     const el = scrollContainerRef.current
     if (!el) return
     const atBottom = getDistanceFromBottom(el) < SCROLL_THRESHOLD_PX
@@ -118,22 +132,6 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
     observer.observe(content)
     return () => observer.disconnect()
   }, [scrollToBottom])
-
-  // While streaming, keep the viewport locked to bottom unless the user scrolls away.
-  useEffect(() => {
-    if (!isStreaming) return
-
-    let rafId = 0
-    const tick = () => {
-      if (isAtBottomRef.current) {
-        scrollToBottom(false)
-      }
-      rafId = requestAnimationFrame(tick)
-    }
-
-    rafId = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(rafId)
-  }, [isStreaming, scrollToBottom])
 
   // Scroll to bottom on initial session (when first messages arrive)
   useEffect(() => {
@@ -351,7 +349,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
               {/* Action chips */}
               <div className="grid grid-cols-2 gap-2.5 max-w-md w-full px-4">
                 <div className="group flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-surface-900/80 border border-surface-800 text-left">
-                  <span className="text-[#9CA3AF] flex-shrink-0">
+                  <span className="text-[#9CA3AF] shrink-0">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
                     </svg>
@@ -359,7 +357,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
                   <span className="text-[#B0B8C4] text-sm">Resume a session</span>
                 </div>
                 <div className="group flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-surface-900/80 border border-surface-800 text-left">
-                  <span className="text-[#9CA3AF] flex-shrink-0">
+                  <span className="text-[#9CA3AF] shrink-0">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
                     </svg>
@@ -532,14 +530,14 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
             </div>
           </form>
           <div className="flex items-center justify-between mt-2 px-1">
-            <span className="flex items-center gap-1.5 text-[11px] text-text-tertiary">
+            <span className="flex items-center gap-1.5 text-[11px] text-text-tertiary truncate max-w-[260px]">
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
                 <path d="M2 4h12M2 4v8a2 2 0 002 2h8a2 2 0 002-2V4M2 4l2-2h8l2 2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
-              Local
+              {projectState.activeProjectPath}
             </span>
             <span className="flex items-center gap-1 text-[11px] text-text-tertiary">
-              main
+              {gitBranch ?? "..."}
               <svg width="10" height="10" viewBox="0 0 10 10"><path d="M3 4l2 2 2-2" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </span>
           </div>

@@ -1,6 +1,6 @@
 {
   "name": "nekocode",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "description": "AI-powered coding assistant desktop app",
   "main": "./out/main/index.js",
   "scripts": {
@@ -14,6 +14,8 @@
     "release": "bun run verify:patches && electron-vite build && electron-builder --win --publish always",
     "postinstall": "patch-package",
     "verify:patches": "node ./scripts/verify-patches.cjs",
+    "version:up": "node ./scripts/auto-upversion.cjs",
+    "version:up:dry": "node ./scripts/auto-upversion.cjs --dry-run",
     "lint": "eslint --ext .ts,.tsx ./src",
     "test": "vitest run",
     "test:watch": "vitest",
