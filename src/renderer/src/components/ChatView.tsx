@@ -326,30 +326,64 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto px-6 pt-8 pb-10 relative"
       >
-        <div ref={messageContentRef}>
+        <div ref={messageContentRef} className="min-h-full">
           {!sessionId ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="w-full max-w-xl rounded-2xl border border-surface-700/70 bg-surface-900/75 px-8 py-10 shadow-[0_16px_44px_rgba(0,0,0,0.28)] backdrop-blur-sm">
-                <div className="mb-5 inline-flex items-center gap-2 rounded-lg border border-surface-600 bg-surface-800/70 px-3 py-1.5 text-xs text-text-secondary">
-                  <span className="inline-block h-2 w-2 rounded-full bg-accent-400" />
-                  Workspace Ready
+            <div className="flex flex-col items-center justify-center h-full select-none pt-16">
+              {/* Logo */}
+              <div className="relative mb-6">
+                <div className="w-14 h-14 rounded-xl bg-surface-900/80 border border-surface-700/50 flex items-center justify-center overflow-hidden">
+                  <img
+                    src="./favicon.png"
+                    alt="nekocode"
+                    className="w-10 h-10 object-contain"
+                  />
                 </div>
+              </div>
 
-                <h2 className="text-xl font-display font-semibold tracking-tight text-text-primary">
-                  Select a session from the sidebar
-                </h2>
+              {/* Title */}
+              <h1 className="text-text-primary text-lg font-semibold tracking-tight mb-1.5 font-mono">
+                nekocode
+              </h1>
+              <p className="text-[#9CA3AF] text-sm mb-12">
+                Select a session to continue.
+              </p>
 
-                <p className="mt-2 text-sm leading-relaxed text-text-secondary">
-                  Open an existing conversation or create a new session to start chatting with your project context.
-                </p>
+              {/* Action chips */}
+              <div className="grid grid-cols-2 gap-2.5 max-w-md w-full px-4">
+                <div className="group flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-surface-900/80 border border-surface-800 text-left">
+                  <span className="text-[#9CA3AF] flex-shrink-0">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                    </svg>
+                  </span>
+                  <span className="text-[#B0B8C4] text-sm">Resume a session</span>
+                </div>
+                <div className="group flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-surface-900/80 border border-surface-800 text-left">
+                  <span className="text-[#9CA3AF] flex-shrink-0">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                    </svg>
+                  </span>
+                  <span className="text-[#B0B8C4] text-sm">Start a new thread</span>
+                </div>
+              </div>
 
-                <div className="mt-6 grid grid-cols-1 gap-2.5 text-sm text-text-secondary sm:grid-cols-2">
-                  <div className="rounded-lg border border-surface-700/70 bg-surface-800/45 px-3 py-2.5">
-                    Resume a previous session
+              {/* Keyboard shortcuts */}
+              <div className="flex items-center gap-5 text-[#9CA3AF] mt-12">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
+                    <kbd className="inline-flex items-center justify-center min-w-[1.75rem] h-7 px-2 text-[11px] leading-none font-mono text-[#C9CED6] bg-surface-800/80 border border-surface-600/50 rounded-md">Ctrl</kbd>
+                    <kbd className="inline-flex items-center justify-center min-w-[1.75rem] h-7 px-2 text-[11px] leading-none font-mono text-[#C9CED6] bg-surface-800/80 border border-surface-600/50 rounded-md">K</kbd>
                   </div>
-                  <div className="rounded-lg border border-surface-700/70 bg-surface-800/45 px-3 py-2.5">
-                    Create a new focused thread
+                  <span className="text-xs">New session</span>
+                </div>
+                <span className="text-[#3B3F48] mx-1.5">|</span>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
+                    <kbd className="inline-flex items-center justify-center min-w-[1.75rem] h-7 px-2 text-[11px] leading-none font-mono text-[#C9CED6] bg-surface-800/80 border border-surface-600/50 rounded-md">↑</kbd>
+                    <kbd className="inline-flex items-center justify-center min-w-[1.75rem] h-7 px-2 text-[11px] leading-none font-mono text-[#C9CED6] bg-surface-800/80 border border-surface-600/50 rounded-md">↓</kbd>
                   </div>
+                  <span className="text-xs">Navigate</span>
                 </div>
               </div>
             </div>
