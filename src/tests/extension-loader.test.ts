@@ -145,6 +145,11 @@ describe('shouldRetryWithoutExtensions', () => {
     ]
     expect(shouldRetryWithoutExtensions(errors, 1)).toBe(false)
   })
+
+  it('returns false when errors have undefined message (triggers ?? "" fallback)', () => {
+    const errors = [{ path: '/a' } as ExtensionLoadError]
+    expect(shouldRetryWithoutExtensions(errors, 0)).toBe(false)
+  })
 })
 
 describe('normalizeExtensionErrors', () => {
