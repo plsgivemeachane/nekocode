@@ -16,7 +16,7 @@ export function UserMessage({ content }: UserMessageProps) {
 
   return (
     <div className="flex flex-col items-end">
-      <div className="max-w-[80%] bg-transparent border-2 border-accent-500/30 text-text-primary rounded-2xl rounded-br-md px-4 py-2.5 text-sm whitespace-pre-wrap break-words">
+      <div className="max-w-[80%] bg-surface-900 border border-surface-700/80 text-text-primary rounded-2xl rounded-br-md px-4 py-2.5 text-sm whitespace-pre-wrap break-words shadow-[0_1px_0_rgba(255,255,255,0.03),0_8px_24px_rgba(0,0,0,0.22)]">
         {content}
       </div>
       <button
