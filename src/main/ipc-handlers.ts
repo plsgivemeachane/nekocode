@@ -6,6 +6,7 @@ import type {
   SessionPromptPayload,
   SessionAbortPayload,
   SessionDisposePayload,
+  SessionDeletePayload,
   SessionReconnectPayload,
   SessionReconnectResult,
   SessionLoadHistoryPayload,
@@ -69,6 +70,11 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.SESSION_DISPOSE, async (_event, payload: SessionDisposePayload): Promise<void> => {
     logger.info(`SESSION_DISPOSE sessionId=${payload.sessionId}`)
     sessionManager.dispose(payload.sessionId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SESSION_DELETE, async (_event, payload: SessionDeletePayload): Promise<void> => {
+    logger.info(`SESSION_DELETE sessionId=${payload.sessionId} cwd=${payload.cwd}`)
+    await sessionManager.deleteSession(payload.sessionId, payload.cwd)
   })
 
   ipcMain.handle(IPC_CHANNELS.SESSION_RECONNECT, async (_event, payload: SessionReconnectPayload): Promise<SessionReconnectResult> => {

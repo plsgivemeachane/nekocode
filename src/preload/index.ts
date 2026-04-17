@@ -27,6 +27,8 @@ const sessionApi: NekoCodeIPC['session'] = {
 
   dispose: (sessionId: string): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.SESSION_DISPOSE, { sessionId }),
+  deleteSession: (sessionId: string, cwd: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SESSION_DELETE, { sessionId, cwd }),
 
   reconnect: (sessionId: string, cwd: string): Promise<SessionReconnectResult> =>
     ipcRenderer.invoke(IPC_CHANNELS.SESSION_RECONNECT, { sessionId, cwd }),

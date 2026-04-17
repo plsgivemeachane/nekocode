@@ -32,6 +32,11 @@ export interface SessionDisposePayload {
   sessionId: string
 }
 
+export interface SessionDeletePayload {
+  sessionId: string
+  cwd: string
+}
+
 /** Payload for reconnecting to an existing session */
 export interface SessionReconnectPayload {
   sessionId: string
@@ -177,6 +182,7 @@ export interface NekoCodeIPC {
     prompt: (sessionId: string, text: string) => Promise<void>
     abort: (sessionId: string) => Promise<void>
     dispose: (sessionId: string) => Promise<void>
+  deleteSession: (sessionId: string, cwd: string) => Promise<void>
     reconnect: (sessionId: string, cwd: string) => Promise<SessionReconnectResult>
     loadHistory: (sessionId: string) => Promise<ChatMessageIPC[]>
     loadHistoryFromDisk: (sessionId: string, cwd: string, limit: number) => Promise<ChatMessageIPC[]>

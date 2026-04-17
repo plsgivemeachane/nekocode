@@ -102,8 +102,9 @@ function SessionList({
 }
 
 export function TreeSidebar() {
-  const { state, addProject, removeProject, reconnectSession, createSession, refreshSessions, preloadSession } =
+  const { state, addProject, removeProject, reconnectSession, createSession, refreshSessions, preloadSession, setActiveSession } =
     useProjectStore()
+  const activeSessionId = state.activeSessionId
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
@@ -182,7 +183,7 @@ export function TreeSidebar() {
     })
   }, [createSession, refreshSessions, removeProject])
 
-  const openSessionMenu = useCallback((e: React.MouseEvent, sessionId: string) => {
+  const openSessionMenu = useCallback((e: React.MouseEvent, sessionId: string, projectPath: string, projectId: string) => {
     e.preventDefault()
     e.stopPropagation()
     setCtxMenu({
@@ -197,15 +198,22 @@ export function TreeSidebar() {
         {
           label: 'Delete Session',
           icon: <svg width="13" height="13" viewBox="0 0 12 12" fill="none"><path d="M2 3.5h8M4.5 3.5V2.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v1M9 3.5v6a.5.5 0 0 1-.5.5h-5a.5.5 0 0 1-.5-.5v-6" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" /></svg>,
-          onClick: () => {
-            // Session deletion not yet implemented in backend
-            logger.warn('Session deletion not yet implemented')
+          onClick: async () => {
+            try {
+              await window.nekocode.session.deleteSession(sessionId, projectPath)
+              await refreshSessions(projectId)
+              if (activeSessionId === sessionId) {
+                setActiveSession('', '')
+              }
+            } catch (err) {
+              logger.error('Failed to delete session:', err)
+            }
           },
           danger: true,
         },
       ],
     })
-  }, [])
+  }, [activeSessionId, refreshSessions, setActiveSession])
 
   return (
     <aside className="w-60 bg-surface-900 h-screen flex flex-col shrink-0 text-text-primary shadow-[inset_-1px_0_0_rgba(255,255,255,0.06)]">
@@ -278,7 +286,7 @@ export function TreeSidebar() {
                   sessionStatuses={state.sessionStatuses}
                   onReconnect={(sessionId) => reconnectSession(sessionId, project.path)}
                   onHoverSession={(sessionId) => preloadSession(sessionId, project.path)}
-                  onContextMenu={openSessionMenu}
+                  onContextMenu={(e, sessionId) => openSessionMenu(e, sessionId, project.path, project.id)}
                   onCreateSession={() => createSession(project.path)}
                 />
               )}

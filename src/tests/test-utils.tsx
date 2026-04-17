@@ -14,6 +14,7 @@ function createMockSessionAPI(): NekoCodeIPC['session'] {
     prompt: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     abort: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     dispose: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    deleteSession: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     reconnect: vi.fn<() => Promise<SessionReconnectResult>>().mockResolvedValue({
       sessionId: 'mock-sdk-session-id',
       stableId: 'mock-stable-id',

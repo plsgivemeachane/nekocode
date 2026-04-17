@@ -8,6 +8,7 @@ export const IPC_CHANNELS = {
   SESSION_EVENTS: 'session:events',
   SESSION_ABORT: 'session:abort',
   SESSION_DISPOSE: 'session:dispose',
+  SESSION_DELETE: 'session:delete',
   SESSION_RECONNECT: 'session:reconnect',
   SESSION_LOAD_HISTORY: 'session:load-history',
   SESSION_LOAD_HISTORY_DISK: 'session:load-history-disk',

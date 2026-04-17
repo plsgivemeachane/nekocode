@@ -312,6 +312,28 @@ export class PiSessionManager {
     return diskMessages
   }
 
+  /** Delete a session file from disk and dispose it if active. */
+  async deleteSession(sessionId: string, cwd: string): Promise<void> {
+    // If the session is currently in memory, dispose it first
+    if (this.sessions.has(sessionId)) {
+      this.dispose(sessionId)
+    }
+    // Find and delete the session file from disk
+    const infos = await SdkSessionManager.list(cwd)
+    const match = infos.find(info => info.id === sessionId)
+    if (match?.path) {
+      try {
+        unlinkSync(match.path)
+        logger.info(`deleteSession ${sessionId} — deleted file ${match.path}`)
+      } catch (err) {
+        logger.warn(`deleteSession ${sessionId} — failed to delete file ${match.path}:`, err)
+        throw err
+      }
+    } else {
+      logger.warn(`deleteSession ${sessionId} — session file not found on disk for cwd=${cwd}`)
+    }
+  }
+
   /** Dispose a session, cleaning up subscriptions and SDK resources. */
   dispose(sessionId: string): void {
     const managed = this.getManaged(sessionId)
