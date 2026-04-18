@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useCallback } from 'react'
 import { useSession } from '../hooks/useSession'
+import { useAutoScroll } from '../hooks/useAutoScroll'
 import { UserMessage } from './chat/UserMessage'
 import { AssistantMessage } from './chat/AssistantMessage'
 import { ToolCallGroup } from './chat/ToolCallSection'
@@ -7,14 +8,13 @@ import { MessagesTimeline } from './chat/MessagesTimeline'
 import { StatusIndicator } from './StatusIndicator'
 import { WelcomeScreen } from './WelcomeScreen'
 import { NavBar } from './NavBar'
+import { ChatInput, type ChatInputHandle } from './ChatInput'
 import { useProjectStore } from '../stores/project-store'
 import { createLogger } from '../logger'
 
 const logger = createLogger('ChatView')
 import type { ChatMessage } from '../types/chat'
 
-const SCROLL_THRESHOLD_PX = 40
-const TEXTAREA_MAX_HEIGHT_PX = 200
 const SESSION_SELECTED_EVENT = 'nekocode:session-selected'
 
 interface ChatViewProps {
@@ -28,31 +28,48 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
     useSession({ sessionId })
   const isAgentConnecting = sessionId != null && !projectState.agentReady
 
-  const [showScrollBtn, setShowScrollBtn] = React.useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const messageContentRef = useRef<HTMLDivElement>(null)
-  const isAtBottomRef = useRef(true)
-  const programmaticScrollRef = useRef(false)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const [showModelDropdown, setShowModelDropdown] = React.useState(false)
+  const chatInputRef = useRef<ChatInputHandle>(null)
   const [gitBranch, setGitBranch] = React.useState<string | null>(null)
-  const modelDropdownRef = useRef<HTMLDivElement>(null)
-  const wasAgentConnectingRef = useRef(isAgentConnecting)
-  const wasHistoryLoadingRef = useRef(isHistoryLoading)
 
+  // --- Auto-scroll ---
+  const { showScrollBtn, scrollToBottom, handleScroll } = useAutoScroll({
+    scrollContainerRef,
+    messageContentRef,
+    scrollDeps: [messages],
+    isStreaming,
+    sessionId,
+    isAgentConnecting,
+    isHistoryLoading,
+    messageCount: messages.length,
+  })
+
+  // --- Focus management ---
   const focusInput = useCallback(() => {
-    const ta = textareaRef.current
-    if (!ta || ta.disabled) return
-    ta.focus()
-    const length = ta.value.length
-    ta.setSelectionRange(length, length)
+    chatInputRef.current?.focus()
   }, [])
 
-  const getDistanceFromBottom = useCallback((el: HTMLDivElement) => {
-    return el.scrollHeight - el.scrollTop - el.clientHeight
-  }, [])
+  useEffect(() => {
+    if (!sessionId) return
+    requestAnimationFrame(() => {
+      focusInput()
+    })
+  }, [focusInput, sessionId])
 
-  // Fetch git branch when project path changes
+  useEffect(() => {
+    const handleSessionSelected = () => {
+      requestAnimationFrame(() => {
+        focusInput()
+      })
+    }
+    window.addEventListener(SESSION_SELECTED_EVENT, handleSessionSelected)
+    return () => {
+      window.removeEventListener(SESSION_SELECTED_EVENT, handleSessionSelected)
+    }
+  }, [focusInput])
+
+  // --- Git branch ---
   React.useEffect(() => {
     const path = projectState.activeProjectPath
     if (!path) {
@@ -66,207 +83,28 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
     return () => { cancelled = true }
   }, [projectState.activeProjectPath])
 
-  // Instant scroll to bottom (no smooth — avoids jank during streaming)
-  const scrollToBottom = useCallback((smooth = false) => {
-    const el = scrollContainerRef.current
-    if (!el) return
-    programmaticScrollRef.current = true
-    isAtBottomRef.current = true
-    setShowScrollBtn(false)
-    if (smooth) {
-      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
-    } else {
-      el.scrollTop = el.scrollHeight
-    }
-    requestAnimationFrame(() => {
-      const current = scrollContainerRef.current
-      if (current) {
-        const atBottom = getDistanceFromBottom(current) < SCROLL_THRESHOLD_PX
-        isAtBottomRef.current = atBottom
-        setShowScrollBtn(!atBottom && messages.length > 0)
-      }
-      programmaticScrollRef.current = false
-    })
-  }, [getDistanceFromBottom, messages.length])
-
-  // Close model dropdown on outside click
-  useEffect(() => {
-    if (!showModelDropdown) return
-    const handler = (e: MouseEvent) => {
-      if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
-        setShowModelDropdown(false)
-      }
-    }
-    document.addEventListener("mousedown", handler)
-    return () => document.removeEventListener("mousedown", handler)
-  }, [showModelDropdown])
-
-  // Track scroll position — update isAtBottomRef and button visibility
-  const handleScroll = useCallback(() => {
-    const el = scrollContainerRef.current
-    if (!el) return
-    const atBottom = getDistanceFromBottom(el) < SCROLL_THRESHOLD_PX
-    isAtBottomRef.current = atBottom
-    setShowScrollBtn(!atBottom && messages.length > 0)
-  }, [getDistanceFromBottom, messages.length])
-
-  // Auto-scroll when messages or streaming state change — only if user hasn't scrolled up
-  useEffect(() => {
-    if (isAtBottomRef.current) {
-      scrollToBottom(false)
-    }
-  }, [messages, isStreaming, scrollToBottom])
-
-  // Keep auto-scroll stable when content height changes after render (e.g. markdown/code highlighting)
-  useEffect(() => {
-    const container = scrollContainerRef.current
-    const content = messageContentRef.current
-    if (!container || !content) return
-
-    const observer = new ResizeObserver(() => {
-      if (isAtBottomRef.current) {
-        scrollToBottom(false)
-      }
-    })
-
-    observer.observe(content)
-    return () => observer.disconnect()
-  }, [scrollToBottom])
-
-  // Scroll to bottom on initial session (when first messages arrive)
-  useEffect(() => {
-    if (messages.length === 1) {
-      scrollToBottom(false)
-    }
-  }, [messages.length, scrollToBottom])
-
-  // Reset scroll lock on session switch so each session opens at latest messages
-  useEffect(() => {
-    isAtBottomRef.current = true
-    setShowScrollBtn(false)
-    if (sessionId) {
-      requestAnimationFrame(() => scrollToBottom(false))
-    }
-  }, [sessionId, scrollToBottom])
-
-  // Keep the prompt focused when a session is selected.
-  useEffect(() => {
-    if (!sessionId) return
-    requestAnimationFrame(() => {
-      focusInput()
-    })
-  }, [focusInput, sessionId])
-
-  // Sidebar can emit this when re-selecting an already active session.
-  useEffect(() => {
-    const handleSessionSelected = () => {
-      requestAnimationFrame(() => {
-        focusInput()
-      })
-    }
-
-    window.addEventListener(SESSION_SELECTED_EVENT, handleSessionSelected)
-    return () => {
-      window.removeEventListener(SESSION_SELECTED_EVENT, handleSessionSelected)
-    }
-  }, [focusInput])
-
-  // When connection finishes, force viewport to latest messages so loaded content
-  // does not shift the view downward.
-  useEffect(() => {
-    const wasConnecting = wasAgentConnectingRef.current
-    if (wasConnecting && !isAgentConnecting) {
-      isAtBottomRef.current = true
-      setShowScrollBtn(false)
-      requestAnimationFrame(() => {
-        scrollToBottom(false)
-        requestAnimationFrame(() => scrollToBottom(false))
-      })
-    }
-    wasAgentConnectingRef.current = isAgentConnecting
-  }, [isAgentConnecting, scrollToBottom])
-
-  // Reconnect can complete before large history batches fully render.
-  // Snap to bottom when history loading flips to completed.
-  useEffect(() => {
-    const wasHistoryLoading = wasHistoryLoadingRef.current
-    if (wasHistoryLoading && !isHistoryLoading && sessionId && messages.length > 0) {
-      isAtBottomRef.current = true
-      setShowScrollBtn(false)
-      requestAnimationFrame(() => {
-        scrollToBottom(false)
-        requestAnimationFrame(() => scrollToBottom(false))
-      })
-    }
-    wasHistoryLoadingRef.current = isHistoryLoading
-  }, [isHistoryLoading, messages.length, scrollToBottom, sessionId])
-
-  // Log session changes
+  // --- Logging ---
   useEffect(() => {
     if (sessionId) {
       logger.info(`session changed: ${sessionId.slice(0, 8)}...`)
     }
   }, [sessionId])
 
-  // Log errors
   useEffect(() => {
     if (error) {
       logger.warn(`error: ${error}`)
     }
   }, [error])
 
+  // --- Welcome screen suggestion handler ---
   const handleSuggestionFromWelcome = useCallback((prompt: string) => {
     setInput(prompt)
     sendPrompt(prompt)
   }, [sendPrompt])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const text = input.trim()
-    if (!text || isStreaming) return
-    setInput('')
-    // Reset textarea height after clearing
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
-    }
-    logger.info(`submit: ${text.slice(0, 80)}${text.length > 80 ? '...' : ''}`)
-    await sendPrompt(text)
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      const text = input.trim()
-      if (text && !isStreaming) {
-        setInput('')
-        if (textareaRef.current) {
-          textareaRef.current.style.height = 'auto'
-        }
-        sendPrompt(text)
-      }
-    }
-  }
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value)
-    // Auto-resize textarea
-    const ta = textareaRef.current
-    if (ta) {
-      ta.style.height = 'auto'
-      ta.style.height = `${Math.min(ta.scrollHeight, TEXTAREA_MAX_HEIGHT_PX)}px`
-    }
-  }
-
-  const handleInputContainerMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    const target = e.target as HTMLElement
-    if (target.closest('button, input, textarea, a, select, option, [role="button"]')) return
-    e.preventDefault()
-    textareaRef.current?.focus()
-  }
-
+  // --- Message grouping ---
   const lastMessageId = messages.length > 0 ? messages[messages.length - 1].id : null
 
-  // Group consecutive tool_call messages into clusters
   type ToolCallMsg = Extract<ChatMessage, { role: 'assistant'; type: 'tool_call' }>
   type MessageGroup =
     | { key: string; type: 'single'; msg: ChatMessage }
@@ -312,8 +150,6 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
         return null
     }
   }
-
-
 
   return (
     <div className={`bg-surface-950 text-text-primary flex flex-col h-full ${className ?? ""}`}>
@@ -378,8 +214,8 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
                 <span className="text-[#3B3F48] mx-1.5">|</span>
                 <div className="flex items-center gap-2">
                   <div className="flex items-center gap-1">
-                    <kbd className="inline-flex items-center justify-center min-w-[1.75rem] h-7 px-2 text-[11px] leading-none font-mono text-[#C9CED6] bg-surface-800/80 border border-surface-600/50 rounded-md">↑</kbd>
-                    <kbd className="inline-flex items-center justify-center min-w-[1.75rem] h-7 px-2 text-[11px] leading-none font-mono text-[#C9CED6] bg-surface-800/80 border border-surface-600/50 rounded-md">↓</kbd>
+                    <kbd className="inline-flex items-center justify-center min-w-[1.75rem] h-7 px-2 text-[11px] leading-none font-mono text-[#C9CED6] bg-surface-800/80 border border-surface-600/50 rounded-md">&uarr;</kbd>
+                    <kbd className="inline-flex items-center justify-center min-w-[1.75rem] h-7 px-2 text-[11px] leading-none font-mono text-[#C9CED6] bg-surface-800/80 border border-surface-600/50 rounded-md">&darr;</kbd>
                   </div>
                   <span className="text-xs">Navigate</span>
                 </div>
@@ -448,102 +284,20 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
         </div>
       )}
 
-      <footer className="px-6 py-4 bg-surface-950">
-        <div className="max-w-3xl mx-auto">
-          <form onSubmit={handleSubmit}>
-            <div
-              onMouseDown={handleInputContainerMouseDown}
-              className="rounded-[1.25rem] border border-surface-700 bg-surface-900 p-4 shadow-[0_0_20px_rgba(0,0,0,0.2)] cursor-text"
-            >
-              <textarea
-                ref={textareaRef}
-                value={input}
-                onChange={handleInputChange}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask anything, @tag files/folders, or use / to show available commands"
-                disabled={!sessionId || isStreaming}
-                rows={1}
-                className="w-full bg-transparent text-sm text-text-primary placeholder:text-text-tertiary/50 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed resize-none overflow-hidden leading-relaxed"
-              />
-              <div className="flex items-center justify-between mt-2 pt-2">
-                <div className="flex items-center gap-0 text-xs text-text-secondary">
-                  <div ref={modelDropdownRef} className="relative">
-                    <button type="button" onClick={() => setShowModelDropdown(v => !v)} className="flex items-center gap-1.5 px-3.5 py-2 rounded-md hover:bg-surface-800 transition-colors duration-150 border border-transparent hover:border-surface-600">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-accent-400">
-                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5"/>
-                        <path d="M8 12h8M12 8v8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                      </svg>
-                      <span>{activeModel ? activeModel.name : "Loading..."}</span>
-                      <svg width="10" height="10" viewBox="0 0 10 10" className="text-text-tertiary"><path d="M3 4l2 2 2-2" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </button>
-                    {showModelDropdown && (() => {
-                      const visibleModels = modelList.filter(m => !["anthropic", "google", "openai"].includes(m.provider))
-                      return visibleModels.length > 0 ? (
-                      <div className="absolute bottom-full left-0 mb-1 w-56 bg-surface-800 border border-surface-700 rounded-lg shadow-xl p-2 max-h-64 overflow-y-auto z-50">
-                        {visibleModels.map(m => (
-                          <button
-                            key={m.id}
-                            type="button"
-                            onClick={() => { setModel(m.provider, m.id); setShowModelDropdown(false) }}
-                            className={`w-full text-left px-3.5 py-2 text-xs hover:bg-surface-700 transition-colors flex items-center justify-between rounded-md border border-transparent hover:border-surface-600 ${activeModel?.id === m.id ? "text-accent-400" : "text-text-secondary"}`}
-                          >
-                            <span>{m.name}</span>
-                            <span className="text-text-tertiary text-[10px] ml-2">{m.provider}</span>
-                          </button>
-                        ))}
-                      </div>
-                      ) : (
-                        <div className="absolute bottom-full left-0 mb-1 w-56 bg-surface-800 border border-surface-700 rounded-lg shadow-xl p-2 z-50">
-                          <div className="px-3 py-2 text-xs text-text-tertiary">No models configured</div>
-                        </div>
-                      )
-                    })()}
-                  </div>
-                </div>
-                {isStreaming ? (
-                  <button
-                    type="button"
-                    onClick={() => void abortPrompt()}
-                    disabled={!sessionId}
-                    className="w-9 h-9 flex items-center justify-center rounded-full bg-error text-white hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-black/25"
-                    aria-label="Stop response"
-                    title="Stop"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                      <rect x="3" y="3" width="8" height="8" rx="1.2" fill="currentColor" />
-                    </svg>
-                  </button>
-                ) : (
-                  <button
-                    type="submit"
-                    disabled={!sessionId || !input.trim()}
-                    className="w-9 h-9 flex items-center justify-center rounded-full bg-accent-700 text-white hover:bg-accent-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-accent-700/25 hover:shadow-accent-600/35"
-                    aria-label="Send message"
-                    title="Send"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                      <path d="M8 3v10M4 7l4-4 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </button>
-                )}
-              </div>
-            </div>
-          </form>
-          <div className="flex items-center justify-between mt-2 px-1">
-            <span className="flex items-center gap-1.5 text-[11px] text-text-tertiary truncate max-w-[260px]">
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                <path d="M2 4h12M2 4v8a2 2 0 002 2h8a2 2 0 002-2V4M2 4l2-2h8l2 2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              {projectState.activeProjectPath}
-            </span>
-            <span className="flex items-center gap-1 text-[11px] text-text-tertiary">
-              {gitBranch ?? "..."}
-              <svg width="10" height="10" viewBox="0 0 10 10"><path d="M3 4l2 2 2-2" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </span>
-          </div>
-        </div>
-      </footer>
-
+      <ChatInput
+        ref={chatInputRef}
+        sessionId={sessionId}
+        isStreaming={isStreaming}
+        input={input}
+        setInput={setInput}
+        sendPrompt={sendPrompt}
+        abortPrompt={abortPrompt}
+        activeModel={activeModel}
+        modelList={modelList}
+        setModel={setModel}
+        projectPath={projectState.activeProjectPath}
+        gitBranch={gitBranch}
+      />
     </div>
   )
 }
