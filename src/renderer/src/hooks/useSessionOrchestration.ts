@@ -1,7 +1,7 @@
 import { useCallback, useRef } from 'react'
 import type { ProjectAction } from '../stores/project-store'
 import type { Dispatch } from 'react'
-import { createLogger } from '../logger'
+import { createLogger } from '../utils/logger'
 import { logExtensionLoadWarnings } from '../utils/extension-logging'
 
 const logger = createLogger('useSessionOrchestration')

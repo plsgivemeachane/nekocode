@@ -31,6 +31,9 @@ export const IPC_CHANNELS = {
   UPDATE_DOWNLOADED: 'update:downloaded',
   UPDATE_ERROR: 'update:error',
   GIT_GET_BRANCH: 'git:get-branch',
+  ZOOM_GET: 'zoom:get',
+  ZOOM_SET: 'zoom:set',
+  ZOOM_RESET: 'zoom:reset',
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]

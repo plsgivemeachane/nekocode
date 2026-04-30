@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { ChatMessage } from '@/renderer/src/types/chat'
+import type { ChatMessage, AssistantTextMessage, AssistantToolCallMessage } from '@/renderer/src/types/chat'
 import { handleTextDelta, handleToolCall, handleToolResult } from '@/renderer/src/utils/message-transforms'
 
 /**
@@ -26,6 +26,10 @@ const toolMsg = (overrides: { toolName: string; toolId: string; status?: 'runnin
   id: overrides.id ?? 't1',
 })
 
+// Type assertion helpers for tests
+const asText = (msg: ChatMessage) => msg as AssistantTextMessage
+const asTool = (msg: ChatMessage) => msg as AssistantToolCallMessage
+
 // ── Tests ──────────────────────────────────────────────────────────
 
 describe('useSession message transformation logic', () => {
@@ -34,28 +38,28 @@ describe('useSession message transformation logic', () => {
       const msgs = handleTextDelta([], 'Hello')
       expect(msgs).toHaveLength(1)
       expect(msgs[0].role).toBe('assistant')
-      expect(msgs[0].type).toBe('text')
-      expect(msgs[0].content).toBe('Hello')
+      expect(asText(msgs[0]).type).toBe('text')
+      expect(asText(msgs[0]).content).toBe('Hello')
     })
 
     it('appends to existing assistant text message', () => {
       let msgs = handleTextDelta([], 'Hello')
       msgs = handleTextDelta(msgs, ' world')
       expect(msgs).toHaveLength(1)
-      expect(msgs[0].content).toBe('Hello world')
+      expect(asText(msgs[0]).content).toBe('Hello world')
     })
 
     it('creates new assistant text after a user message', () => {
       const msgs = handleTextDelta([userMsg('hi')], 'Hey there')
       expect(msgs).toHaveLength(2)
-      expect(msgs[1].content).toBe('Hey there')
+      expect(asText(msgs[1]).content).toBe('Hey there')
     })
 
     it('creates new assistant text after a tool_call', () => {
       const msgs = handleTextDelta([toolMsg({ toolName: 'bash', toolId: 'tc-1', status: 'done' })], 'Result:')
       expect(msgs).toHaveLength(2)
-      expect(msgs[1].type).toBe('text')
-      expect(msgs[1].content).toBe('Result:')
+      expect(asText(msgs[1]).type).toBe('text')
+      expect(asText(msgs[1]).content).toBe('Result:')
     })
 
     it('accumulates many deltas into one message', () => {
@@ -64,7 +68,7 @@ describe('useSession message transformation logic', () => {
         msgs = handleTextDelta(msgs, ch)
       }
       expect(msgs).toHaveLength(1)
-      expect(msgs[0].content).toBe('Hello world!')
+      expect(asText(msgs[0]).content).toBe('Hello world!')
     })
   })
 
@@ -77,9 +81,9 @@ describe('useSession message transformation logic', () => {
         args: { command: 'ls' },
       })
       expect(msgs).toHaveLength(1)
-      expect(msgs[0].type).toBe('tool_call')
-      expect(msgs[0].status).toBe('running')
-      expect(msgs[0].toolName).toBe('bash')
+      expect(asTool(msgs[0]).type).toBe('tool_call')
+      expect(asTool(msgs[0]).status).toBe('running')
+      expect(asTool(msgs[0]).toolName).toBe('bash')
     })
 
     it('preserves existing messages', () => {
@@ -90,8 +94,8 @@ describe('useSession message transformation logic', () => {
         args: { path: '/f' },
       })
       expect(msgs).toHaveLength(2)
-      expect(msgs[0].content).toBe('Let me check')
-      expect(msgs[1].type).toBe('tool_call')
+      expect(asText(msgs[0]).content).toBe('Let me check')
+      expect(asTool(msgs[1]).type).toBe('tool_call')
     })
   })
 
@@ -105,9 +109,9 @@ describe('useSession message transformation logic', () => {
         isError: false,
       })
       expect(msgs).toHaveLength(1)
-      expect(msgs[0].status).toBe('done')
-      expect(msgs[0].result).toBe('file.txt')
-      expect(msgs[0].isError).toBe(false)
+      expect(asTool(msgs[0]).status).toBe('done')
+      expect(asTool(msgs[0]).result).toBe('file.txt')
+      expect(asTool(msgs[0]).isError).toBe(false)
     })
 
     it('matches the most recent running tool_call by toolId', () => {
@@ -115,9 +119,9 @@ describe('useSession message transformation logic', () => {
         [toolMsg({ toolName: 'bash', toolId: 'tc-1', status: 'done', id: 't1' }), toolMsg({ toolName: 'read', toolId: 'tc-2', id: 't2' })],
         { type: 'tool_result', toolName: 'read', toolCallId: 'tc-2', result: 'contents', isError: false },
       )
-      expect(msgs[0].status).toBe('done')
-      expect(msgs[1].status).toBe('done')
-      expect(msgs[1].result).toBe('contents')
+      expect(asTool(msgs[0]).status).toBe('done')
+      expect(asTool(msgs[1]).status).toBe('done')
+      expect(asTool(msgs[1]).result).toBe('contents')
     })
 
     it('sets isError on tool_result', () => {
@@ -128,9 +132,9 @@ describe('useSession message transformation logic', () => {
         result: 'command not found',
         isError: true,
       })
-      expect(msgs[0].status).toBe('done')
-      expect(msgs[0].isError).toBe(true)
-      expect(msgs[0].result).toBe('command not found')
+      expect(asTool(msgs[0]).status).toBe('done')
+      expect(asTool(msgs[0]).isError).toBe(true)
+      expect(asTool(msgs[0]).result).toBe('command not found')
     })
 
     it('returns unchanged when no matching tool_call found', () => {
@@ -142,8 +146,8 @@ describe('useSession message transformation logic', () => {
         isError: false,
       })
       expect(msgs).toHaveLength(1)
-      expect(msgs[0].type).toBe('text')
-      expect(msgs[0].content).toBe('hi')
+      expect(asText(msgs[0]).type).toBe('text')
+      expect(asText(msgs[0]).content).toBe('hi')
     })
 
     it('does not match already-completed tool_calls', () => {
@@ -154,8 +158,8 @@ describe('useSession message transformation logic', () => {
         result: 'should not match',
         isError: false,
       })
-      expect(msgs[0].status).toBe('done')
-      expect(msgs[0].result).toBeUndefined()
+      expect((msgs[0] as { status: string }).status).toBe('done')
+      expect((msgs[0] as { result?: unknown }).result).toBeUndefined()
     })
   })
 
@@ -166,25 +170,25 @@ describe('useSession message transformation logic', () => {
       msgs = handleTextDelta(msgs, 'Let me read ')
       msgs = handleTextDelta(msgs, 'that file.')
       expect(msgs).toHaveLength(1)
-      expect(msgs[0].content).toBe('Let me read that file.')
+      expect((msgs[0] as { content: string }).content).toBe('Let me read that file.')
 
       msgs = handleToolCall(msgs, {
         type: 'tool_call', toolName: 'read', toolCallId: 'tc-1', args: { path: '/f' },
       })
       expect(msgs).toHaveLength(2)
-      expect(msgs[1].status).toBe('running')
+      expect((msgs[1] as { status: string }).status).toBe('running')
 
       msgs = handleToolResult(msgs, {
         type: 'tool_result', toolName: 'read', toolCallId: 'tc-1', result: 'file contents here', isError: false,
       })
       expect(msgs).toHaveLength(2)
-      expect(msgs[1].status).toBe('done')
-      expect(msgs[1].result).toBe('file contents here')
+      expect(asTool(msgs[1]).status).toBe('done')
+      expect(asTool(msgs[1]).result).toBe('file contents here')
 
       msgs = handleTextDelta(msgs, 'The file says: ')
       msgs = handleTextDelta(msgs, 'file contents here')
       expect(msgs).toHaveLength(3)
-      expect(msgs[2].content).toBe('The file says: file contents here')
+      expect(asText(msgs[2]).content).toBe('The file says: file contents here')
 
       expect(msgs).toHaveLength(3)
     })
@@ -199,10 +203,10 @@ describe('useSession message transformation logic', () => {
       msgs = handleToolResult(msgs, { type: 'tool_result', toolName: 'bash', toolCallId: 'tc-2', result: 'b', isError: false })
 
       expect(msgs).toHaveLength(2)
-      expect(msgs[0].toolName).toBe('read')
-      expect(msgs[0].status).toBe('done')
-      expect(msgs[1].toolName).toBe('bash')
-      expect(msgs[1].status).toBe('done')
+      expect(asTool(msgs[0]).toolName).toBe('read')
+      expect(asTool(msgs[0]).status).toBe('done')
+      expect(asTool(msgs[1]).toolName).toBe('bash')
+      expect(asTool(msgs[1]).status).toBe('done')
     })
   })
 })

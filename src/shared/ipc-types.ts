@@ -176,6 +176,10 @@ export interface UpdateErrorInfo {
 }
 
 /** API exposed to the renderer via contextBridge */
+export interface ZoomInfo {
+  factor: number
+}
+
 export interface NekoCodeIPC {
   session: {
     create: (cwd: string) => Promise<SessionCreateResult>
@@ -216,5 +220,10 @@ export interface NekoCodeIPC {
     onProgress: (callback: (progress: UpdateProgress) => void) => () => void
     onDownloaded: (callback: (info: { version: string }) => void) => () => void
     onError: (callback: (error: UpdateErrorInfo) => void) => () => void
+  }
+  zoom: {
+    get: () => Promise<ZoomInfo>
+    set: (factor: number) => Promise<void>
+    reset: () => Promise<void>
   }
 }

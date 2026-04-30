@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useCallback } from 'react'
-import { useSession } from '../hooks/useSession'
-import { WelcomeScreen } from './WelcomeScreen'
-import { createLogger } from '../logger'
+import { useSession } from '../../hooks/useSession'
+import { WelcomeScreen } from '../ui/WelcomeScreen'
+import { createLogger } from '../../utils/logger'
 
 const logger = createLogger('SessionView')
 

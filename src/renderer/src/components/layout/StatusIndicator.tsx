@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import type { UsageData } from '../../../shared/ipc-types'
+import type { UsageData } from '../../../../shared/ipc-types'
 
 const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 

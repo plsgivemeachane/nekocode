@@ -12,7 +12,7 @@ import type {
   SessionInfoDisplay,
   ChatMessageIPC,
 } from '../../../shared/ipc-types'
-import { createLogger } from '../logger'
+import { createLogger } from '../utils/logger'
 import { updateSessionInProject } from '../utils/project-helpers'
 import { useSessionOrchestration } from '../hooks/useSessionOrchestration'
 

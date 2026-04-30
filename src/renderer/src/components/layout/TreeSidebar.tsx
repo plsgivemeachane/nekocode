@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { useProjectStore, type SessionStatus } from '../stores/project-store'
-import { ContextMenu, type ContextMenuEntry } from './ContextMenu'
-import { createLogger } from '../logger'
+import { useProjectStore, type SessionStatus } from '../../stores/project-store'
+import { ContextMenu, type ContextMenuEntry } from '../ui/ContextMenu'
+import { createLogger } from '../../utils/logger'
 
 const logger = createLogger('TreeSidebar')
 

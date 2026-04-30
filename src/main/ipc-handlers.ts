@@ -223,6 +223,31 @@ export function registerIpcHandlers(
       return null
     }
   })
+
+  // --- Zoom handlers ---
+
+  ipcMain.handle(IPC_CHANNELS.ZOOM_GET, async (): Promise<{ factor: number }> => {
+    const win = BrowserWindow.getFocusedWindow()
+    if (win && !win.isDestroyed()) {
+      const factor = win.webContents.getZoomFactor()
+      return { factor }
+    }
+    return { factor: 1.0 }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.ZOOM_SET, async (_event, payload: { factor: number }): Promise<void> => {
+    const win = BrowserWindow.getFocusedWindow()
+    if (win && !win.isDestroyed()) {
+      win.webContents.setZoomFactor(payload.factor)
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.ZOOM_RESET, async (): Promise<void> => {
+    const win = BrowserWindow.getFocusedWindow()
+    if (win && !win.isDestroyed()) {
+      win.webContents.setZoomFactor(1.0)
+    }
+  })
 }
 
 /**

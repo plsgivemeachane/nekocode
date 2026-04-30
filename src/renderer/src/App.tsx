@@ -1,8 +1,8 @@
 import React from 'react'
 import { ProjectProvider, useProjectStore } from './stores/project-store'
-import { TreeSidebar } from './components/TreeSidebar'
-import { ChatView } from './components/ChatView'
-import { createLogger } from './logger'
+import { TreeSidebar } from './components/layout/TreeSidebar'
+import { ChatView } from './components/chat/ChatView'
+import { createLogger } from './utils/logger'
 
 const logger = createLogger('App')
 

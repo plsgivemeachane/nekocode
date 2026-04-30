@@ -1,6 +1,6 @@
 import React, { useRef, useState, useCallback, useImperativeHandle, forwardRef } from 'react'
-import { useClickOutside } from '../hooks/useClickOutside'
-import { createLogger } from '../logger'
+import { useClickOutside } from '../../hooks/useClickOutside'
+import { createLogger } from '../../utils/logger'
 
 type Model = { id: string; name: string; provider: string }
 

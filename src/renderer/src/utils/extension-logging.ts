@@ -1,5 +1,5 @@
 import type { ExtensionLoadError } from '../../../shared/ipc-types'
-import { createLogger } from '../logger'
+import { createLogger } from './logger'
 
 const logger = createLogger('extension-logging')
 

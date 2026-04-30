@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { ModelInfo } from '../../../shared/ipc-types'
-import { createLogger } from '../logger'
+import { createLogger } from '../utils/logger'
 
 const logger = createLogger('useModelSelection')
 

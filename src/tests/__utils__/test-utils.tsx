@@ -1,7 +1,7 @@
 import type { NekoCodeIPC } from '@/shared/ipc-types'
 import type { SessionStreamEvent, ChatMessageIPC, ProjectInfo, SessionCreateResult, SessionReconnectResult, WorkspaceActiveResult, ModelInfo, UpdateAvailableInfo } from '@/shared/ipc-types'
-import type { PiSessionManager } from '../main/session-manager'
-import type { ProjectManager } from '../main/project-manager'
+import type { PiSessionManager } from '../../main/session-manager'
+import type { ProjectManager } from '../../main/project-manager'
 
 // ── Mock IPC factory ──────────────────────────────────────────────
 
@@ -85,6 +85,11 @@ export function createMockIPC(): NekoCodeIPC {
     workspace: createMockWorkspaceAPI(),
     update: createMockUpdateAPI(),
     git: { getBranch: vi.fn().mockResolvedValue(null) },
+    zoom: {
+      get: vi.fn().mockResolvedValue({ factor: 1.0 }),
+      set: vi.fn().mockResolvedValue(undefined),
+      reset: vi.fn().mockResolvedValue(undefined),
+    },
   }
 }
 

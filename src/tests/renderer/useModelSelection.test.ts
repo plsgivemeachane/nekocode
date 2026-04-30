@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import type { ModelInfo } from '@/shared/ipc-types'
 import { useModelSelection } from '@/renderer/src/hooks/useModelSelection'
-import { createMockIPC, setupMockIPC, clearMockIPC } from '../test-utils'
+import { createMockIPC, setupMockIPC, clearMockIPC } from '../__utils__/test-utils'
 import type { Mock } from 'vitest'
 
 // ── Helpers ─────────────────────────────────────────────────────
