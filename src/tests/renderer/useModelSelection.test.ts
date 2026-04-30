@@ -12,8 +12,10 @@ const mockModel: ModelInfo = { id: 'gpt-4', name: 'GPT-4', provider: 'openai' }
 const mockModel2: ModelInfo = { id: 'claude-3', name: 'Claude 3', provider: 'anthropic' }
 const mockModelList: ModelInfo[] = [mockModel, mockModel2]
 
-function flushPromises(): Promise<void> {
-  return act(async () => undefined)
+async function flushPromises(): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
 }
 
 // Type-safe accessors for mock functions on the IPC object
@@ -51,8 +53,9 @@ describe('useModelSelection', () => {
 
   describe('activeModel', () => {
     it('returns null initially before the IPC resolves', () => {
-      // Make getModel hang so it hasn't resolved yet
+      // Make both IPCs hang so no state updates occur during test
       getModel.mockReturnValue(new Promise(() => {}))
+      listModels.mockReturnValue(new Promise(() => {}))
       const { result } = renderHook(() => useModelSelection('sess-1'))
       expect(result.current.activeModel).toBeNull()
     })
@@ -296,20 +299,36 @@ describe('useModelSelection', () => {
         { initialProps: { sid: 'sess-1' } },
       )
 
+      // Wait for initial effects to complete
+      await flushPromises()
+
       const fn1 = result.current.setModel
 
-      rerender({ sid: 'sess-1' })
+      await act(() => {
+        rerender({ sid: 'sess-1' })
+      })
       expect(result.current.setModel).toBe(fn1)
 
-      rerender({ sid: 'sess-2' })
+      await act(() => {
+        rerender({ sid: 'sess-2' })
+      })
+      await flushPromises()
       expect(result.current.setModel).not.toBe(fn1)
     })
 
     it('is stable when sessionId is null (still a valid callback)', async () => {
+      listModels.mockResolvedValue([])
+
       const { result, rerender } = renderHook(() => useModelSelection(null))
+
+      // Wait for modelList effect to complete
+      await flushPromises()
+
       const fn1 = result.current.setModel
 
-      rerender()
+      await act(() => {
+        rerender()
+      })
       expect(result.current.setModel).toBe(fn1)
     })
 
@@ -335,7 +354,11 @@ describe('useModelSelection', () => {
   // ── Integration ─────────────────────────────────────────────
 
   describe('integration', () => {
-    it('returns the correct shape', () => {
+    it('returns the correct shape', async () => {
+      // Make mocks hang so no state updates occur during test
+      getModel.mockReturnValue(new Promise(() => {}))
+      listModels.mockReturnValue(new Promise(() => {}))
+
       const { result } = renderHook(() => useModelSelection('sess-1'))
       expect(result.current).toHaveProperty('activeModel')
       expect(result.current).toHaveProperty('modelList')
