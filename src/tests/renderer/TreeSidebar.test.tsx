@@ -23,7 +23,14 @@ const mockRemoveProject = vi.fn()
 const mockRefreshSessions = vi.fn()
 const mockSetActiveSession = vi.fn()
 
-const mockProjectState = {
+const mockProjectState: {
+  projects: ProjectInfo[]
+  activeSessionId: string | null
+  activeProjectPath: string
+  sessionStatuses: Record<string, string>
+  preloadedHistory: Record<string, unknown>
+  agentReady: boolean
+} = {
   projects: [],
   activeSessionId: null,
   activeProjectPath: "/test/project",

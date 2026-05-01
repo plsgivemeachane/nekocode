@@ -469,7 +469,7 @@ describe('PiSessionManager', () => {
   })
 
   it('should emit usage_update event on message_end with cumulative usage', async () => {
-    const id = await manager.create('/tmp/project')
+    await manager.create('/tmp/project')
 
     mockSession().emit({
       type: 'message_update',
@@ -508,10 +508,10 @@ describe('PiSessionManager', () => {
     vi.advanceTimersByTime(16)
     mockSession().emit({
       type: 'message_end',
-      message: {
-        ...mockAssistantMessage({ content: [{ type: 'text', text: 'Response' }] }),
-        usage: undefined, // Explicitly no usage
-      },
+      message: mockAssistantMessage({
+        content: [{ type: 'text', text: 'Response' }],
+        usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+      }),
     })
 
     const history = manager.getHistory(id)

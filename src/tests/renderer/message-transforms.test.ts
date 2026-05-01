@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { ChatMessageIPC } from '@/shared/ipc-types'
-import type { ChatMessage } from '@/renderer/src/types/chat'
+import type { ChatMessage, AssistantTextMessage } from '@/renderer/src/types/chat'
 import {
   ipcToChatMessage,
   ipcToChatMessages,
@@ -390,7 +390,7 @@ describe('ipcToChatMessage - usage persistence', () => {
     const ipc = makeIPC({ role: 'assistant', content: 'Response' })
     const result = ipcToChatMessage(ipc)
     expect(result).toHaveLength(1)
-    expect(result[0].usage).toBeUndefined()
+    expect((result[0] as AssistantTextMessage).usage).toBeUndefined()
   })
 
   it('user messages do not have usage field even if provided', () => {
@@ -436,7 +436,7 @@ describe('ipcToChatMessage - usage persistence', () => {
     })
     const result = ipcToChatMessage(ipc)
     expect(result).toHaveLength(1)
-    expect(result[0].usage).toEqual({ inputTokens: 0, outputTokens: 0, totalCost: 0 })
+    expect((result[0] as AssistantTextMessage).usage).toEqual({ inputTokens: 0, outputTokens: 0, totalCost: 0 })
   })
 
   it('handles large token counts', () => {
@@ -446,7 +446,7 @@ describe('ipcToChatMessage - usage persistence', () => {
       usage: { inputTokens: 1000000, outputTokens: 500000, totalCost: 15.50 },
     })
     const result = ipcToChatMessage(ipc)
-    expect(result[0].usage).toEqual({ inputTokens: 1000000, outputTokens: 500000, totalCost: 15.50 })
+    expect((result[0] as AssistantTextMessage).usage).toEqual({ inputTokens: 1000000, outputTokens: 500000, totalCost: 15.50 })
   })
 })
 

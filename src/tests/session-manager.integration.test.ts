@@ -19,7 +19,22 @@ vi.mock('electron', () => ({
 import { PiSessionManager } from '../main/session-manager'
 import type { SessionStreamEvent } from '../shared/ipc-types'
 import type { SessionInfo } from '@mariozechner/pi-coding-agent'
-import type { Message } from '@mariozechner/pi-ai'
+import type { Message, AssistantMessage } from '@mariozechner/pi-ai'
+
+/** Create a minimal mock AssistantMessage for SDK messages */
+function mockAssistantMessage(overrides: Partial<AssistantMessage> = {}): AssistantMessage {
+  return {
+    role: 'assistant',
+    content: [{ type: 'text', text: 'Hi' }],
+    api: {} as AssistantMessage['api'],
+    provider: {} as AssistantMessage['provider'],
+    model: 'test-model',
+    usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+    stopReason: 'stop',
+    timestamp: Date.now(),
+    ...overrides,
+  }
+}
 
 function createMockSession(id?: string) {
   const listeners: Array<(event: unknown) => void> = []
@@ -282,12 +297,11 @@ describe('PiSessionManager integration', () => {
     const mockSdkSession = createMockSession('usage-test-session')
     mockSdkSession.messages = [
       { role: 'user', content: 'Hello', timestamp: 1000 },
-      {
-        role: 'assistant',
+      mockAssistantMessage({
         content: [{ type: 'text', text: 'Hi there' }],
         timestamp: 2000,
         usage: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, totalTokens: 150, cost: { input: 0.001, output: 0.002, cacheRead: 0, cacheWrite: 0, total: 0.003 } },
-      },
+      }),
     ]
 
     sdkMocks.sessionListMock.mockResolvedValue([
@@ -327,19 +341,17 @@ describe('PiSessionManager integration', () => {
     const mockSdkSession = createMockSession('multi-usage-test-session')
     mockSdkSession.messages = [
       { role: 'user', content: 'Hello', timestamp: 1000 },
-      {
-        role: 'assistant',
+      mockAssistantMessage({
         content: [{ type: 'text', text: 'Hi' }],
         timestamp: 2000,
         usage: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, totalTokens: 150, cost: { input: 0.001, output: 0.002, cacheRead: 0, cacheWrite: 0, total: 0.003 } },
-      },
+      }),
       { role: 'user', content: 'More', timestamp: 3000 },
-      {
-        role: 'assistant',
+      mockAssistantMessage({
         content: [{ type: 'text', text: 'Sure' }],
         timestamp: 4000,
         usage: { input: 200, output: 100, cacheRead: 0, cacheWrite: 0, totalTokens: 300, cost: { input: 0.002, output: 0.004, cacheRead: 0, cacheWrite: 0, total: 0.006 } },
-      },
+      }),
     ]
 
     sdkMocks.sessionListMock.mockResolvedValue([
@@ -375,7 +387,7 @@ describe('PiSessionManager integration', () => {
     const mockSdkSession = createMockSession('no-usage-test-session')
     mockSdkSession.messages = [
       { role: 'user', content: 'Hello', timestamp: 1000 },
-      { role: 'assistant', content: [{ type: 'text', text: 'Hi' }], timestamp: 2000 },
+      mockAssistantMessage({ content: [{ type: 'text', text: 'Hi' }], timestamp: 2000 }),
     ]
 
     sdkMocks.sessionListMock.mockResolvedValue([
@@ -406,12 +418,11 @@ describe('PiSessionManager integration', () => {
     const mockSdkSession = createMockSession('history-usage-test-session')
     mockSdkSession.messages = [
       { role: 'user', content: 'Hello', timestamp: 1000 },
-      {
-        role: 'assistant',
+      mockAssistantMessage({
         content: [{ type: 'text', text: 'Hi there' }],
         timestamp: 2000,
         usage: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, totalTokens: 150, cost: { input: 0.001, output: 0.002, cacheRead: 0, cacheWrite: 0, total: 0.003 } },
-      },
+      }),
     ]
 
     sdkMocks.sessionListMock.mockResolvedValue([
