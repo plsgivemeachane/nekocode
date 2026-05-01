@@ -72,6 +72,13 @@ export interface SessionLoadHistoryDiskPayload {
   limit: number
 }
 
+/** Message-level usage data (tokens and cost for a single assistant message) */
+export interface MessageUsage {
+  inputTokens: number
+  outputTokens: number
+  totalCost: number
+}
+
 /** A chat message suitable for IPC transfer (no circular refs, plain data) */
 export interface ChatMessageIPC {
   id: string
@@ -79,6 +86,8 @@ export interface ChatMessageIPC {
   content: string
   toolCalls?: Array<{ id: string; name: string; args: unknown; result?: unknown; isError?: boolean }>
   timestamp: number
+  /** Usage data for assistant messages (undefined for user messages) */
+  usage?: MessageUsage
 }
 
 /**

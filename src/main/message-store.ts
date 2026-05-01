@@ -56,12 +56,24 @@ export function extractHistoryFromSdkMessages(
       }
     }
 
+    // Extract usage from assistant messages if available
+    let usage: ChatMessageIPC['usage']
+    if (role === 'assistant' && 'usage' in m && m.usage) {
+      const sdkUsage = m.usage as { input: number; output: number; cost: { total: number } }
+      usage = {
+        inputTokens: sdkUsage.input,
+        outputTokens: sdkUsage.output,
+        totalCost: sdkUsage.cost.total,
+      }
+    }
+
     result.push({
       id: crypto.randomUUID(),
       role,
       content,
       toolCalls,
       timestamp: 'timestamp' in m ? m.timestamp : Date.now(),
+      usage,
     })
   }
 

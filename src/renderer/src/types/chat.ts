@@ -1,6 +1,8 @@
+import type { MessageUsage } from '../../../shared/ipc-types'
+
 export type ChatMessage =
   | { role: 'user'; content: string; id: string }
-  | { role: 'assistant'; type: 'text'; content: string; id: string }
+  | { role: 'assistant'; type: 'text'; content: string; id: string; usage?: MessageUsage }
   | { role: 'assistant'; type: 'tool_call'; toolName: string; toolId: string; args: unknown; status: 'running' | 'done'; result?: unknown; isError?: boolean; id: string }
 
 // Extracted types for type guards

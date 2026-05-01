@@ -323,3 +323,100 @@ describe('tryRefreshFromDisk', () => {
     expect(result).toBeNull()
   })
 })
+
+describe('extractHistoryFromSdkMessages - usage persistence', () => {
+  it('extracts usage from assistant message with usage data', () => {
+    const messages = [
+      {
+        role: 'assistant',
+        content: 'response',
+        timestamp: 2000,
+        usage: { input: 100, output: 50, cacheRead: 10, cacheWrite: 5, totalTokens: 165, cost: { input: 0.001, output: 0.002, cacheRead: 0, cacheWrite: 0, total: 0.003 } },
+      },
+    ]
+    const result = extract(messages)
+    expect(result).toHaveLength(1)
+    expect(result[0].role).toBe('assistant')
+    expect(result[0].usage).toEqual({
+      inputTokens: 100,
+      outputTokens: 50,
+      totalCost: 0.003,
+    })
+  })
+
+  it('handles assistant message without usage (undefined)', () => {
+    const messages = [
+      { role: 'assistant', content: 'response', timestamp: 2000 },
+    ]
+    const result = extract(messages)
+    expect(result).toHaveLength(1)
+    expect(result[0].usage).toBeUndefined()
+  })
+
+  it('handles assistant message with null/undefined usage', () => {
+    const messages = [
+      { role: 'assistant', content: 'response', timestamp: 2000, usage: null },
+    ]
+    const result = extract(messages)
+    expect(result).toHaveLength(1)
+    expect(result[0].usage).toBeUndefined()
+  })
+
+  it('extracts usage from multiple assistant messages', () => {
+    const messages = [
+      { role: 'user', content: 'hello', timestamp: 1000 },
+      {
+        role: 'assistant',
+        content: 'response 1',
+        timestamp: 2000,
+        usage: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, totalTokens: 150, cost: { input: 0.001, output: 0.002, cacheRead: 0, cacheWrite: 0, total: 0.003 } },
+      },
+      { role: 'user', content: 'more', timestamp: 3000 },
+      {
+        role: 'assistant',
+        content: 'response 2',
+        timestamp: 4000,
+        usage: { input: 200, output: 100, cacheRead: 0, cacheWrite: 0, totalTokens: 300, cost: { input: 0.002, output: 0.004, cacheRead: 0, cacheWrite: 0, total: 0.006 } },
+      },
+    ]
+    const result = extract(messages)
+    expect(result).toHaveLength(4)
+    expect(result[1].usage).toEqual({ inputTokens: 100, outputTokens: 50, totalCost: 0.003 })
+    expect(result[3].usage).toEqual({ inputTokens: 200, outputTokens: 100, totalCost: 0.006 })
+  })
+
+  it('user messages never have usage field', () => {
+    const messages = [
+      { role: 'user', content: 'hello', timestamp: 1000, usage: { input: 100, output: 50, cost: { total: 0.003 } } },
+    ]
+    const result = extract(messages)
+    expect(result).toHaveLength(1)
+    expect(result[0].role).toBe('user')
+    // User messages should not have usage extracted even if present in input
+    expect(result[0].usage).toBeUndefined()
+  })
+
+  it('preserves usage through round-trip with tool calls', () => {
+    const messages = [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Running...' },
+          { type: 'toolCall', id: 'tc-1', name: 'bash', arguments: '{"cmd":"ls"}' },
+        ],
+        timestamp: 2000,
+        usage: { input: 500, output: 200, cacheRead: 0, cacheWrite: 0, totalTokens: 700, cost: { input: 0.01, output: 0.005, cacheRead: 0, cacheWrite: 0, total: 0.015 } },
+      },
+      { role: 'toolResult', toolCallId: 'tc-1', content: 'file1.txt', isError: false, timestamp: 2500 },
+    ]
+    const result = extract(messages)
+    expect(result).toHaveLength(1)
+    expect(result[0].role).toBe('assistant')
+    expect(result[0].usage).toEqual({
+      inputTokens: 500,
+      outputTokens: 200,
+      totalCost: 0.015,
+    })
+    expect(result[0].toolCalls).toHaveLength(1)
+  })
+})

@@ -58,49 +58,75 @@ export function useSessionOrchestration({
         return
       }
       createInFlightProjectsRef.current.add(projectPath)
-      try {
-        // Reuse only the currently active draft session that was created in this runtime.
-        const isActiveDraft =
-          activeSessionId != null &&
-          activeProjectPath === projectPath &&
-          draftSessionsRef.current.get(activeSessionId) === projectPath
 
-        if (isActiveDraft && activeSessionId) {
-          try {
-            const history = await window.nekocode.session.loadHistory(activeSessionId)
-            dispatch({ type: 'SET_SESSION_MESSAGE_COUNT', sessionId: activeSessionId, messageCount: history.length })
-            if (history.length === 0) {
-              logger.info(`createSession: reusing active empty draft ${activeSessionId.slice(0, 8)}... cwd=${projectPath}`)
-              dispatch({ type: 'SET_ACTIVE_SESSION', sessionId: activeSessionId, projectPath })
-              return
-            }
-            draftSessionsRef.current.delete(activeSessionId)
-            logger.info(`createSession: active draft ${activeSessionId.slice(0, 8)}... has ${history.length} message(s), creating fresh session`)
-          } catch (err) {
-            draftSessionsRef.current.delete(activeSessionId)
-            logger.warn(`createSession: failed to verify draft history for ${activeSessionId.slice(0, 8)}..., creating fresh session`, err)
+      // Reuse only the currently active draft session that was created in this runtime.
+      const isActiveDraft =
+        activeSessionId != null &&
+        activeProjectPath === projectPath &&
+        draftSessionsRef.current.get(activeSessionId) === projectPath
+
+      if (isActiveDraft && activeSessionId) {
+        try {
+          const history = await window.nekocode.session.loadHistory(activeSessionId)
+          dispatch({ type: 'SET_SESSION_MESSAGE_COUNT', sessionId: activeSessionId, messageCount: history.length })
+          if (history.length === 0) {
+            logger.info(`createSession: reusing active empty draft ${activeSessionId.slice(0, 8)}... cwd=${projectPath}`)
+            dispatch({ type: 'SET_ACTIVE_SESSION', sessionId: activeSessionId, projectPath })
+            createInFlightProjectsRef.current.delete(projectPath)
+            return
           }
+          draftSessionsRef.current.delete(activeSessionId)
+          logger.info(`createSession: active draft ${activeSessionId.slice(0, 8)}... has ${history.length} message(s), creating fresh session`)
+        } catch (err) {
+          draftSessionsRef.current.delete(activeSessionId)
+          logger.warn(`createSession: failed to verify draft history for ${activeSessionId.slice(0, 8)}..., creating fresh session`, err)
         }
+      }
 
+      // Generate a temporary pending session ID for optimistic UI update
+      const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      
+      // Immediately show the connecting state in the UI
+      dispatch({ type: 'SET_AGENT_CONNECTING' })
+      dispatch({ type: 'SET_ACTIVE_SESSION', sessionId: pendingId, projectPath })
+      dispatch({
+        type: 'ADD_SESSION_TO_PROJECT',
+        projectPath,
+        session: {
+          id: pendingId,
+          firstMessage: 'Connecting...',
+          created: new Date().toISOString(),
+          messageCount: 0,
+        },
+      })
+
+      try {
         const result = await window.nekocode.session.create(projectPath)
         logExtensionLoadWarnings('create', result.sessionId, result.extensionErrors, result.extensionsDisabled, (sid) => {
           dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId: sid, status: 'error' })
         })
         draftSessionsRef.current.set(result.sessionId, projectPath)
         logger.info(`createSession OK: ${result.sessionId.slice(0, 8)}... cwd=${projectPath}`)
-        dispatch({ type: 'SET_ACTIVE_SESSION', sessionId: result.sessionId, projectPath })
+        
+        // Replace the pending session with the real one
         dispatch({
-          type: 'ADD_SESSION_TO_PROJECT',
+          type: 'REPLACE_PENDING_SESSION',
           projectPath,
-          session: {
+          pendingId,
+          realSession: {
             id: result.sessionId,
             firstMessage: 'New session',
             created: new Date().toISOString(),
             messageCount: 0,
           },
         })
+        dispatch({ type: 'SET_AGENT_READY', sessionId: result.sessionId })
       } catch (err) {
         logger.error('createSession failed:', err)
+        // Remove the pending session on failure
+        dispatch({ type: 'SET_AGENT_READY', sessionId: pendingId })
+        // Note: The pending session will remain in the list but show as error state
+        // User can retry or remove it
       } finally {
         createInFlightProjectsRef.current.delete(projectPath)
       }

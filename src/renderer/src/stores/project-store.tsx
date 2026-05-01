@@ -50,6 +50,7 @@ export type ProjectAction =
   | { type: 'PRELOAD_HISTORY'; sessionId: string; messages: ChatMessageIPC[] }
   | { type: 'SET_AGENT_CONNECTING' }
   | { type: 'SET_AGENT_READY'; sessionId: string }
+  | { type: 'REPLACE_PENDING_SESSION'; projectPath: string; pendingId: string; realSession: SessionInfoDisplay }
 
 // ---------------------------------------------------------------------------
 // Reducer (pure)
@@ -193,6 +194,21 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
         return state
       }
       return { ...state, agentReady: true }
+
+    case 'REPLACE_PENDING_SESSION': {
+      // Replace a pending session with the real one, and update active session ID
+      const { projectPath, pendingId, realSession } = action
+      logger.debug(`REPLACE_PENDING_SESSION: pending=${pendingId.slice(0, 8)}... real=${realSession.id.slice(0, 8)}...`)
+      return {
+        ...state,
+        activeSessionId: state.activeSessionId === pendingId ? realSession.id : state.activeSessionId,
+        projects: state.projects.map(p =>
+          p.path === projectPath
+            ? { ...p, sessions: [realSession, ...p.sessions.filter(s => s.id !== pendingId)] }
+            : p
+        ),
+      }
+    }
 
     default:
       return state

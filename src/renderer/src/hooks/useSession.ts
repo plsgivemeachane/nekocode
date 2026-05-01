@@ -7,6 +7,7 @@ import { useProjectStore } from '../stores/project-store'
 import { useModelSelection } from './useModelSelection'
 import { useSessionEvents } from './useSessionEvents'
 import { ipcToChatMessages, messageSignature, isSessionNotReadyError } from '../utils/message-transforms'
+import { isPendingSession } from '../utils/project-helpers'
 
 const logger = createLogger('useSession')
 
@@ -92,6 +93,14 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
     }
     setInput(draft ?? '')
     if (!sessionId) {
+      setMessages(INITIAL_MESSAGES)
+      setIsHistoryLoading(false)
+      prevSessionRef.current = sessionId
+      return () => { cancelled = true }
+    }
+    // Skip history loading for pending sessions (optimistic UI updates)
+    if (isPendingSession(sessionId)) {
+      logger.debug(`pending session ${sessionId.slice(0, 8)}... — skipping history load`)
       setMessages(INITIAL_MESSAGES)
       setIsHistoryLoading(false)
       prevSessionRef.current = sessionId

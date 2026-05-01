@@ -9,7 +9,7 @@ export function ipcToChatMessage(ipc: ChatMessageIPC): ChatMessage[] {
     if (ipc.role === 'user') {
       msgs.push({ role: 'user', content: ipc.content, id: ipc.id })
     } else {
-      msgs.push({ role: 'assistant', type: 'text', content: ipc.content, id: ipc.id })
+      msgs.push({ role: 'assistant', type: 'text', content: ipc.content, id: ipc.id, usage: ipc.usage })
     }
   }
   if (ipc.toolCalls) {

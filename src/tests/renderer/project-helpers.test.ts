@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 import type { ProjectInfo, SessionInfoDisplay } from "@/shared/ipc-types"
-import { updateSessionInProject } from "@/renderer/src/utils/project-helpers"
+import { updateSessionInProject, isPendingSession } from "@/renderer/src/utils/project-helpers"
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -143,6 +143,76 @@ describe("updateSessionInProject", () => {
       updateSessionInProject(projects, "s1", updater)
       expect(updater).toHaveBeenCalledOnce()
       expect(updater).toHaveBeenCalledWith(session)
+    })
+  })
+})
+
+describe("isPendingSession", () => {
+  describe("returns true for pending session IDs", () => {
+    it("identifies standard pending session ID format", () => {
+      expect(isPendingSession("pending-1234567890-abc123")).toBe(true)
+    })
+
+    it("identifies pending session ID with minimal format", () => {
+      expect(isPendingSession("pending-")).toBe(true)
+    })
+
+    it("identifies pending session ID with timestamp", () => {
+      expect(isPendingSession("pending-1700000000000")).toBe(true)
+    })
+
+    it("identifies pending session ID with random suffix", () => {
+      expect(isPendingSession("pending-abc123xyz")).toBe(true)
+    })
+  })
+
+  describe("returns false for non-pending session IDs", () => {
+    it("rejects regular session IDs", () => {
+      expect(isPendingSession("sess-123")).toBe(false)
+    })
+
+    it("rejects UUID-style session IDs", () => {
+      expect(isPendingSession("123e4567-e89b-12d3-a456-426614174000")).toBe(false)
+    })
+
+    it("rejects session IDs that start with similar but not exact prefix", () => {
+      expect(isPendingSession("pending123")).toBe(false)
+      expect(isPendingSession("Pending-123")).toBe(false)
+      expect(isPendingSession("PENDING-123")).toBe(false)
+      expect(isPendingSession("pending_123")).toBe(false)
+    })
+
+    it("rejects session IDs that contain pending but don't start with it", () => {
+      expect(isPendingSession("session-pending-123")).toBe(false)
+      expect(isPendingSession("not-pending-123")).toBe(false)
+    })
+  })
+
+  describe("handles null and undefined", () => {
+    it("returns false for null", () => {
+      expect(isPendingSession(null)).toBe(false)
+    })
+
+    it("returns false for undefined", () => {
+      expect(isPendingSession(undefined)).toBe(false)
+    })
+  })
+
+  describe("type guard behavior", () => {
+    it("narrows type to pending session ID when true", () => {
+      const sessionId: string | null = "pending-123"
+      if (isPendingSession(sessionId)) {
+        // TypeScript should recognize sessionId as `pending-${string}`
+        expect(sessionId.startsWith("pending-")).toBe(true)
+      }
+    })
+
+    it("does not narrow type when false", () => {
+      const sessionId: string | null = "sess-123"
+      if (!isPendingSession(sessionId)) {
+        // sessionId is still string | null
+        expect(typeof sessionId === "string" || sessionId === null).toBe(true)
+      }
     })
   })
 })

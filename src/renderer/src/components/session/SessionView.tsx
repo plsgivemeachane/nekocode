@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback } from 'react'
+import React, { useRef, useEffect } from 'react'
 import { useSession } from '../../hooks/useSession'
 import { WelcomeScreen } from '../ui/WelcomeScreen'
 import { createLogger } from '../../utils/logger'

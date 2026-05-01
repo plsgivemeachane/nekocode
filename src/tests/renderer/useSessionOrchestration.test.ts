@@ -215,15 +215,33 @@ describe("useSessionOrchestration", () => {
       expect(window.nekocode.session.create).toHaveBeenCalledWith(PROJECT_PATH)
     })
 
-    it("dispatches ADD_SESSION_TO_PROJECT with new session info", async () => {
+    it("dispatches SET_AGENT_CONNECTING immediately for optimistic UI", async () => {
       const { createSession } = runInHookScope(() =>
         useSessionOrchestration({ dispatch, activeSessionId: null, activeProjectPath: null }),
       )
       await createSession(PROJECT_PATH)
+      expect(dispatch).toHaveBeenCalledWith({ type: "SET_AGENT_CONNECTING" })
+    })
+
+    it("dispatches SET_ACTIVE_SESSION with pending session immediately, then REPLACE_PENDING_SESSION", async () => {
+      const { createSession } = runInHookScope(() =>
+        useSessionOrchestration({ dispatch, activeSessionId: null, activeProjectPath: null }),
+      )
+      await createSession(PROJECT_PATH)
+      // First, SET_ACTIVE_SESSION is called with a pending ID
+      expect(dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "SET_ACTIVE_SESSION",
+          projectPath: PROJECT_PATH,
+          sessionId: expect.stringMatching(/^pending-/),
+        }),
+      )
+      // Then, REPLACE_PENDING_SESSION is called with the real session
       expect(dispatch).toHaveBeenCalledWith({
-        type: "ADD_SESSION_TO_PROJECT",
+        type: "REPLACE_PENDING_SESSION",
         projectPath: PROJECT_PATH,
-        session: {
+        pendingId: expect.stringMatching(/^pending-/),
+        realSession: {
           id: SESSION_ID,
           firstMessage: "New session",
           created: expect.any(String),
@@ -232,12 +250,12 @@ describe("useSessionOrchestration", () => {
       })
     })
 
-    it("dispatches SET_ACTIVE_SESSION with new session", async () => {
+    it("dispatches SET_AGENT_READY with real session ID after creation", async () => {
       const { createSession } = runInHookScope(() =>
         useSessionOrchestration({ dispatch, activeSessionId: null, activeProjectPath: null }),
       )
       await createSession(PROJECT_PATH)
-      expect(dispatch).toHaveBeenCalledWith({ type: "SET_ACTIVE_SESSION", sessionId: SESSION_ID, projectPath: PROJECT_PATH })
+      expect(dispatch).toHaveBeenCalledWith({ type: "SET_AGENT_READY", sessionId: SESSION_ID })
     })
 
     it("tracks the new session as a draft", async () => {

@@ -366,6 +366,90 @@ describe('messageSignature', () => {
   })
 })
 
+// ── ipcToChatMessage - usage persistence ───────────────────────
+
+describe('ipcToChatMessage - usage persistence', () => {
+  it('preserves usage field on assistant text message', () => {
+    const ipc = makeIPC({
+      role: 'assistant',
+      content: 'Response',
+      usage: { inputTokens: 100, outputTokens: 50, totalCost: 0.003 },
+    })
+    const result = ipcToChatMessage(ipc)
+    expect(result).toHaveLength(1)
+    expect(result[0]).toEqual({
+      role: 'assistant',
+      type: 'text',
+      content: 'Response',
+      id: 'ipc-1',
+      usage: { inputTokens: 100, outputTokens: 50, totalCost: 0.003 },
+    })
+  })
+
+  it('handles assistant message without usage (undefined)', () => {
+    const ipc = makeIPC({ role: 'assistant', content: 'Response' })
+    const result = ipcToChatMessage(ipc)
+    expect(result).toHaveLength(1)
+    expect(result[0].usage).toBeUndefined()
+  })
+
+  it('user messages do not have usage field even if provided', () => {
+    const ipc = makeIPC({
+      role: 'user',
+      content: 'Hello',
+      usage: { inputTokens: 100, outputTokens: 50, totalCost: 0.003 }, // Should be ignored
+    })
+    const result = ipcToChatMessage(ipc)
+    expect(result).toHaveLength(1)
+    expect(result[0]).toEqual({ role: 'user', content: 'Hello', id: 'ipc-1' })
+    expect('usage' in result[0]).toBe(false)
+  })
+
+  it('preserves usage with tool calls', () => {
+    const ipc = makeIPC({
+      role: 'assistant',
+      content: 'Running...',
+      usage: { inputTokens: 500, outputTokens: 200, totalCost: 0.015 },
+      toolCalls: [{ id: 'tc-1', name: 'bash', args: { cmd: 'ls' }, result: 'file.txt' }],
+    })
+    const result = ipcToChatMessage(ipc)
+    expect(result).toHaveLength(2) // 1 text + 1 tool_call
+    // Text message should have usage
+    expect(result[0]).toEqual({
+      role: 'assistant',
+      type: 'text',
+      content: 'Running...',
+      id: 'ipc-1',
+      usage: { inputTokens: 500, outputTokens: 200, totalCost: 0.015 },
+    })
+    // Tool call message should not have usage
+    const tc = result[1] as Extract<ChatMessage, { type: 'tool_call' }>
+    expect(tc.type).toBe('tool_call')
+    expect('usage' in tc).toBe(false)
+  })
+
+  it('handles zero cost usage', () => {
+    const ipc = makeIPC({
+      role: 'assistant',
+      content: 'Free response',
+      usage: { inputTokens: 0, outputTokens: 0, totalCost: 0 },
+    })
+    const result = ipcToChatMessage(ipc)
+    expect(result).toHaveLength(1)
+    expect(result[0].usage).toEqual({ inputTokens: 0, outputTokens: 0, totalCost: 0 })
+  })
+
+  it('handles large token counts', () => {
+    const ipc = makeIPC({
+      role: 'assistant',
+      content: 'Large response',
+      usage: { inputTokens: 1000000, outputTokens: 500000, totalCost: 15.50 },
+    })
+    const result = ipcToChatMessage(ipc)
+    expect(result[0].usage).toEqual({ inputTokens: 1000000, outputTokens: 500000, totalCost: 15.50 })
+  })
+})
+
 
 // ── isSessionNotReadyError ─────────────────────────────────────
 

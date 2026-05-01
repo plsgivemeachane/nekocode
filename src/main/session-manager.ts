@@ -93,9 +93,30 @@ export class PiSessionManager {
         if (diskMessages.length > existing.messages.length) {
           logger.info(`Reconnect ${sessionId} - refreshed in-memory history ${existing.messages.length} -> ${diskMessages.length}`)
           existing.messages = diskMessages
+          // Recalculate usageTotals from refreshed messages
+          existing.usageTotals = { input: 0, output: 0, totalCost: 0 }
+          for (const msg of existing.messages) {
+            if (msg.role === 'assistant' && msg.usage) {
+              existing.usageTotals.input += msg.usage.inputTokens
+              existing.usageTotals.output += msg.usage.outputTokens
+              existing.usageTotals.totalCost += msg.usage.totalCost
+            }
+          }
         }
       } catch (err) {
         logger.debug(`Reconnect ${sessionId} - disk reconciliation failed: ${err}`)
+      }
+      // Emit current usage to ensure stats bar is updated
+      if (existing.usageTotals.input > 0 || existing.usageTotals.output > 0 || existing.usageTotals.totalCost > 0) {
+        const ctxUsage = existing.session.getContextUsage()
+        const usageData: UsageData = {
+          inputTokens: existing.usageTotals.input,
+          outputTokens: existing.usageTotals.output,
+          totalCost: existing.usageTotals.totalCost,
+          contextPercent: ctxUsage?.percent ?? 0,
+          contextWindow: ctxUsage?.contextWindow ?? 0,
+        }
+        this.onEvent(sessionId, { type: 'usage_update', usage: usageData })
       }
       return existing.messages
     }
@@ -121,6 +142,28 @@ export class PiSessionManager {
 
     // Populate message history from the SDK's persisted messages
     managed.messages = extractHistoryFromSdkMessages(session.messages)
+
+    // Restore cumulative usageTotals from loaded messages
+    for (const msg of managed.messages) {
+      if (msg.role === 'assistant' && msg.usage) {
+        managed.usageTotals.input += msg.usage.inputTokens
+        managed.usageTotals.output += msg.usage.outputTokens
+        managed.usageTotals.totalCost += msg.usage.totalCost
+      }
+    }
+
+    // Emit restored usage to renderer so stats bar is updated
+    if (managed.usageTotals.input > 0 || managed.usageTotals.output > 0 || managed.usageTotals.totalCost > 0) {
+      const ctxUsage = managed.session.getContextUsage()
+      const usageData: UsageData = {
+        inputTokens: managed.usageTotals.input,
+        outputTokens: managed.usageTotals.output,
+        totalCost: managed.usageTotals.totalCost,
+        contextPercent: ctxUsage?.percent ?? 0,
+        contextWindow: ctxUsage?.contextWindow ?? 0,
+      }
+      this.onEvent(stableId, { type: 'usage_update', usage: usageData })
+    }
 
     this.sessions.set(stableId, managed)
     return managed.messages
@@ -374,6 +417,15 @@ export class PiSessionManager {
           managed.usageTotals.input += usage.input
           managed.usageTotals.output += usage.output
           managed.usageTotals.totalCost += usage.cost.total
+          // Store per-message usage in the last assistant message
+          const lastMsg = managed.messages[managed.messages.length - 1]
+          if (lastMsg && lastMsg.role === 'assistant') {
+            lastMsg.usage = {
+              inputTokens: usage.input,
+              outputTokens: usage.output,
+              totalCost: usage.cost.total,
+            }
+          }
           const ctxUsage = managed.session.getContextUsage()
           const usageData: UsageData = {
             inputTokens: managed.usageTotals.input,

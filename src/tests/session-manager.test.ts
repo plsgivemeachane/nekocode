@@ -57,6 +57,7 @@ function createMockSession(id?: string, initialActiveTools: string[] = ['read', 
     setActiveToolsByName: vi.fn((toolNames: string[]) => {
       activeTools = [...toolNames]
     }),
+    getContextUsage: vi.fn(() => ({ percent: 50, contextWindow: 200000 })),
     /** Simulate the SDK emitting an event */
     emit(event: AgentSessionEvent) {
       for (const fn of listeners) fn(event)
@@ -394,6 +395,128 @@ describe('PiSessionManager', () => {
     expect(history[0].toolCalls).toHaveLength(1)
     expect(history[0].toolCalls![0].isError).toBe(true)
     expect(history[0].toolCalls![0].result).toBe('command not found: bad_command')
+  })
+
+  // ── Usage Persistence Tests ─────────────────────────────────────
+
+  it('should store usage in assistant message on message_end', async () => {
+    const id = await manager.create('/tmp/project')
+
+    // First, emit a message_update to create the current assistant message
+    mockSession().emit({
+      type: 'message_update',
+      message: mockAssistantMessage(),
+      assistantMessageEvent: { type: 'text_delta', delta: 'Response', contentIndex: 0, partial: mockAssistantMessage() },
+    })
+    // Flush the text_delta through the batcher
+    vi.advanceTimersByTime(16)
+
+    // Then emit message_end with usage
+    mockSession().emit({
+      type: 'message_end',
+      message: mockAssistantMessage({
+        content: [{ type: 'text', text: 'Response' }],
+        usage: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, totalTokens: 150, cost: { input: 0.001, output: 0.002, cacheRead: 0, cacheWrite: 0, total: 0.003 } },
+      }),
+    })
+
+    const history = manager.getHistory(id)
+    expect(history).toHaveLength(1)
+    expect(history[0].usage).toEqual({
+      inputTokens: 100,
+      outputTokens: 50,
+      totalCost: 0.003,
+    })
+  })
+
+  it('should accumulate usage across multiple messages', async () => {
+    const id = await manager.create('/tmp/project')
+
+    // First message
+    mockSession().emit({
+      type: 'message_update',
+      message: mockAssistantMessage(),
+      assistantMessageEvent: { type: 'text_delta', delta: 'Response 1', contentIndex: 0, partial: mockAssistantMessage() },
+    })
+    vi.advanceTimersByTime(16)
+    mockSession().emit({
+      type: 'message_end',
+      message: mockAssistantMessage({
+        content: [{ type: 'text', text: 'Response 1' }],
+        usage: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, totalTokens: 150, cost: { input: 0.001, output: 0.002, cacheRead: 0, cacheWrite: 0, total: 0.003 } },
+      }),
+    })
+
+    // Second message
+    mockSession().emit({
+      type: 'message_update',
+      message: mockAssistantMessage(),
+      assistantMessageEvent: { type: 'text_delta', delta: 'Response 2', contentIndex: 0, partial: mockAssistantMessage() },
+    })
+    vi.advanceTimersByTime(16)
+    mockSession().emit({
+      type: 'message_end',
+      message: mockAssistantMessage({
+        content: [{ type: 'text', text: 'Response 2' }],
+        usage: { input: 200, output: 100, cacheRead: 0, cacheWrite: 0, totalTokens: 300, cost: { input: 0.002, output: 0.004, cacheRead: 0, cacheWrite: 0, total: 0.006 } },
+      }),
+    })
+
+    const history = manager.getHistory(id)
+    expect(history).toHaveLength(2)
+    expect(history[0].usage).toEqual({ inputTokens: 100, outputTokens: 50, totalCost: 0.003 })
+    expect(history[1].usage).toEqual({ inputTokens: 200, outputTokens: 100, totalCost: 0.006 })
+  })
+
+  it('should emit usage_update event on message_end with cumulative usage', async () => {
+    const id = await manager.create('/tmp/project')
+
+    mockSession().emit({
+      type: 'message_update',
+      message: mockAssistantMessage(),
+      assistantMessageEvent: { type: 'text_delta', delta: 'Response', contentIndex: 0, partial: mockAssistantMessage() },
+    })
+    vi.advanceTimersByTime(16)
+    mockSession().emit({
+      type: 'message_end',
+      message: mockAssistantMessage({
+        content: [{ type: 'text', text: 'Response' }],
+        usage: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, totalTokens: 150, cost: { input: 0.001, output: 0.002, cacheRead: 0, cacheWrite: 0, total: 0.003 } },
+      }),
+    })
+
+    const usageEvents = events.filter(e => e.event.type === 'usage_update')
+    expect(usageEvents).toHaveLength(1)
+    expect(usageEvents[0].event).toMatchObject({
+      type: 'usage_update',
+      usage: {
+        inputTokens: 100,
+        outputTokens: 50,
+        totalCost: 0.003,
+      },
+    })
+  })
+
+  it('should handle message_end without usage gracefully', async () => {
+    const id = await manager.create('/tmp/project')
+
+    mockSession().emit({
+      type: 'message_update',
+      message: mockAssistantMessage(),
+      assistantMessageEvent: { type: 'text_delta', delta: 'Response', contentIndex: 0, partial: mockAssistantMessage() },
+    })
+    vi.advanceTimersByTime(16)
+    mockSession().emit({
+      type: 'message_end',
+      message: {
+        ...mockAssistantMessage({ content: [{ type: 'text', text: 'Response' }] }),
+        usage: undefined, // Explicitly no usage
+      },
+    })
+
+    const history = manager.getHistory(id)
+    expect(history).toHaveLength(1)
+    expect(history[0].usage).toBeUndefined()
   })
 })
 
