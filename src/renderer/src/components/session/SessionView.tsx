@@ -47,11 +47,6 @@ export function SessionView({ sessionId, cwd, onCreateSession, onDisposeSession 
     return () => document.removeEventListener("mousedown", handler)
   }, [showModelDropdown])
 
-  const handleSuggestionFromWelcome = useCallback((prompt: string) => {
-    setInput(prompt)
-    sendPrompt(prompt)
-  }, [sendPrompt])
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const text = input.trim()
@@ -102,7 +97,7 @@ export function SessionView({ sessionId, cwd, onCreateSession, onDisposeSession 
             <p className="text-text-tertiary">Click &quot;New Session&quot; to select a project folder.</p>
           </div>
         ) : messages.length === 0 ? (
-          <WelcomeScreen onSuggestionClick={handleSuggestionFromWelcome} />
+          <WelcomeScreen />
         ) : (
           <div className="space-y-4 max-w-3xl mx-auto">
             {messages.map((msg) => {

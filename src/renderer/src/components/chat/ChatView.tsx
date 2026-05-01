@@ -96,12 +96,6 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
     }
   }, [error])
 
-  // --- Welcome screen suggestion handler ---
-  const handleSuggestionFromWelcome = useCallback((prompt: string) => {
-    setInput(prompt)
-    sendPrompt(prompt)
-  }, [sendPrompt])
-
   // --- Message grouping ---
   const lastMessageId = messages.length > 0 ? messages[messages.length - 1].id : null
 
@@ -228,7 +222,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
               </div>
             </div>
           ) : messages.length === 0 ? (
-            <WelcomeScreen onSuggestionClick={handleSuggestionFromWelcome} />
+            <WelcomeScreen />
           ) : (
             <div className="max-w-3xl mx-auto pt-4">
               <MessagesTimeline
