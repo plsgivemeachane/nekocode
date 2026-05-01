@@ -1,6 +1,6 @@
 {
   "name": "nekocode",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "AI-powered coding assistant desktop app",
   "main": "./out/main/index.js",
   "scripts": {
