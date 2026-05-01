@@ -516,7 +516,8 @@ describe('PiSessionManager', () => {
 
     const history = manager.getHistory(id)
     expect(history).toHaveLength(1)
-    expect(history[0].usage).toBeUndefined()
+    // When usage is all zeros, it should still be present (not undefined)
+    expect(history[0].usage).toEqual({ inputTokens: 0, outputTokens: 0, totalCost: 0 })
   })
 })
 
