@@ -13,6 +13,7 @@ import type {
   UpdateAvailableInfo,
   UpdateProgress,
   UpdateErrorInfo,
+  ZoomInfo,
 } from '../shared/ipc-types'
 
 const sessionApi: NekoCodeIPC['session'] = {
@@ -133,5 +134,15 @@ contextBridge.exposeInMainWorld('nekocode', {
       ipcRenderer.on(IPC_CHANNELS.UPDATE_ERROR, handler)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_ERROR, handler)
     },
+  },
+  zoom: {
+    get: (): Promise<ZoomInfo> =>
+      ipcRenderer.invoke(IPC_CHANNELS.ZOOM_GET),
+
+    set: (factor: number): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.ZOOM_SET, { factor }),
+
+    reset: (): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.ZOOM_RESET),
   },
 })

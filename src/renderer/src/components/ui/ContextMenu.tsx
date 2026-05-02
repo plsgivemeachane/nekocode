@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { createLogger } from '../logger'
+import { createLogger } from '../../utils/logger'
 
 const logger = createLogger('ContextMenu')
 

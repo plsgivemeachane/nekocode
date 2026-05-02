@@ -1,7 +1,7 @@
 import type { NekoCodeIPC } from '@/shared/ipc-types'
 import type { SessionStreamEvent, ChatMessageIPC, ProjectInfo, SessionCreateResult, SessionReconnectResult, WorkspaceActiveResult, ModelInfo, UpdateAvailableInfo } from '@/shared/ipc-types'
-import type { PiSessionManager } from '../main/session-manager'
-import type { ProjectManager } from '../main/project-manager'
+import type { PiSessionManager } from '../../main/session-manager'
+import type { ProjectManager } from '../../main/project-manager'
 
 // ── Mock IPC factory ──────────────────────────────────────────────
 
@@ -85,6 +85,11 @@ export function createMockIPC(): NekoCodeIPC {
     workspace: createMockWorkspaceAPI(),
     update: createMockUpdateAPI(),
     git: { getBranch: vi.fn().mockResolvedValue(null) },
+    zoom: {
+      get: vi.fn().mockResolvedValue({ factor: 1.0 }),
+      set: vi.fn().mockResolvedValue(undefined),
+      reset: vi.fn().mockResolvedValue(undefined),
+    },
   }
 }
 
@@ -108,7 +113,7 @@ export function createSessionManagerMock(
     dispose: vi.fn(() => undefined),
     reconnect: vi.fn(async () => []),
     getHistory: vi.fn(() => []),
-    getModel: vi.fn(() => null),
+    getModel: vi.fn(() => ({ id: 'model-1', name: 'Model 1', provider: 'mock' })),
     listModels: vi.fn(async () => []),
     setModel: vi.fn(async () => ({ id: 'model-1', name: 'Model 1', provider: 'mock' })),
     getExtensionLoadErrors: vi.fn(() => []),

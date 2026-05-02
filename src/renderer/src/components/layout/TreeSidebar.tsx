@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { useProjectStore, type SessionStatus } from '../stores/project-store'
-import { ContextMenu, type ContextMenuEntry } from './ContextMenu'
-import { createLogger } from '../logger'
+import { useProjectStore, type SessionStatus } from '../../stores/project-store'
+import { ContextMenu, type ContextMenuEntry } from '../ui/ContextMenu'
+import { createLogger } from '../../utils/logger'
 
 const logger = createLogger('TreeSidebar')
 
@@ -46,6 +46,10 @@ function SessionList({
   const visibleSessions = showAll ? sessions : sessions.slice(0, VISIBLE_SESSIONS)
 
   const handleSessionClick = (sessionId: string) => {
+    // Ignore clicks on pending sessions (optimistic UI placeholders)
+    if (sessionId.startsWith('pending-')) {
+      return
+    }
     onReconnect(sessionId)
     // Notify ChatView so the prompt input can be focused even when re-selecting the current session.
     window.dispatchEvent(new Event('nekocode:session-selected'))
@@ -67,6 +71,7 @@ function SessionList({
       {visibleSessions.map(session => {
         const isActiveSession = activeSessionId === session.id
         const status = sessionStatuses[session.id] ?? 'idle'
+        const isPending = session.id.startsWith('pending-')
 
         return (
           <div
@@ -75,16 +80,23 @@ function SessionList({
               isActiveSession
                 ? 'bg-surface-800/80 text-text-primary border-surface-600'
                 : 'text-text-secondary/80 border-transparent hover:bg-surface-800/60 hover:text-text-primary hover:border-surface-600'
-            }`}
+            } ${isPending ? 'opacity-60 cursor-wait' : ''}`}
             onClick={() => handleSessionClick(session.id)}
-            onMouseEnter={() => onHoverSession(session.id)}
+            onMouseEnter={() => !isPending && onHoverSession(session.id)}
             onContextMenu={(e) => onContextMenu(e, session.id)}
           >
             <span className={`truncate flex-1 ${isActiveSession ? '' : 'pl-3'}`}>
               {session.firstMessage ? truncate(session.firstMessage, 26) : 'Untitled'}
             </span>
 
-            <StatusDot status={status} />
+            {isPending ? (
+              <svg className="animate-spin w-3 h-3 text-text-tertiary" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+            ) : (
+              <StatusDot status={status} />
+            )}
           </div>
         )
       })}

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { IPC_CHANNELS } from '../shared/ipc-channels'
 import { registerIpcHandlers, sendEventToRenderer } from '../main/ipc-handlers'
-import { createProjectManagerMock, createSessionManagerMock } from './test-utils'
+import { createProjectManagerMock, createSessionManagerMock } from './__utils__/test-utils'
 
 const handlers = new Map<string, (...args: unknown[]) => unknown>()
 const electronState = {

@@ -1,7 +1,7 @@
-import React, { useRef, useEffect, useCallback } from 'react'
-import { useSession } from '../hooks/useSession'
-import { WelcomeScreen } from './WelcomeScreen'
-import { createLogger } from '../logger'
+import React, { useRef, useEffect } from 'react'
+import { useSession } from '../../hooks/useSession'
+import { WelcomeScreen } from '../ui/WelcomeScreen'
+import { createLogger } from '../../utils/logger'
 
 const logger = createLogger('SessionView')
 
@@ -46,11 +46,6 @@ export function SessionView({ sessionId, cwd, onCreateSession, onDisposeSession 
     document.addEventListener("mousedown", handler)
     return () => document.removeEventListener("mousedown", handler)
   }, [showModelDropdown])
-
-  const handleSuggestionFromWelcome = useCallback((prompt: string) => {
-    setInput(prompt)
-    sendPrompt(prompt)
-  }, [sendPrompt])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -102,7 +97,7 @@ export function SessionView({ sessionId, cwd, onCreateSession, onDisposeSession 
             <p className="text-text-tertiary">Click &quot;New Session&quot; to select a project folder.</p>
           </div>
         ) : messages.length === 0 ? (
-          <WelcomeScreen onSuggestionClick={handleSuggestionFromWelcome} />
+          <WelcomeScreen />
         ) : (
           <div className="space-y-4 max-w-3xl mx-auto">
             {messages.map((msg) => {

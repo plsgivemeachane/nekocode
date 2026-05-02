@@ -10,10 +10,11 @@ import React, {
 import type {
   ProjectInfo,
   SessionInfoDisplay,
-  ExtensionLoadError,
   ChatMessageIPC,
 } from '../../../shared/ipc-types'
-import { createLogger } from '../logger'
+import { createLogger } from '../utils/logger'
+import { updateSessionInProject } from '../utils/project-helpers'
+import { useSessionOrchestration } from '../hooks/useSessionOrchestration'
 
 const logger = createLogger('project-store')
 
@@ -34,7 +35,7 @@ interface ProjectState {
   agentReady: boolean
 }
 
-type ProjectAction =
+export type ProjectAction =
   | { type: 'SET_PROJECTS'; projects: ProjectInfo[] }
   | { type: 'ADD_PROJECT'; project: ProjectInfo }
   | { type: 'REMOVE_PROJECT'; projectId: string }
@@ -49,6 +50,7 @@ type ProjectAction =
   | { type: 'PRELOAD_HISTORY'; sessionId: string; messages: ChatMessageIPC[] }
   | { type: 'SET_AGENT_CONNECTING' }
   | { type: 'SET_AGENT_READY'; sessionId: string }
+  | { type: 'REPLACE_PENDING_SESSION'; projectPath: string; pendingId: string; realSession: SessionInfoDisplay }
 
 // ---------------------------------------------------------------------------
 // Reducer (pure)
@@ -156,31 +158,20 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
     case 'UPDATE_SESSION_FIRST_MESSAGE':
       return {
         ...state,
-        projects: state.projects.map(p => ({
-          ...p,
-          sessions: p.sessions.map(s =>
-            s.id === action.sessionId
-              ? {
-                ...s,
-                firstMessage: action.firstMessage,
-                // Mark session as non-empty once the first user message is observed.
-                messageCount: Math.max(s.messageCount, 1),
-              }
-              : s,
-          ),
+        projects: updateSessionInProject(state.projects, action.sessionId, s => ({
+          ...s,
+          firstMessage: action.firstMessage,
+          // Mark session as non-empty once the first user message is observed.
+          messageCount: Math.max(s.messageCount, 1),
         })),
       }
 
     case 'SET_SESSION_MESSAGE_COUNT':
       return {
         ...state,
-        projects: state.projects.map(p => ({
-          ...p,
-          sessions: p.sessions.map(s =>
-            s.id === action.sessionId
-              ? { ...s, messageCount: Math.max(s.messageCount, action.messageCount) }
-              : s,
-          ),
+        projects: updateSessionInProject(state.projects, action.sessionId, s => ({
+          ...s,
+          messageCount: Math.max(s.messageCount, action.messageCount),
         })),
       }
 
@@ -203,6 +194,21 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
         return state
       }
       return { ...state, agentReady: true }
+
+    case 'REPLACE_PENDING_SESSION': {
+      // Replace a pending session with the real one, and update active session ID
+      const { projectPath, pendingId, realSession } = action
+      logger.debug(`REPLACE_PENDING_SESSION: pending=${pendingId.slice(0, 8)}... real=${realSession.id.slice(0, 8)}...`)
+      return {
+        ...state,
+        activeSessionId: state.activeSessionId === pendingId ? realSession.id : state.activeSessionId,
+        projects: state.projects.map(p =>
+          p.path === projectPath
+            ? { ...p, sessions: [realSession, ...p.sessions.filter(s => s.id !== pendingId)] }
+            : p
+        ),
+      }
+    }
 
     default:
       return state
@@ -233,33 +239,14 @@ const ProjectStoreContext = createContext<ProjectStoreAPI | null>(null)
 export function ProjectProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE)
   const initializedRef = useRef(false)
-  // Tracks sessions created in this runtime that are still true empty drafts.
-  // Key: sessionId, Value: projectPath
-  const draftSessionsRef = useRef<Map<string, string>>(new Map())
-  // Prevent duplicate session creation from rapid repeated clicks.
-  const createInFlightProjectsRef = useRef<Set<string>>(new Set())
 
-  const logExtensionLoadWarnings = useCallback((
-    mode: 'create' | 'reconnect',
-    sessionId: string,
-    errors?: ExtensionLoadError[],
-    extensionsDisabled?: boolean,
-  ) => {
-    if (!errors || errors.length === 0) return
-    if (extensionsDisabled) {
-      logger.warn(`[${mode}] sessionId=${sessionId.slice(0, 8)}... running in degraded mode (extensions disabled)`)
-    }
-    logger.warn(`[${mode}] sessionId=${sessionId.slice(0, 8)}... extension load errors=${errors.length}`)
-    for (const error of errors) {
-      logger.warn(`[${mode}] path=${error.path} message=${error.message}`)
-      if (error.stack) {
-        logger.debug(`[${mode}] stack for ${error.path}:\n${error.stack}`)
-      }
-    }
-    if (!extensionsDisabled) {
-      dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId, status: 'error' })
-    }
-  }, [])
+  // Delegate session orchestration (reconnect/create) to a dedicated hook
+  const { reconnectSession, createSession, initReconnect, draftSessionsRef } =
+    useSessionOrchestration({
+      dispatch,
+      activeSessionId: state.activeSessionId,
+      activeProjectPath: state.activeProjectPath,
+    })
 
   // Load persisted workspace on first mount
   useEffect(() => {
@@ -280,23 +267,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             // Verify the session still exists in the restored projects
             const project = projects.find(p => p.path === projectPath)
             if (project && project.sessions.some(s => s.id === sessionId)) {
-              dispatch({ type: 'SET_AGENT_CONNECTING' })
-              dispatch({ type: 'SET_ACTIVE_SESSION', sessionId, projectPath })
-              try {
-                const result = await window.nekocode.session.reconnect(sessionId, projectPath)
-                logExtensionLoadWarnings('reconnect', sessionId, result.extensionErrors, result.extensionsDisabled)
-                dispatch({ type: 'SET_SESSION_MESSAGE_COUNT', sessionId, messageCount: result.history.length })
-                // Preload history so useSession finds it even if its effect
-                // already fired before reconnect completed (startup race).
-                if (result.history.length > 0) {
-                  dispatch({ type: 'PRELOAD_HISTORY', sessionId, messages: result.history })
-                }
-                dispatch({ type: 'SET_AGENT_READY', sessionId })
-              } catch (err) {
-                logger.error('Failed to reconnect restored session', err)
-                dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId, status: 'error' })
-                dispatch({ type: 'SET_AGENT_READY', sessionId })
-              }
+              await initReconnect(sessionId, projectPath)
             }
           }
         }
@@ -304,7 +275,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         logger.error('Failed to load workspace', err)
       }
     })()
-  }, [logExtensionLoadWarnings])
+  }, [initReconnect])
 
   // Persist active session changes to workspace
   useEffect(() => {
@@ -375,102 +346,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const setActiveSession = useCallback(
-    (sessionId: string, projectPath: string) => {
-      dispatch({ type: 'SET_ACTIVE_SESSION', sessionId, projectPath })
-    },
-    [],
-  )
-
-  const reconnectSession = useCallback(
-    async (sessionId: string, projectPath: string) => {
-      // Set active session immediately with "connecting" status
-      dispatch({ type: 'SET_ACTIVE_SESSION', sessionId, projectPath })
-      dispatch({ type: 'SET_AGENT_CONNECTING' })
-
-      // Kick off full reconnect in background (agent creation happens here)
-      // DO NOT dispatch RECONNECT_SESSION — it re-sets activeSessionId causing a flash.
-      // DO NOT dispatch CLEAR_PRELOADED_HISTORY — it triggers the load effect to re-fire.
-      try {
-        const wasRuntimeDraft = draftSessionsRef.current.get(sessionId) === projectPath
-        const result = await window.nekocode.session.reconnect(sessionId, projectPath)
-        logExtensionLoadWarnings('reconnect', sessionId, result.extensionErrors, result.extensionsDisabled)
-        dispatch({ type: 'SET_SESSION_MESSAGE_COUNT', sessionId, messageCount: result.history.length })
-        if (result.history.length > 0) {
-          // Any non-empty reconnect is not a draft.
-          draftSessionsRef.current.delete(sessionId)
-        } else if (wasRuntimeDraft) {
-          // Keep draft status for runtime-created empty sessions.
-          draftSessionsRef.current.set(sessionId, projectPath)
-        }
-        logger.info(`reconnectSession OK: ${sessionId.slice(0, 8)}...`)
-        dispatch({ type: 'SET_AGENT_READY', sessionId })
-      } catch (err) {
-          logger.error('reconnectSession failed:', err)
-          dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId, status: 'error' })
-          dispatch({ type: 'SET_AGENT_READY', sessionId })
-      }
-    },
-    [logExtensionLoadWarnings],
-  )
-
-  const createSession = useCallback(
-    async (projectPath: string) => {
-      if (createInFlightProjectsRef.current.has(projectPath)) {
-        logger.debug(`createSession skipped: already in flight for cwd=${projectPath}`)
-        return
-      }
-      createInFlightProjectsRef.current.add(projectPath)
-      try {
-        // Reuse only the currently active draft session that was created in this runtime.
-        const activeSessionId = state.activeSessionId
-        const isActiveDraft =
-          activeSessionId != null &&
-          state.activeProjectPath === projectPath &&
-          draftSessionsRef.current.get(activeSessionId) === projectPath
-
-        if (isActiveDraft && activeSessionId) {
-          try {
-            const history = await window.nekocode.session.loadHistory(activeSessionId)
-            dispatch({ type: 'SET_SESSION_MESSAGE_COUNT', sessionId: activeSessionId, messageCount: history.length })
-            if (history.length === 0) {
-              logger.info(`createSession: reusing active empty draft ${activeSessionId.slice(0, 8)}... cwd=${projectPath}`)
-              dispatch({ type: 'SET_ACTIVE_SESSION', sessionId: activeSessionId, projectPath })
-              return
-            }
-            // History exists, so this is no longer a draft.
-            draftSessionsRef.current.delete(activeSessionId)
-            logger.info(`createSession: active draft ${activeSessionId.slice(0, 8)}... has ${history.length} message(s), creating fresh session`)
-          } catch (err) {
-            draftSessionsRef.current.delete(activeSessionId)
-            logger.warn(`createSession: failed to verify draft history for ${activeSessionId.slice(0, 8)}..., creating fresh session`, err)
-          }
-        }
-
-        const result = await window.nekocode.session.create(projectPath)
-        logExtensionLoadWarnings('create', result.sessionId, result.extensionErrors, result.extensionsDisabled)
-        draftSessionsRef.current.set(result.sessionId, projectPath)
-        logger.info(`createSession OK: ${result.sessionId.slice(0, 8)}... cwd=${projectPath}`)
-        dispatch({ type: 'SET_ACTIVE_SESSION', sessionId: result.sessionId, projectPath })
-        dispatch({
-          type: 'ADD_SESSION_TO_PROJECT',
-          projectPath,
-          session: {
-            id: result.sessionId,
-            firstMessage: 'New session',
-            created: new Date().toISOString(),
-            messageCount: 0,
-          },
-        })
-      } catch (err) {
-          logger.error('createSession failed:', err)
-      } finally {
-        createInFlightProjectsRef.current.delete(projectPath)
-      }
-    },
-    [logExtensionLoadWarnings, state.activeProjectPath, state.activeSessionId],
-  )
-
   const refreshSessions = useCallback(async (projectId: string) => {
     try {
       const updated = await window.nekocode.project.sessions(projectId)
@@ -480,6 +355,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       logger.error('refreshSessions failed:', err)
     }
   }, [])
+
+  const setActiveSession = useCallback(
+    (sessionId: string, projectPath: string) => {
+      dispatch({ type: 'SET_ACTIVE_SESSION', sessionId, projectPath })
+    },
+    [],
+  )
 
   /**
    * Preload message history for a single session (hover-triggered).

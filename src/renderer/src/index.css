@@ -16,7 +16,7 @@
   --color-accent-900: oklch(0.37 0.06 195);
 
   /* Surface: neutral cool grays */
-  --color-surface-950: #171717;
+  --color-surface-950: #0b0e14;
   --color-surface-900: #262626;
   --color-surface-850: #2d2d2d;
   --color-surface-800: oklch(0.25 0.009 260);
@@ -30,7 +30,7 @@
   --color-surface-50: oklch(0.98 0.001 260);
 
   /* Text on surfaces */
-  --color-text-primary: oklch(0.92 0.008 60);
+  --color-text-primary: #bfbdb6;
   --color-text-secondary: oklch(0.68 0.01 55);
   --color-text-tertiary: oklch(0.48 0.008 55);
   --color-text-accent: oklch(0.82 0.14 70);
@@ -42,7 +42,7 @@
 
   /* Fonts */
   --font-display: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
-  --font-body: "Inter", "SF Pro Text", system-ui, -apple-system, sans-serif;
+  --font-body: "Open Sans", sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
 
   /* Custom spacing */
@@ -220,7 +220,7 @@
     word-break: break-word;
     font-size: 0.875rem;
     line-height: 1.625;
-    color: var(--color-text-primary);
+    color: #bfbdb6;
   }
 
   .chat-markdown > :first-child {

@@ -1,19 +1,13 @@
-import {
-  createAgentSession,
-  DefaultResourceLoader,
-  getAgentDir,
-  SessionManager as SdkSessionManager,
-  SessionManager,
-  SettingsManager,
-  type AgentSession,
-  type AgentSessionEvent,
-  type SessionMessageEntry,
-} from '@mariozechner/pi-coding-agent'
-import type { TextContent, ToolCall, Message } from '@mariozechner/pi-ai'
+import { SessionManager as SdkSessionManager } from '@mariozechner/pi-coding-agent'
+import type { AgentSession, AgentSessionEvent } from '@mariozechner/pi-coding-agent'
+import type { TextContent } from '@mariozechner/pi-ai'
 import { unlinkSync } from 'fs'
 import { StreamBatcher } from './stream-batcher'
 import type { SessionStreamEvent, ChatMessageIPC, ModelInfo, ExtensionLoadError, UsageData } from '../shared/ipc-types'
 import { createLogger } from './logger'
+import { loadWithFallback } from './extension-loader'
+import { extractHistoryFromSdkMessages, loadHistoryFromDisk as loadHistoryFromDiskImpl } from './message-store'
+
 const logger = createLogger('session-manager')
 
 /** Internal representation of a managed session */
@@ -52,8 +46,8 @@ export type SessionEventCallback = (sessionId: string, event: SessionStreamEvent
  */
 export class PiSessionManager {
   private sessions = new Map<string, ManagedSession>()
-  private readonly onEvent: SessionEventCallback
-  private readonly allowExtensionFallback: boolean
+  private allowExtensionFallback: boolean
+  private onEvent: SessionEventCallback
 
   constructor(onEvent: SessionEventCallback) {
     this.onEvent = onEvent
@@ -61,53 +55,16 @@ export class PiSessionManager {
   }
 
   /**
-   * Create a new pi SDK session for the given working directory.
+   * Create a new agent session for the given working directory.
    * Returns the stable session ID from the SDK (persisted on disk).
    */
   async create(cwd: string): Promise<string> {
-    const primaryAttempt = await this.createSdkSession(SessionManager.create(cwd), cwd, 'create')
-    const primaryErrors = this.normalizeExtensionErrors(primaryAttempt.extensionsResult.errors)
-
-    let session = primaryAttempt.session
-    let extensionsResult = primaryAttempt.extensionsResult
-    let extensionErrors = primaryErrors
-    let extensionsDisabled = false
-
-    if (this.shouldRetryWithoutExtensions(primaryErrors, primaryAttempt.extensionsResult.extensions.length)) {
-      if (!this.allowExtensionFallback) {
-        this.logExtensionErrors('create', primaryErrors)
-        throw new Error(`[create] Systemic extension loader failure (${primaryErrors.length}) - set NEKOCODE_ALLOW_EXTENSION_FALLBACK=1 to allow degraded reconnect/create without extensions`)
-      }
-      logger.warn('[create] Detected systemic extension loader failure signature, retrying with extensions disabled')
-      const retryAttempt = await this.createSdkSession(SessionManager.create(cwd), cwd, 'create-noext', { noExtensions: true })
-      session = retryAttempt.session
-      extensionsResult = retryAttempt.extensionsResult
-      extensionsDisabled = retryAttempt.extensionsResult.errors.length === 0
-      if (extensionsDisabled) {
-        logger.warn(`[create] Primary extension load failed (${primaryErrors.length}); fallback create without extensions succeeded`)
-        extensionErrors = [
-          {
-            path: '__create__',
-            message: `Create fallback engaged: extensions disabled for this session due to systemic extension loader failure (primaryErrors=${primaryErrors.length})`,
-          },
-        ]
-      } else {
-        extensionErrors = [
-          ...primaryErrors,
-          ...this.normalizeExtensionErrors(retryAttempt.extensionsResult.errors),
-          {
-            path: '__create__',
-            message: 'Create fallback attempted with extensions disabled but still encountered extension load errors',
-          },
-        ]
-      }
-    }
-
-    this.logExtensionErrors('create', extensionErrors)
-    logger.info(`[create] Extensions loaded: ${extensionsResult.extensions.length}, errors: ${extensionsResult.errors.length}`)
-    for (const ext of extensionsResult.extensions) {
-      logger.info(`[create] Extension: ${ext.path}`)
-    }
+    const { session, extensionErrors, extensionsDisabled } = await loadWithFallback(
+      'create',
+      () => SdkSessionManager.create(cwd),
+      cwd,
+      this.allowExtensionFallback,
+    )
 
     const sessionId = session.sessionId
     logger.info(`Create ${sessionId} cwd=${cwd}`)
@@ -130,17 +87,36 @@ export class PiSessionManager {
     // after reconciling with disk to avoid returning stale/empty caches.
     const existing = this.sessions.get(sessionId)
     if (existing) {
-      logger.info(`Reconnect ${sessionId} — already in memory`)
-      // Reconcile synchronously so reconnect callers get the best available history now.
+      logger.info(`Reconnect ${sessionId} - already in memory`)
       try {
-        const diskMessages = await this.loadHistoryFromDisk(sessionId, cwd, 0)
+        const diskMessages = await loadHistoryFromDiskImpl(sessionId, cwd, 0)
         if (diskMessages.length > existing.messages.length) {
-          logger.info(`Reconnect ${sessionId} — refreshed in-memory history ${existing.messages.length} -> ${diskMessages.length}`)
+          logger.info(`Reconnect ${sessionId} - refreshed in-memory history ${existing.messages.length} -> ${diskMessages.length}`)
           existing.messages = diskMessages
+          // Recalculate usageTotals from refreshed messages
+          existing.usageTotals = { input: 0, output: 0, totalCost: 0 }
+          for (const msg of existing.messages) {
+            if (msg.role === 'assistant' && msg.usage) {
+              existing.usageTotals.input += msg.usage.inputTokens
+              existing.usageTotals.output += msg.usage.outputTokens
+              existing.usageTotals.totalCost += msg.usage.totalCost
+            }
+          }
         }
       } catch (err) {
-        // Best-effort reconciliation; keep using in-memory history if disk read fails.
-        logger.debug(`Reconnect ${sessionId} — disk reconciliation failed: ${err}`)
+        logger.debug(`Reconnect ${sessionId} - disk reconciliation failed: ${err}`)
+      }
+      // Emit current usage to ensure stats bar is updated
+      if (existing.usageTotals.input > 0 || existing.usageTotals.output > 0 || existing.usageTotals.totalCost > 0) {
+        const ctxUsage = existing.session.getContextUsage()
+        const usageData: UsageData = {
+          inputTokens: existing.usageTotals.input,
+          outputTokens: existing.usageTotals.output,
+          totalCost: existing.usageTotals.totalCost,
+          contextPercent: ctxUsage?.percent ?? 0,
+          contextWindow: ctxUsage?.contextWindow ?? 0,
+        }
+        this.onEvent(sessionId, { type: 'usage_update', usage: usageData })
       }
       return existing.messages
     }
@@ -152,51 +128,12 @@ export class PiSessionManager {
       throw new Error(`Session not found on disk: ${sessionId}`)
     }
 
-    const primarySessionManager = SdkSessionManager.open(match.path)
-    const primaryAttempt = await this.createSdkSession(primarySessionManager, cwd, 'reconnect')
-    const primaryErrors = this.normalizeExtensionErrors(primaryAttempt.extensionsResult.errors)
-
-    let session = primaryAttempt.session
-    let extensionsResult = primaryAttempt.extensionsResult
-    let extensionErrors = primaryErrors
-    let extensionsDisabled = false
-
-    if (this.shouldRetryWithoutExtensions(primaryErrors, primaryAttempt.extensionsResult.extensions.length)) {
-      if (!this.allowExtensionFallback) {
-        this.logExtensionErrors('reconnect', primaryErrors)
-        throw new Error(`[reconnect] Systemic extension loader failure (${primaryErrors.length}) - set NEKOCODE_ALLOW_EXTENSION_FALLBACK=1 to allow degraded reconnect/create without extensions`)
-      }
-      logger.warn('[reconnect] Detected systemic extension loader failure signature, retrying with extensions disabled')
-      const retrySessionManager = SdkSessionManager.open(match.path)
-      const retryAttempt = await this.createSdkSession(retrySessionManager, cwd, 'reconnect-noext', { noExtensions: true })
-      session = retryAttempt.session
-      extensionsResult = retryAttempt.extensionsResult
-      extensionsDisabled = retryAttempt.extensionsResult.errors.length === 0
-      if (extensionsDisabled) {
-        logger.warn(`[reconnect] Primary extension load failed (${primaryErrors.length}); fallback reconnect without extensions succeeded`)
-        extensionErrors = [
-          {
-            path: '__reconnect__',
-            message: `Reconnect fallback engaged: extensions disabled for this session due to systemic extension loader failure (primaryErrors=${primaryErrors.length})`,
-          },
-        ]
-      } else {
-        extensionErrors = [
-          ...primaryErrors,
-          ...this.normalizeExtensionErrors(retryAttempt.extensionsResult.errors),
-          {
-            path: '__reconnect__',
-            message: 'Reconnect fallback attempted with extensions disabled but still encountered extension load errors',
-          },
-        ]
-      }
-    }
-
-    this.logExtensionErrors('reconnect', extensionErrors)
-    logger.info(`[reconnect] Extensions loaded: ${extensionsResult.extensions.length}, errors: ${extensionsResult.errors.length}`)
-    for (const ext of extensionsResult.extensions) {
-      logger.info(`[reconnect] Extension: ${ext.path}`)
-    }
+    const { session, extensionErrors, extensionsDisabled } = await loadWithFallback(
+      'reconnect',
+      () => SdkSessionManager.open(match.path),
+      cwd,
+      this.allowExtensionFallback,
+    )
 
     const stableId = session.sessionId
     logger.info(`Reconnected ${stableId} (requested: ${sessionId})`)
@@ -204,7 +141,29 @@ export class PiSessionManager {
     const managed = this.wrapSession(session, stableId, extensionErrors, extensionsDisabled)
 
     // Populate message history from the SDK's persisted messages
-    managed.messages = this.extractHistoryFromSdkMessages(session.messages)
+    managed.messages = extractHistoryFromSdkMessages(session.messages)
+
+    // Restore cumulative usageTotals from loaded messages
+    for (const msg of managed.messages) {
+      if (msg.role === 'assistant' && msg.usage) {
+        managed.usageTotals.input += msg.usage.inputTokens
+        managed.usageTotals.output += msg.usage.outputTokens
+        managed.usageTotals.totalCost += msg.usage.totalCost
+      }
+    }
+
+    // Emit restored usage to renderer so stats bar is updated
+    if (managed.usageTotals.input > 0 || managed.usageTotals.output > 0 || managed.usageTotals.totalCost > 0) {
+      const ctxUsage = managed.session.getContextUsage()
+      const usageData: UsageData = {
+        inputTokens: managed.usageTotals.input,
+        outputTokens: managed.usageTotals.output,
+        totalCost: managed.usageTotals.totalCost,
+        contextPercent: ctxUsage?.percent ?? 0,
+        contextWindow: ctxUsage?.contextWindow ?? 0,
+      }
+      this.onEvent(stableId, { type: 'usage_update', usage: usageData })
+    }
 
     this.sessions.set(stableId, managed)
     return managed.messages
@@ -224,49 +183,17 @@ export class PiSessionManager {
     return managed.extensionsDisabled
   }
 
-  /**
-   * Attempt to refresh an in-memory session from disk in the background.
-   * If the session has been persisted (has an assistant message), reload its
-   * messages from disk. Only updates if disk has more messages than memory,
-   * and never overwrites while the session is actively streaming.
-   */
-  private async tryRefreshFromDisk(sessionId: string, cwd: string): Promise<void> {
-    try {
-      const managed = this.sessions.get(sessionId)
-      if (!managed) return
-
-      // Don't refresh while streaming — in-memory state is authoritative then
-      if (managed.currentAssistantId) return
-
-      const infos = await SdkSessionManager.list(cwd)
-      const match = infos.find(info => info.id === sessionId)
-      if (!match?.path) return // Not on disk yet (empty session) — that's fine
-
-      const sdkSessionMgr = SdkSessionManager.open(match.path)
-      const diskMessages = this.extractHistoryFromSdkMessages(sdkSessionMgr.getEntries().filter((e): e is SessionMessageEntry => e.type === "message").map(e => e.message))
-
-      // Only update if disk has strictly more messages than memory
-      if (diskMessages.length > managed.messages.length) {
-        logger.info(`Background refresh ${sessionId} — updated ${managed.messages.length} -> ${diskMessages.length} messages`)
-        managed.messages = diskMessages
-      }
-    } catch (err) {
-      // Best-effort background refresh — log but don't throw
-      logger.debug(`Background refresh failed for ${sessionId}: ${err}`)
-    }
-  }
-
   /** Send a user prompt to an active session. */
   async prompt(sessionId: string, text: string): Promise<void> {
     logger.info(`Prompt ${sessionId} text=${text.slice(0, 120)}${text.length > 120 ? '...' : ''}`)
     const managed = this.getManaged(sessionId)
-    logger.debug(`Prompt ${sessionId} — streaming state: currentAssistantId=${managed.currentAssistantId ?? 'none'}, currentToolCallId=${managed.currentToolCallId ?? 'none'}`)
+    logger.debug(`Prompt ${sessionId} - streaming state: currentAssistantId=${managed.currentAssistantId ?? 'none'}, currentToolCallId=${managed.currentToolCallId ?? 'none'}`)
     if (!managed.hasPrompted) {
       this.onEvent(sessionId, { type: 'user_message', text })
       managed.hasPrompted = true
     }
     await managed.session.prompt(text, { streamingBehavior: 'steer' })
-    logger.debug(`Prompt ${sessionId} — SDK prompt() returned (streaming initiated)`)
+    logger.debug(`Prompt ${sessionId} - SDK prompt() returned (streaming initiated)`)
   }
 
   /** Abort the current streaming response. */
@@ -279,58 +206,37 @@ export class PiSessionManager {
   /** Get the accumulated message history for a session. */
   getHistory(sessionId: string): ChatMessageIPC[] {
     const managed = this.getManaged(sessionId)
-    logger.debug(`getHistory ${sessionId} — returning ${managed.messages.length} message(s)`)
-    // Return a copy to prevent mutation
+    logger.debug(`getHistory ${sessionId} - returning ${managed.messages.length} message(s)`)
     return [...managed.messages]
   }
 
   /**
    * Load message history from disk WITHOUT creating an agent session.
-   * Lightweight alternative to reconnect() — just reads the session file and extracts messages.
+   * Lightweight alternative to reconnect() - just reads the session file and extracts messages.
    * Used for preloading session timelines in the sidebar.
    * @param limit Max number of recent messages to return (0 = all)
    */
   async loadHistoryFromDisk(sessionId: string, cwd: string, limit: number = 0): Promise<ChatMessageIPC[]> {
-    logger.info(`loadHistoryFromDisk ${sessionId} cwd=${cwd} limit=${limit}`)
-    const infos = await SdkSessionManager.list(cwd)
-    const match = infos.find(info => info.id === sessionId)
-    if (!match?.path) {
-      logger.debug(`loadHistoryFromDisk ${sessionId} — not found on disk, returning empty`)
-      return []
-    }
-
-    const sdkSessionMgr = SdkSessionManager.open(match.path)
-    const allMessages = this.extractHistoryFromSdkMessages(
-      sdkSessionMgr.getEntries()
-        .filter((e): e is SessionMessageEntry => e.type === "message")
-        .map(e => e.message)
-    )
-    const diskMessages = limit > 0 && allMessages.length > limit
-      ? allMessages.slice(-limit)
-      : allMessages
-    logger.debug(`loadHistoryFromDisk ${sessionId} — ${diskMessages.length}/${allMessages.length} message(s) returned`)
-    return diskMessages
+    return loadHistoryFromDiskImpl(sessionId, cwd, limit)
   }
 
   /** Delete a session file from disk and dispose it if active. */
   async deleteSession(sessionId: string, cwd: string): Promise<void> {
-    // If the session is currently in memory, dispose it first
     if (this.sessions.has(sessionId)) {
       this.dispose(sessionId)
     }
-    // Find and delete the session file from disk
     const infos = await SdkSessionManager.list(cwd)
     const match = infos.find(info => info.id === sessionId)
     if (match?.path) {
       try {
         unlinkSync(match.path)
-        logger.info(`deleteSession ${sessionId} — deleted file ${match.path}`)
+        logger.info(`deleteSession ${sessionId} - deleted file ${match.path}`)
       } catch (err) {
-        logger.warn(`deleteSession ${sessionId} — failed to delete file ${match.path}:`, err)
+        logger.warn(`deleteSession ${sessionId} - failed to delete file ${match.path}:`, err)
         throw err
       }
     } else {
-      logger.warn(`deleteSession ${sessionId} — session file not found on disk for cwd=${cwd}`)
+      logger.warn(`deleteSession ${sessionId} - session file not found on disk for cwd=${cwd}`)
     }
   }
 
@@ -339,18 +245,17 @@ export class PiSessionManager {
     const managed = this.getManaged(sessionId)
     managed.batcher.dispose()
     managed.unsubscribe()
-    // Clean up empty session files (never prompted)
     try {
       const sm = managed.session.sessionManager
       if (sm.isPersisted()) {
         const sessionFile = sm.getSessionFile()
         if (sessionFile && sm.getEntries().length === 0) {
           unlinkSync(sessionFile)
-          logger.info(`Dispose ${sessionId} — deleted empty session file`)
+          logger.info(`Dispose ${sessionId} - deleted empty session file`)
         }
       }
     } catch (err) {
-      logger.warn(`Dispose ${sessionId} — failed to clean up session file:`, err)
+      logger.warn(`Dispose ${sessionId} - failed to clean up session file:`, err)
     }
     managed.session.dispose()
     this.sessions.delete(sessionId)
@@ -365,11 +270,10 @@ export class PiSessionManager {
   }
 
   /** Get the current model for a session. */
-  getModel(sessionId: string): ModelInfo | null {
-    const managed = this.sessions.get(sessionId)
-    if (!managed) return null
+  getModel(sessionId: string): ModelInfo {
+    const managed = this.getManaged(sessionId)
     const model = managed.session.model
-    if (!model) return null
+    if (!model) throw new Error(`No model set for session: ${sessionId}`)
     return { id: model.id, name: model.name, provider: model.provider }
   }
 
@@ -411,7 +315,7 @@ export class PiSessionManager {
   private getManaged(sessionId: string): ManagedSession {
     const managed = this.sessions.get(sessionId)
     if (!managed) {
-      logger.error(`getManaged: session not found ${sessionId} — active sessions: [${Array.from(this.sessions.keys()).join(', ')}]`)
+      logger.error(`getManaged: session not found ${sessionId} - active sessions: [${Array.from(this.sessions.keys()).join(', ')}]`)
       throw new Error(`Session not found: ${sessionId}`)
     }
     return managed
@@ -432,7 +336,7 @@ export class PiSessionManager {
 
     const managed: ManagedSession = {
       session,
-      unsubscribe: () => {}, // placeholder, replaced below
+      unsubscribe: () => {},
       batcher,
       extensionErrors,
       extensionsDisabled,
@@ -449,176 +353,6 @@ export class PiSessionManager {
     })
 
     return managed
-  }
-
-  private async createSdkSession(
-    sessionManager: SessionManager,
-    cwd: string,
-    mode: 'create' | 'create-noext' | 'reconnect' | 'reconnect-noext',
-    loaderOptions?: { noExtensions?: boolean },
-  ): Promise<Awaited<ReturnType<typeof createAgentSession>>> {
-    const loader = this.createResourceLoader(cwd, loaderOptions)
-    logger.debug(`[${mode}] createSdkSession loaderCwd=${cwd} processCwd=${process.cwd()} NODE_PATH=${process.env.NODE_PATH ?? ''}`)
-    await loader.reload()
-    return createAgentSession({
-      cwd,
-      resourceLoader: loader,
-      sessionManager,
-    })
-  }
-
-  private createResourceLoader(cwd: string, options?: { noExtensions?: boolean }): DefaultResourceLoader {
-    return new DefaultResourceLoader({
-      cwd,
-      agentDir: getAgentDir(),
-      settingsManager: SettingsManager.create(),
-      noExtensions: options?.noExtensions,
-    })
-  }
-
-  private shouldRetryWithoutExtensions(errors: ExtensionLoadError[], loadedExtensionsCount: number): boolean {
-    if (loadedExtensionsCount > 0 || errors.length === 0) return false
-    const uniqueMessages = new Set(errors.map(error => error.message))
-    if (uniqueMessages.size !== 1) return false
-    const onlyMessage = errors[0]?.message ?? ''
-    return onlyMessage.includes('(void 0) is not a function')
-  }
-
-  private normalizeExtensionErrors(errors: unknown[]): ExtensionLoadError[] {
-    return errors.map((error, index) => {
-      if (typeof error === 'string') {
-        return {
-          path: `unknown:${index}`,
-          message: error,
-        }
-      }
-
-      if (error && typeof error === 'object') {
-        const path = 'path' in error && typeof error.path === 'string' ? error.path : `unknown:${index}`
-        const message = 'error' in error && typeof error.error === 'string'
-          ? error.error
-          : 'message' in error && typeof error.message === 'string'
-            ? error.message
-            : String(error)
-        const stack = 'stack' in error && typeof error.stack === 'string' ? error.stack : undefined
-        return { path, message, stack }
-      }
-
-      return {
-        path: `unknown:${index}`,
-        message: String(error),
-      }
-    })
-  }
-
-  private logExtensionErrors(mode: 'create' | 'reconnect', errors: ExtensionLoadError[]): void {
-    if (errors.length === 0) return
-    const markerOnly = errors.every(error => error.path === '__reconnect__' || error.path === '__create__')
-    if (markerOnly) {
-      for (const extensionError of errors) {
-        logger.warn(`[${mode}] ${extensionError.message}`)
-      }
-      return
-    }
-    logger.error(`[${mode}] Extension load errors (${errors.length})`)
-    const uniqueMessages = new Set(errors.map(error => error.message))
-    if (uniqueMessages.size === 1) {
-      logger.error(`[${mode}] Extension error fingerprint: uniform-message across all failures -> ${errors[0].message}`)
-    }
-    const stackCount = errors.filter(error => !!error.stack).length
-    if (stackCount === 0) {
-      logger.error(`[${mode}] Extension diagnostics: no stack traces provided by SDK error payload`)
-    }
-    for (const extensionError of errors) {
-      logger.error(`[${mode}] Extension load error path=${extensionError.path} message=${extensionError.message}`)
-      if (extensionError.stack) {
-        logger.error(`[${mode}] Extension load stack path=${extensionError.path}\n${extensionError.stack}`)
-      }
-    }
-  }
-
-  /**
-   * Extract ChatMessageIPC[] from the SDK's AgentMessage[].
-   * Converts the SDK's internal message format to the lightweight IPC format.
-   * Only handles UserMessage and AssistantMessage — skips BashExecutionMessage,
-   * ToolResultMessage, and other custom message types.
-   */
-  private extractHistoryFromSdkMessages(
-    sdkMessages: AgentSession['messages'],
-  ): ChatMessageIPC[] {
-    logger.debug(`extractHistoryFromSdkMessages: ${sdkMessages.length} raw SDK message(s)`)
-    const result: ChatMessageIPC[] = []
-    // First pass: collect toolResult messages keyed by toolCallId
-    const toolResults = new Map<string, { result: unknown; isError: boolean }>()
-    for (const msg of sdkMessages) {
-      if (!('role' in msg)) continue
-      const m = msg as Message
-      if (m.role === 'toolResult') {
-        const content = Array.isArray(m.content)
-          ? m.content.filter((b): b is TextContent => b.type === 'text').map(b => b.text).join('')
-          : ''
-        toolResults.set(m.toolCallId, { result: content, isError: !!m.isError })
-      }
-    }
-
-    for (const msg of sdkMessages) {
-      if (!('role' in msg)) continue
-      const m = msg as Message
-      const role = m.role
-      if (role !== 'user' && role !== 'assistant') continue
-
-      let content = ''
-      if (role === 'user') {
-        const userContent = m.content
-        if (typeof userContent === 'string') {
-          content = userContent
-        } else if (Array.isArray(userContent)) {
-          content = userContent
-            .filter((block): block is TextContent => block.type === 'text')
-            .map(block => block.text)
-            .join('')
-        }
-      } else {
-        const assistantContent = m.content
-        if (Array.isArray(assistantContent)) {
-          content = assistantContent
-            .filter((block): block is TextContent => block.type === 'text')
-            .map(block => block.text)
-            .join('')
-        }
-      }
-
-      // Extract tool calls from assistant messages
-      let toolCalls: ChatMessageIPC['toolCalls']
-      if (role === 'assistant') {
-        const assistantContent = m.content
-        if (Array.isArray(assistantContent)) {
-          const tcBlocks = assistantContent.filter((block): block is ToolCall => block.type === 'toolCall')
-          if (tcBlocks.length > 0) {
-            toolCalls = tcBlocks.map(tc => {
-              const tcResult = toolResults.get(tc.id)
-              return {
-                id: tc.id,
-                name: tc.name,
-                args: tc.arguments,
-                result: tcResult?.result,
-                isError: tcResult?.isError,
-              }
-            })
-          }
-        }
-      }
-
-      result.push({
-        id: crypto.randomUUID(),
-        role,
-        content,
-        toolCalls,
-        timestamp: 'timestamp' in m ? m.timestamp : Date.now(),
-      })
-    }
-    logger.debug(`extractHistoryFromSdkMessages: produced ${result.length} ChatMessageIPC(s)`)
-    return result
   }
 
   /**
@@ -641,7 +375,6 @@ export class PiSessionManager {
       case 'message_update': {
         const sub = event.assistantMessageEvent
         if (sub.type === 'text_delta') {
-          // Start tracking a new assistant message on first delta
           if (!managed.currentAssistantId) {
             managed.currentAssistantId = crypto.randomUUID()
             managed.currentAssistantContent = ''
@@ -653,10 +386,8 @@ export class PiSessionManager {
       }
       case 'message_start': {
         logger.debug(`message_start: role=${event.message?.role ?? 'unknown'}`)
-        // Check if this is a user message start — if so, flush any pending assistant
         if (event.message?.role === 'user') {
           this.finalizeAssistantMessage(managed)
-          // Record the user message
           let content = ''
           if (typeof event.message.content === 'string') {
             content = event.message.content
@@ -678,16 +409,23 @@ export class PiSessionManager {
       }
       case 'message_end': {
         logger.debug(`message_end: role=${event.message?.role ?? 'unknown'}`)
-        // Finalize the assistant message when the message ends
         if (managed.currentAssistantId) {
           this.finalizeAssistantMessage(managed)
         }
-        // Emit usage update if this is an assistant message with usage data
         if (event.message?.role === 'assistant' && 'usage' in event.message && event.message.usage) {
           const usage = event.message.usage as { input: number; output: number; cost: { total: number } }
           managed.usageTotals.input += usage.input
           managed.usageTotals.output += usage.output
           managed.usageTotals.totalCost += usage.cost.total
+          // Store per-message usage in the last assistant message
+          const lastMsg = managed.messages[managed.messages.length - 1]
+          if (lastMsg && lastMsg.role === 'assistant') {
+            lastMsg.usage = {
+              inputTokens: usage.input,
+              outputTokens: usage.output,
+              totalCost: usage.cost.total,
+            }
+          }
           const ctxUsage = managed.session.getContextUsage()
           const usageData: UsageData = {
             inputTokens: managed.usageTotals.input,
@@ -704,10 +442,8 @@ export class PiSessionManager {
         batcher.flush()
         logger.debug(`tool_execution_start: name=${event.toolName}, id=${event.toolCallId}, args=${JSON.stringify(event.args)?.slice(0, 200)}`)
         emit({ type: 'tool_call', toolCallId: event.toolCallId ?? managed.currentToolCallId ?? crypto.randomUUID(), toolName: event.toolName, args: event.args })
-        // Finalize any in-progress assistant text before attaching tool calls
         this.finalizeAssistantMessage(managed)
         managed.currentToolCallId = event.toolCallId ?? crypto.randomUUID()
-        // Tool calls attach to the now-finalized assistant message
         const lastMsg = managed.messages[managed.messages.length - 1]
         if (lastMsg && lastMsg.role === 'assistant') {
           if (!lastMsg.toolCalls) lastMsg.toolCalls = []
@@ -717,7 +453,6 @@ export class PiSessionManager {
             args: event.args,
           })
         } else {
-          // No assistant message yet — create a placeholder
           managed.messages.push({
             id: crypto.randomUUID(),
             role: 'assistant',
@@ -742,7 +477,6 @@ export class PiSessionManager {
           result: event.result,
           isError: event.isError,
         })
-        // Update the tool call result
         if (managed.currentToolCallId) {
           const lastMsg = managed.messages[managed.messages.length - 1]
           if (lastMsg?.toolCalls) {
@@ -764,8 +498,6 @@ export class PiSessionManager {
         emit({ type: 'done' })
         break
       case 'turn_end':
-        // turn_end fires per turn; agent_end fires when fully done.
-        // We emit 'done' on agent_end, so turn_end is just a no-op here.
         break
       case 'agent_start':
         batcher.flush()
@@ -773,8 +505,6 @@ export class PiSessionManager {
         emit({ type: 'agent_start' })
         break
       default:
-        // turn_start, tool_execution_update
-        // are internal bookkeeping — not useful for the renderer.
         logger.debug(`unhandled event type: ${(event as { type: string }).type}`)
         break
     }

@@ -72,6 +72,13 @@ export interface SessionLoadHistoryDiskPayload {
   limit: number
 }
 
+/** Message-level usage data (tokens and cost for a single assistant message) */
+export interface MessageUsage {
+  inputTokens: number
+  outputTokens: number
+  totalCost: number
+}
+
 /** A chat message suitable for IPC transfer (no circular refs, plain data) */
 export interface ChatMessageIPC {
   id: string
@@ -79,6 +86,8 @@ export interface ChatMessageIPC {
   content: string
   toolCalls?: Array<{ id: string; name: string; args: unknown; result?: unknown; isError?: boolean }>
   timestamp: number
+  /** Usage data for assistant messages (undefined for user messages) */
+  usage?: MessageUsage
 }
 
 /**
@@ -176,6 +185,10 @@ export interface UpdateErrorInfo {
 }
 
 /** API exposed to the renderer via contextBridge */
+export interface ZoomInfo {
+  factor: number
+}
+
 export interface NekoCodeIPC {
   session: {
     create: (cwd: string) => Promise<SessionCreateResult>
@@ -216,5 +229,10 @@ export interface NekoCodeIPC {
     onProgress: (callback: (progress: UpdateProgress) => void) => () => void
     onDownloaded: (callback: (info: { version: string }) => void) => () => void
     onError: (callback: (error: UpdateErrorInfo) => void) => () => void
+  }
+  zoom: {
+    get: () => Promise<ZoomInfo>
+    set: (factor: number) => Promise<void>
+    reset: () => Promise<void>
   }
 }

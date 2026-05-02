@@ -32,6 +32,24 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' }
   })
 
+  // Keyboard shortcuts for zoom
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.control || input.meta) {
+      if (input.key === '=' || input.key === '+') {
+        event.preventDefault()
+        const currentZoom = mainWindow.webContents.getZoomFactor()
+        mainWindow.webContents.setZoomFactor(Math.min(2.0, currentZoom + 0.1))
+      } else if (input.key === '-') {
+        event.preventDefault()
+        const currentZoom = mainWindow.webContents.getZoomFactor()
+        mainWindow.webContents.setZoomFactor(Math.max(0.5, currentZoom - 0.1))
+      } else if (input.key === '0') {
+        event.preventDefault()
+        mainWindow.webContents.setZoomFactor(1.0)
+      }
+    }
+  })
+
   logger.info('BrowserWindow created')
   mainWindowRef = mainWindow
   logger.debug(`preload path: ${join(__dirname, '../preload/index.js')}`)
