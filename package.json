@@ -1,19 +1,20 @@
 {
   "name": "nekocode",
-  "version": "0.2.10",
+  "version": "0.2.12",
   "description": "AI-powered coding assistant desktop app",
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
-    "build": "bun run verify:patches && electron-vite build",
+    "dev": "node ./scripts/build-worker.cjs && electron-vite dev",
+    "build": "bun run verify:patches && electron-vite build && node ./scripts/build-worker.cjs",
     "preview": "electron-vite preview",
-    "package": "bun run version:up && bun run verify:patches && electron-vite build && electron-builder --win",
-    "package:mac": "bun run verify:patches && electron-vite build && electron-builder --mac",
-    "package:linux": "bun run verify:patches && electron-vite build && electron-builder --linux",
-    "package:all": "bun run version:up && bun run verify:patches && electron-vite build && electron-builder -mwl",
-    "release": "bun run verify:patches && electron-vite build && electron-builder --win --publish always",
+    "package": "bun run version:up && bun run verify:patches && electron-vite build && node ./scripts/build-worker.cjs && electron-builder --win",
+    "package:mac": "bun run verify:patches && electron-vite build && node ./scripts/build-worker.cjs && electron-builder --mac",
+    "package:linux": "bun run verify:patches && electron-vite build && node ./scripts/build-worker.cjs && electron-builder --linux",
+    "package:all": "bun run version:up && bun run verify:patches && electron-vite build && node ./scripts/build-worker.cjs && electron-builder -mwl",
+    "release": "bun run verify:patches && electron-vite build && node ./scripts/build-worker.cjs && electron-builder --win --publish always",
     "postinstall": "patch-package",
     "verify:patches": "node ./scripts/verify-patches.cjs",
+    "build:worker": "node ./scripts/build-worker.cjs",
     "version:up": "node ./scripts/auto-upversion.cjs",
     "version:up:dry": "node ./scripts/auto-upversion.cjs --dry-run",
     "lint": "eslint --ext .ts,.tsx ./src",
@@ -83,6 +84,13 @@
         "to": "patches",
         "filter": [
           "**/*.patch"
+        ]
+      },
+      {
+        "from": "workers",
+        "to": "workers",
+        "filter": [
+          "**/*"
         ]
       }
     ],

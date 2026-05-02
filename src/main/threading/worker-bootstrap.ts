@@ -1,6 +1,6 @@
 import { parentPort } from 'worker_threads'
 import type { WorkerMessage, WorkerResponse, OperationType, WorkerEventMessage } from './types'
-import type { AgentSessionEvent, AgentSession } from '@mariozechner/pi-coding-agent'
+import type { AgentSessionEvent, AgentSession, SessionMessageEntry } from '@mariozechner/pi-coding-agent'
 import { createLogger } from '../logger'
 import type { SessionStreamEvent, ChatMessageIPC, ExtensionLoadError, UsageData } from '../../shared/ipc-types'
 
@@ -467,10 +467,27 @@ async function handleSessionLoadHistoryDisk(input: {
 }): Promise<{ messages: ChatMessageIPC[] }> {
   logger.debug(`Load history from disk: ${input.sessionId}`)
 
-  const { loadHistoryFromDisk } = await import('../message-store')
-  const messages = await loadHistoryFromDisk(input.sessionId, input.cwd, input.limit)
+  // Dynamically import SDK to avoid static import issues in worker thread
+  const { SessionManager: SdkSessionManager } = await import('@mariozechner/pi-coding-agent')
+  const { extractHistoryFromSdkMessages } = await import('../message-store')
 
-  return { messages }
+  const infos = await SdkSessionManager.list(input.cwd)
+  const match = infos.find(info => info.id === input.sessionId)
+  if (!match?.path) {
+    logger.debug(`loadHistoryFromDisk ${input.sessionId} - not found on disk, returning empty`)
+    return { messages: [] }
+  }
+
+  const sdkSessionMgr = SdkSessionManager.open(match.path)
+  const entries = sdkSessionMgr.getEntries() as SessionMessageEntry[]
+  const allMessages = extractHistoryFromSdkMessages(
+    entries.filter((e): e is SessionMessageEntry => e.type === 'message').map(e => e.message),
+  )
+  const diskMessages = input.limit > 0 && allMessages.length > input.limit
+    ? allMessages.slice(-input.limit)
+    : allMessages
+  logger.debug(`loadHistoryFromDisk ${input.sessionId} - ${diskMessages.length}/${allMessages.length} message(s) returned`)
+  return { messages: diskMessages }
 }
 
 /**

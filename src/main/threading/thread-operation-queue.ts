@@ -82,19 +82,24 @@ export class ThreadOperationQueue {
   private isShuttingDown = false
   private workerPath: string
   private onSessionEvent: SessionEventCallback | null = null
+  // Session affinity: maps sessionId to the worker that owns that session
+  // This ensures all operations for a session go to the same worker
+  private sessionToWorker = new Map<string, WorkerState>()
 
   constructor(config?: Partial<ThreadPoolConfig>, onSessionEvent?: SessionEventCallback) {
     this.config = { ...DEFAULT_POOL_CONFIG, ...config }
     this.onSessionEvent = onSessionEvent ?? null
 
-    // Resolve worker path - will be compiled to .js in dist/
-    // In development, we use the source file directly via ts-node/register
+    // Resolve worker path - the worker is built to workers/worker-bootstrap.mjs
+    // This is a separate directory that won't be wiped by electron-vite during builds
     const isDev = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV
     if (isDev) {
-      // In development, we'll use a different approach - inline worker code
-      this.workerPath = join(__dirname, 'worker-bootstrap.js')
+      // In development, use absolute path to the built worker file
+      // The worker is built by scripts/build-worker.cjs to workers/
+      this.workerPath = join(process.cwd(), 'workers', 'worker-bootstrap.mjs')
     } else {
-      this.workerPath = join(__dirname, 'worker-bootstrap.js')
+      // In production, the worker is in the workers directory relative to the app
+      this.workerPath = join(process.cwd(), 'workers', 'worker-bootstrap.mjs')
     }
 
     this.initializePool()
@@ -274,6 +279,24 @@ export class ThreadOperationQueue {
 
     if (response.success) {
       this.stats.completed++
+      
+      // Handle session affinity
+      if (activeOp.operation.type === 'session:create') {
+        // session:create returns sessionId in the output - register affinity
+        const result = response.result as { sessionId?: string }
+        if (result.sessionId) {
+          this.sessionToWorker.set(result.sessionId, state)
+          logger.debug(`Registered session affinity: ${result.sessionId} -> worker ${this.workers.indexOf(state)}`)
+        }
+      } else if (this.clearsSessionAffinity(activeOp.operation.type)) {
+        // session:dispose or session:delete - clear affinity
+        const sessionId = this.getSessionIdFromInput(activeOp.operation.type, activeOp.operation.input)
+        if (sessionId && this.sessionToWorker.has(sessionId)) {
+          this.sessionToWorker.delete(sessionId)
+          logger.debug(`Cleared session affinity for ${sessionId}`)
+        }
+      }
+      
       activeOp.operation.resolve(response.result)
       logger.debug(`Operation ${response.id} completed successfully`)
     } else {
@@ -360,7 +383,9 @@ export class ThreadOperationQueue {
   }
 
   /**
-   * Schedule next operation to an available worker
+   * Schedule next operation to an available worker.
+   * Implements session affinity: operations for a session are routed to the
+   * worker that owns that session.
    */
   private scheduleNext(): void {
     // No pending operations or shutting down
@@ -368,27 +393,52 @@ export class ThreadOperationQueue {
       return
     }
 
-    // Find an idle worker
+    // Look at the next pending operation (highest priority)
+    const nextOperation = this.pendingOperations[0]
+    const sessionId = this.getSessionIdFromInput(nextOperation.type, nextOperation.input)
+
+    // If this operation needs session affinity
+    if (this.needsSessionAffinity(nextOperation.type) && sessionId) {
+      const affinityWorker = this.sessionToWorker.get(sessionId)
+      
+      if (affinityWorker) {
+        // Session has affinity - only dispatch to that worker
+        if (affinityWorker.isIdle) {
+          this.pendingOperations.shift()
+          this.dispatchToWorker(affinityWorker, nextOperation)
+        } else {
+          // Affinity worker is busy - wait for it to become idle
+          // Don't create a new worker for session operations
+          logger.debug(`Worker for session ${sessionId} is busy, waiting...`)
+        }
+        return
+      }
+      // No affinity yet (shouldn't happen in normal flow, but handle gracefully)
+      // Fall through to normal dispatch
+    }
+
+    // Normal dispatch: find any idle worker
     const idleWorker = this.workers.find(w => w.isIdle)
     if (!idleWorker) {
       // All workers busy - consider scaling up
+      // But only for operations that don't need affinity or don't have affinity yet
       if (this.workers.length < this.config.maxThreads) {
         logger.debug('All workers busy, creating new worker...')
         const newWorker = this.createWorker()
-        this.dispatchToWorker(newWorker)
+        this.pendingOperations.shift()
+        this.dispatchToWorker(newWorker, nextOperation)
       }
       return
     }
 
-    this.dispatchToWorker(idleWorker)
+    this.pendingOperations.shift()
+    this.dispatchToWorker(idleWorker, nextOperation)
   }
 
   /**
    * Dispatch operation to worker
    */
-  private dispatchToWorker(state: WorkerState): void {
-    const operation = this.pendingOperations.shift()
-    if (!operation) return
+  private dispatchToWorker(state: WorkerState, operation: PendingOperation): void {
 
     state.isIdle = false
     state.currentOperationId = operation.id
@@ -414,6 +464,19 @@ export class ThreadOperationQueue {
 
     state.worker.postMessage(message)
     logger.debug(`Dispatched operation ${operation.id} to worker`)
+    
+    // Register session affinity for create/reconnect operations
+    // This is done at dispatch time so subsequent operations wait for the right worker
+    if (this.registersSessionAffinity(operation.type)) {
+      // For session:create, we don't know the sessionId yet - it will be registered
+      // in handleWorkerMessage when the operation completes
+      // For session:reconnect, we can register affinity now
+      const sessionId = this.getSessionIdFromInput(operation.type, operation.input)
+      if (sessionId) {
+        this.sessionToWorker.set(sessionId, state)
+        logger.debug(`Registered session affinity: ${sessionId} -> worker ${this.workers.indexOf(state)}`)
+      }
+    }
   }
 
   /**
@@ -423,5 +486,53 @@ export class ThreadOperationQueue {
     while (this.activeOperations.size > 0) {
       await new Promise(resolve => setTimeout(resolve, 100))
     }
+  }
+
+  // ========================================================================
+  // Private Methods - Session Affinity
+  // ========================================================================
+
+  /**
+   * Extract sessionId from operation input if present.
+   * Returns null for operations that don't have a sessionId in their input.
+   */
+  private getSessionIdFromInput(type: OperationType, input: unknown): string | null {
+    if (!input || typeof input !== 'object') return null
+    
+    // session:create doesn't have sessionId in input (it's in the output)
+    // session:list-models is global, not session-specific
+    if (type === 'session:create' || type === 'session:list-models') {
+      return null
+    }
+    
+    // All other session operations have sessionId in their input
+    const sessionInput = input as { sessionId?: string }
+    return sessionInput.sessionId ?? null
+  }
+
+  /**
+   * Check if an operation type needs session affinity.
+   * These operations should be routed to the worker that owns the session.
+   */
+  private needsSessionAffinity(type: OperationType): boolean {
+    return type.startsWith('session:') && 
+           type !== 'session:create' && 
+           type !== 'session:list-models'
+  }
+
+  /**
+   * Check if an operation type creates a session and should register affinity.
+   * session:create and session:reconnect create session state in the worker.
+   */
+  private registersSessionAffinity(type: OperationType): boolean {
+    return type === 'session:create' || type === 'session:reconnect'
+  }
+
+  /**
+   * Check if an operation type clears session affinity.
+   * session:dispose and session:delete remove the session from the worker.
+   */
+  private clearsSessionAffinity(type: OperationType): boolean {
+    return type === 'session:dispose' || type === 'session:delete'
   }
 }
