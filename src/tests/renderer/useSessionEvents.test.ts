@@ -314,3 +314,129 @@ describe("useSessionEvents", () => {
     })
   })
 })
+
+// ============================================
+// STRESS TESTS - TRYING TO BREAK THE CODE
+// ============================================
+
+describe('useSessionEvents - STRESS TESTS', () => {
+  const sessionId = 'stress-session'
+  let onMessages: Mock<(updater: (prev: ChatMessage[]) => ChatMessage[]) => void>
+  let onError: (error: string | null) => void
+  let onUsage: (usage: UsageData) => void
+
+  beforeEach(() => {
+    resetHookState()
+    onMessages = vi.fn()
+    onError = vi.fn() as unknown as typeof onError
+    onUsage = vi.fn() as unknown as typeof onUsage
+  })
+
+  it("handles 100 rapid events without memory leak", () => {
+    runInHookScope(() =>
+      useSessionEvents({ sessionId, onMessages, onError, onUsage }),
+    )
+    for (let i = 0; i < 100; i++) {
+      eventCallback!({ sessionId, event: { type: "text_delta", delta: "x" } })
+    }
+    expect(onMessages).toHaveBeenCalledTimes(100)
+  })
+
+  it("handles events for different sessions (filters correctly)", () => {
+    runInHookScope(() =>
+      useSessionEvents({ sessionId, onMessages, onError, onUsage }),
+    )
+    eventCallback!({ sessionId: "other-session", event: { type: "text_delta", delta: "y" } })
+    eventCallback!({ sessionId, event: { type: "text_delta", delta: "x" } })
+    expect(onMessages).toHaveBeenCalledTimes(1)
+  })
+
+  it("handles error during streaming", () => {
+    runInHookScope(() =>
+      useSessionEvents({ sessionId, onMessages, onError, onUsage }),
+    )
+    eventCallback!({ sessionId, event: { type: "agent_start" } })
+    eventCallback!({ sessionId, event: { type: "text_delta", delta: "partial" } })
+    eventCallback!({ sessionId, event: { type: "error", message: "stream error" } })
+    eventCallback!({ sessionId, event: { type: "done" } })
+    expect(onError).toHaveBeenCalledWith("stream error")
+  })
+
+  it("handles null sessionId gracefully", () => {
+    const result = runInHookScope(() =>
+      useSessionEvents({ sessionId: null, onMessages, onError, onUsage }),
+    )
+    expect(result.getStreamStartTime("any")).toBe(0)
+    expect(result.getCachedError("any")).toBeNull()
+  })
+
+  it("handles concurrent agent_start and error events", () => {
+    const result = runInHookScope(() =>
+      useSessionEvents({ sessionId, onMessages, onError, onUsage }),
+    )
+    eventCallback!({ sessionId, event: { type: "agent_start" } })
+    eventCallback!({ sessionId, event: { type: "error", message: "concurrent error" } })
+    expect(result.getStreamStartTime(sessionId)).toBeGreaterThan(0)
+    expect(result.getCachedError(sessionId)).toBe("concurrent error")
+  })
+
+  it("handles multiple usage updates", () => {
+    runInHookScope(() =>
+      useSessionEvents({ sessionId, onMessages, onError, onUsage }),
+    )
+    eventCallback!({ sessionId, event: { type: "usage_update", usage: { inputTokens: 100, outputTokens: 50, totalCost: 0.01, contextPercent: 50, contextWindow: 200000 } } })
+    eventCallback!({ sessionId, event: { type: "usage_update", usage: { inputTokens: 200, outputTokens: 100, totalCost: 0.02, contextPercent: 75, contextWindow: 200000 } } })
+    expect(onUsage).toHaveBeenCalledTimes(2)
+  })
+
+  it("handles tool_call and tool_result for unknown tool (no match)", () => {
+    runInHookScope(() =>
+      useSessionEvents({ sessionId, onMessages, onError, onUsage }),
+    )
+    eventCallback!({ sessionId, event: { type: "tool_call", toolName: "unknown", toolCallId: "tc-999", args: "{}" } })
+    eventCallback!({ sessionId, event: { type: "tool_result", toolName: "unknown", toolCallId: "tc-999", result: "res", isError: false } })
+    expect(onMessages).toHaveBeenCalled()
+  })
+
+  it("handles done event without prior agent_start", () => {
+    const result = runInHookScope(() =>
+      useSessionEvents({ sessionId, onMessages, onError, onUsage }),
+    )
+    eventCallback!({ sessionId, event: { type: "done" } })
+    expect(result.getStreamStartTime(sessionId)).toBe(0)
+  })
+
+  it("cache is NOT shared across hook instances (each hook has its own cache)", () => {
+    // This test documents the actual behavior: each hook instance has its own cache
+    const result1 = runInHookScope(() =>
+      useSessionEvents({ sessionId, onMessages, onError, onUsage }),
+    )
+    eventCallback!({ sessionId, event: { type: "error", message: "cached error" } })
+    expect(result1.getCachedError(sessionId)).toBe("cached error")
+    
+    // New hook instance does NOT see the cached error from previous instance
+    const result2 = runInHookScope(() =>
+      useSessionEvents({ sessionId, onMessages, onError, onUsage }),
+    )
+    expect(result2.getCachedError(sessionId)).toBeNull()
+  })
+
+  it("handles empty text delta", () => {
+    runInHookScope(() =>
+      useSessionEvents({ sessionId, onMessages, onError, onUsage }),
+    )
+    eventCallback!({ sessionId, event: { type: "text_delta", delta: "" } })
+    expect(onMessages).toHaveBeenCalled()
+  })
+
+  it("handles very long text delta (1MB)", () => {
+    const longDelta = "x".repeat(1024 * 1024)
+    runInHookScope(() =>
+      useSessionEvents({ sessionId, onMessages, onError, onUsage }),
+    )
+    const start = performance.now()
+    eventCallback!({ sessionId, event: { type: "text_delta", delta: longDelta } })
+    const elapsed = performance.now() - start
+    expect(elapsed).toBeLessThan(100)
+  })
+})

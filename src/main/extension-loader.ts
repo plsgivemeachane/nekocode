@@ -136,11 +136,12 @@ export interface LoadWithFallbackResult {
  */
 export async function loadWithFallback(
   mode: 'create' | 'reconnect',
-  getSdkSessionManager: () => SdkSessionManager,
+  getSdkSessionManager: () => SdkSessionManager | Promise<SdkSessionManager>,
   cwd: string,
   allowExtensionFallback: boolean,
 ): Promise<LoadWithFallbackResult> {
-  const primaryAttempt = await createSdkSession(getSdkSessionManager(), cwd, mode)
+  const sdkSessionManager = await getSdkSessionManager()
+  const primaryAttempt = await createSdkSession(sdkSessionManager, cwd, mode)
   const primaryErrors = normalizeExtensionErrors(primaryAttempt.extensionsResult.errors)
 
   let session = primaryAttempt.session
@@ -154,7 +155,8 @@ export async function loadWithFallback(
       throw new Error(`[${mode}] Systemic extension loader failure (${primaryErrors.length}) - set NEKOCODE_ALLOW_EXTENSION_FALLBACK=1 to allow degraded reconnect/create without extensions`)
     }
     logger.warn(`[${mode}] Detected systemic extension loader failure signature, retrying with extensions disabled`)
-    const retryAttempt = await createSdkSession(getSdkSessionManager(), cwd, `${mode}-noext`, { noExtensions: true })
+    const retrySdkSessionManager = await getSdkSessionManager()
+    const retryAttempt = await createSdkSession(retrySdkSessionManager, cwd, `${mode}-noext`, { noExtensions: true })
     session = retryAttempt.session
     extensionsResult = retryAttempt.extensionsResult
     extensionsDisabled = retryAttempt.extensionsResult.errors.length === 0

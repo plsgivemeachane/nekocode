@@ -1,15 +1,36 @@
 import { app, BrowserWindow, Menu, shell } from 'electron'
 import { join } from 'path'
-import { PiSessionManager } from './session-manager'
 import { ProjectManager } from './project-manager'
 import { registerIpcHandlers, sendEventToRenderer } from './ipc-handlers'
 import { createLogger } from './logger'
 import { initAutoUpdater } from './updater'
+import { ThreadOperationQueue } from './threading'
+import { ThreadedProjectManager } from './threading/threaded-project-manager'
+import { ThreadedSessionManager } from './threading/threaded-session-manager'
+import type { SessionStreamEvent } from '../shared/ipc-types'
 
 const logger = createLogger('main')
 
-const sessionManager = new PiSessionManager(sendEventToRenderer)
-const projectManager = new ProjectManager()
+// Event callback for session events from worker threads
+const onSessionEvent = (sessionId: string, event: SessionStreamEvent): void => {
+  sendEventToRenderer(sessionId, event)
+}
+
+// Initialize thread pool for offloading CPU-intensive operations
+const operationQueue = new ThreadOperationQueue(
+  {
+    minThreads: 2,
+    maxThreads: 4,
+  },
+  onSessionEvent
+)
+
+// Core project manager (stays on main thread for state management)
+const coreProjectManager = new ProjectManager()
+
+// Threaded wrappers for better performance
+const sessionManager = new ThreadedSessionManager(operationQueue, onSessionEvent)
+const projectManager = new ThreadedProjectManager(operationQueue, coreProjectManager)
 let isQuitting = false
 let mainWindowRef: BrowserWindow | null = null
 
@@ -67,7 +88,7 @@ function createWindow(): BrowserWindow {
   return mainWindow
 }
 
-function performShutdown(): void {
+async function performShutdown(): Promise<void> {
   if (isQuitting) return
   isQuitting = true
 
@@ -78,6 +99,15 @@ function performShutdown(): void {
     logger.info(`Disposed ${count} session(s) successfully`)
   } catch (err) {
     logger.error('Error disposing sessions on quit', err)
+  }
+
+  // Shutdown thread pool
+  logger.info('Shutting down thread pool')
+  try {
+    await operationQueue.shutdown()
+    logger.info('Thread pool shutdown complete')
+  } catch (err) {
+    logger.error('Error shutting down thread pool', err)
   }
 }
 

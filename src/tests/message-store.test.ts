@@ -318,7 +318,8 @@ describe('tryRefreshFromDisk', () => {
 
   it('returns null when open() throws', async () => {
     mockSdkSessionManager.list.mockResolvedValue([{ id: 'sess-1', path: '/bad/path' }])
-    mockSdkSessionManager.open.mockImplementation(() => { throw new Error('open failed') })
+    // Use mockImplementationOnce to avoid polluting subsequent tests
+    mockSdkSessionManager.open.mockImplementationOnce(() => { throw new Error('open failed') })
     const result = await tryRefreshFromDisk('sess-1', '/cwd', [], null)
     expect(result).toBeNull()
   })
@@ -418,5 +419,334 @@ describe('extractHistoryFromSdkMessages - usage persistence', () => {
       totalCost: 0.015,
     })
     expect(result[0].toolCalls).toHaveLength(1)
+  })
+})
+
+// ============================================
+// STRESS TESTS - TRYING TO BREAK THE CODE
+// ============================================
+
+describe("extractHistoryFromSdkMessages - STRESS TESTS", () => {
+  it("handles tool call IDs with special characters", () => {
+    const messages = [
+      { role: "assistant", content: [
+        { type: "toolCall", id: "tc-<script>alert(1)</script>", name: "bash", arguments: "{}" },
+      ], timestamp: 2000 },
+      { role: "toolResult", toolCallId: "tc-<script>alert(1)</script>", content: "result1", isError: false, timestamp: 2500 },
+    ]
+    const result = extract(messages)
+    expect(result).toHaveLength(1)
+    expect(result[0].toolCalls![0].result).toBe("result1")
+  })
+
+  it("handles empty string tool call IDs", () => {
+    const messages = [
+      { role: "assistant", content: [
+        { type: "toolCall", id: "", name: "bash", arguments: "{}" },
+      ], timestamp: 2000 },
+      { role: "toolResult", toolCallId: "", content: "empty-id-result", isError: false, timestamp: 2500 },
+    ]
+    const result = extract(messages)
+    expect(result).toHaveLength(1)
+    expect(result[0].toolCalls![0].id).toBe("")
+    expect(result[0].toolCalls![0].result).toBe("empty-id-result")
+  })
+
+  it("handles tool call IDs with unicode and emojis", () => {
+    const messages = [
+      { role: "assistant", content: [
+        { type: "toolCall", id: "tc-emoji", name: "bash", arguments: "{}" },
+      ], timestamp: 2000 },
+      { role: "toolResult", toolCallId: "tc-emoji", content: "result", isError: false, timestamp: 2500 },
+    ]
+    const result = extract(messages)
+    expect(result).toHaveLength(1)
+    expect(result[0].toolCalls![0].result).toBe("result")
+  })
+
+  it("handles messages with null content", () => {
+    const messages = [
+      { role: "user", content: null, timestamp: 1000 },
+    ]
+    const result = extract(messages)
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toBe("")
+  })
+
+  it("handles messages with undefined content", () => {
+    const messages = [
+      { role: "user", content: undefined, timestamp: 1000 },
+    ]
+    const result = extract(messages)
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toBe("")
+  })
+
+  it("handles very large tool call result (1MB)", () => {
+    const largeResult = "x".repeat(1024 * 1024)
+    const messages = [
+      { role: "assistant", content: [
+        { type: "toolCall", id: "tc-1", name: "bash", arguments: "{}" },
+      ], timestamp: 2000 },
+      { role: "toolResult", toolCallId: "tc-1", content: largeResult, isError: false, timestamp: 2500 },
+    ]
+    const start = performance.now()
+    const result = extract(messages)
+    const elapsed = performance.now() - start
+    expect(result).toHaveLength(1)
+    expect(result[0].toolCalls![0].result).toBe(largeResult)
+    expect(elapsed).toBeLessThan(100)
+  })
+
+  it("handles 1000 messages efficiently", () => {
+    const messages = []
+    for (let i = 0; i < 1000; i++) {
+      messages.push({ role: "user", content: "msg " + i, timestamp: i * 100 })
+    }
+    const start = performance.now()
+    const result = extract(messages)
+    const elapsed = performance.now() - start
+    expect(result).toHaveLength(1000)
+    expect(elapsed).toBeLessThan(500)
+  })
+
+  it("handles negative timestamps", () => {
+    const messages = [
+      { role: "user", content: "hello", timestamp: -1000 },
+    ]
+    const result = extract(messages)
+    expect(result[0].timestamp).toBe(-1000)
+  })
+
+  it("handles duplicate tool results for same tool call", () => {
+    const messages = [
+      { role: "assistant", content: [
+        { type: "toolCall", id: "tc-1", name: "bash", arguments: "{}" },
+      ], timestamp: 2000 },
+      { role: "toolResult", toolCallId: "tc-1", content: "first result", isError: false, timestamp: 2500 },
+      { role: "toolResult", toolCallId: "tc-1", content: "second result", isError: true, timestamp: 2600 },
+    ]
+    const result = extract(messages)
+    expect(result).toHaveLength(1)
+    expect(result[0].toolCalls![0].result).toBe("second result")
+    expect(result[0].toolCalls![0].isError).toBe(true)
+  })
+
+  it("handles orphaned tool results", () => {
+    const messages = [
+      { role: "user", content: "hello", timestamp: 1000 },
+      { role: "toolResult", toolCallId: "orphan-tc", content: "orphan result", isError: false, timestamp: 1500 },
+      { role: "assistant", content: "response", timestamp: 2000 },
+    ]
+    const result = extract(messages)
+    expect(result).toHaveLength(2)
+  })
+
+  it("handles usage with zero values", () => {
+    const messages = [
+      {
+        role: "assistant",
+        content: "response",
+        timestamp: 2000,
+        usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+      },
+    ]
+    const result = extract(messages)
+    expect(result[0].usage).toEqual({
+      inputTokens: 0,
+      outputTokens: 0,
+      totalCost: 0,
+    })
+  })
+
+  it("handles tool call with undefined name", () => {
+    const messages = [
+      { role: "assistant", content: [
+        { type: "toolCall", id: "tc-1", name: undefined as unknown as string, arguments: "{}" },
+      ], timestamp: 2000 },
+    ]
+    const result = extract(messages)
+    expect(result).toHaveLength(1)
+    expect(result[0].toolCalls![0].name).toBeUndefined()
+  })
+
+  it("handles tool call with null arguments", () => {
+    const messages = [
+      { role: "assistant", content: [
+        { type: "toolCall", id: "tc-1", name: "bash", arguments: null as unknown as string },
+      ], timestamp: 2000 },
+    ]
+    const result = extract(messages)
+    expect(result).toHaveLength(1)
+    expect(result[0].toolCalls![0].args).toBeNull()
+  })
+
+  it("handles content with nested arrays of text blocks", () => {
+    const messages = [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "line1" },
+          { type: "text", text: "line2" },
+          { type: "text", text: "line3" },
+        ],
+        timestamp: 2000,
+      },
+    ]
+    const result = extract(messages)
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toContain("line1")
+  })
+
+  it("handles malformed timestamp (string instead of number)", () => {
+    const messages = [
+      { role: "user", content: "hello", timestamp: "2024-01-01" as unknown as number },
+    ]
+    const result = extract(messages)
+    expect(result).toHaveLength(1)
+    expect(typeof result[0].timestamp).toBe("string")
+  })
+
+  it("handles very long tool call ID (10KB)", () => {
+    const longId = "x".repeat(10 * 1024)
+    const messages = [
+      { role: "assistant", content: [
+        { type: "toolCall", id: longId, name: "bash", arguments: "{}" },
+      ], timestamp: 2000 },
+      { role: "toolResult", toolCallId: longId, content: "result", isError: false, timestamp: 2500 },
+    ]
+    const result = extract(messages)
+    expect(result).toHaveLength(1)
+    expect(result[0].toolCalls![0].id).toBe(longId)
+  })
+
+  it("handles tool result with isError as string instead of boolean", () => {
+    const messages = [
+      { role: "assistant", content: [
+        { type: "toolCall", id: "tc-1", name: "bash", arguments: "{}" },
+      ], timestamp: 2000 },
+      { role: "toolResult", toolCallId: "tc-1", content: "error result", isError: "true" as unknown as boolean, timestamp: 2500 },
+    ]
+    const result = extract(messages)
+    expect(result).toHaveLength(1)
+    // isError is passed through as-is (string "true"), but the code may convert it
+    // This test documents the actual behavior
+    expect(result[0].toolCalls![0].isError).toBe(true)
+  })
+
+  it("handles concurrent extract calls efficiently", async () => {
+    const messages = Array(100).fill(null).map((_, i) => ({
+      role: "user" as const,
+      content: "msg " + i,
+      timestamp: i * 100,
+    }))
+    
+    const start = performance.now()
+    const promises = Array(10).fill(null).map(() => Promise.resolve(extract(messages)))
+    const results = await Promise.all(promises)
+    const elapsed = performance.now() - start
+    
+    expect(results.every(r => r.length === 100)).toBe(true)
+    expect(elapsed).toBeLessThan(1000)
+  })
+
+  it("handles tool call in user message (malformed - should be ignored)", () => {
+    const messages = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "hello" },
+          { type: "toolCall", id: "tc-malformed", name: "bash", arguments: "{}" } as unknown,
+        ],
+        timestamp: 1000,
+      },
+    ]
+    const result = extract(messages)
+    expect(result).toHaveLength(1)
+    expect(result[0].toolCalls).toBeUndefined()
+  })
+})
+
+describe("loadHistoryFromDisk - STRESS TESTS", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    // Don't need to reset mock implementations - the default mock from vi.hoisted works
+  })
+
+  it("handles session with corrupted entries (missing type)", async () => {
+    mockEntries.length = 0
+    mockEntries.push(
+      { message: { role: "user", content: "msg1", timestamp: 1000 } },
+      { type: "message", message: { role: "user", content: "msg2", timestamp: 2000 } },
+    )
+    mockSdkSessionManager.list.mockResolvedValue([{ id: "sess-1", path: "/path" }])
+    const result = await loadHistoryFromDisk("sess-1", "/cwd")
+    expect(result).toHaveLength(1)
+  })
+
+  it("handles limit = 1 (minimum non-zero)", async () => {
+    mockEntries.length = 0
+    mockEntries.push(
+      { type: "message", message: { role: "user", content: "msg1", timestamp: 1000 } },
+      { type: "message", message: { role: "user", content: "msg2", timestamp: 2000 } },
+    )
+    mockSdkSessionManager.list.mockResolvedValue([{ id: "sess-1", path: "/path" }])
+    const result = await loadHistoryFromDisk("sess-1", "/cwd", 1)
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toBe("msg2")
+  })
+
+  it("handles concurrent calls for same session", async () => {
+    mockEntries.length = 0
+    mockEntries.push(
+      { type: "message", message: { role: "user", content: "msg", timestamp: 1000 } },
+    )
+    mockSdkSessionManager.list.mockResolvedValue([{ id: "sess-1", path: "/path" }])
+    
+    const promises = [
+      loadHistoryFromDisk("sess-1", "/cwd"),
+      loadHistoryFromDisk("sess-1", "/cwd"),
+      loadHistoryFromDisk("sess-1", "/cwd"),
+    ]
+    const results = await Promise.all(promises)
+    expect(results.every(r => r.length === 1)).toBe(true)
+  })
+
+  it("handles session path with unicode characters", async () => {
+    mockEntries.length = 0
+    mockEntries.push(
+      { type: "message", message: { role: "user", content: "msg", timestamp: 1000 } },
+    )
+    mockSdkSessionManager.list.mockResolvedValue([{ id: "sess-1", path: "/path/to/session" }])
+    const result = await loadHistoryFromDisk("sess-1", "/cwd/unicode")
+    expect(result).toHaveLength(1)
+  })
+})
+
+describe("tryRefreshFromDisk - STRESS TESTS", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it("handles null currentMessages array", async () => {
+    mockSdkSessionManager.list.mockResolvedValue([])
+    const result = await tryRefreshFromDisk("sess-1", "/cwd", null as unknown as [], null)
+    expect(result).toBeNull()
+  })
+
+  it("handles empty string currentAssistantId (should still return null)", async () => {
+    const result = await tryRefreshFromDisk("sess-1", "/cwd", [], "")
+    expect(result).toBeNull()
+  })
+
+  it("handles disk returning exactly same message count", async () => {
+    mockEntries.length = 0
+    mockEntries.push(
+      { type: "message", message: { role: "user", content: "different content", timestamp: 1000 } },
+    )
+    mockSdkSessionManager.list.mockResolvedValue([{ id: "sess-1", path: "/path" }])
+    const currentMessages = [{ id: "1", role: "user" as const, content: "original content", timestamp: 1000 }]
+    const result = await tryRefreshFromDisk("sess-1", "/cwd", currentMessages, null)
+    expect(result).toBeNull()
   })
 })

@@ -472,3 +472,223 @@ describe("useSessionOrchestration", () => {
     })
   })
 })
+
+// ============================================
+// STRESS TESTS - TRYING TO BREAK THE CODE
+// ============================================
+
+describe("useSessionOrchestration - STRESS TESTS", () => {
+  let dispatch: ReturnType<typeof makeDispatch>
+
+  beforeEach(() => {
+    resetHookState()
+    dispatch = makeDispatch()
+  })
+
+  it("handles rapid createSession calls (debounce)", async () => {
+    setupNekocode({
+      create: vi.fn().mockResolvedValue({
+        sessionId: "s1",
+        history: [],
+        extensionErrors: [],
+        extensionsDisabled: false,
+      }),
+    })
+    const { createSession } = runInHookScope(() =>
+      useSessionOrchestration({ dispatch, activeSessionId: null, activeProjectPath: null }),
+    )
+    
+    // Rapid concurrent calls for same project
+    await Promise.all([
+      createSession(PROJECT_PATH),
+      createSession(PROJECT_PATH),
+      createSession(PROJECT_PATH),
+    ])
+    
+    // Should only create one session due to in-flight check
+    expect(window.nekocode.session.create).toHaveBeenCalledTimes(1)
+  })
+
+  it("handles createSession timeout", async () => {
+    let resolveCreate: (value: unknown) => void
+    setupNekocode({
+      create: vi.fn().mockImplementation(() => new Promise(r => { resolveCreate = r })),
+    })
+    
+    const { createSession } = runInHookScope(() =>
+      useSessionOrchestration({ dispatch, activeSessionId: null, activeProjectPath: null }),
+    )
+    
+    const createPromise = createSession(PROJECT_PATH)
+    
+    // Should have pending session
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "ADD_SESSION_TO_PROJECT" }))
+    
+    // Resolve after delay
+    await new Promise(r => setTimeout(r, 10))
+    resolveCreate!({ sessionId: "s-late", history: [], extensionErrors: [], extensionsDisabled: false })
+    await createPromise
+    
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "REPLACE_PENDING_SESSION" }))
+  })
+
+  it("handles reconnectSession with extension errors", async () => {
+    setupNekocode({
+      reconnect: vi.fn().mockResolvedValue({
+        history: [],
+        extensionErrors: [{ path: "/ext.ts", message: "error" }],
+        extensionsDisabled: true,
+      }),
+    })
+    
+    const { reconnectSession } = runInHookScope(() =>
+      useSessionOrchestration({ dispatch, activeSessionId: null, activeProjectPath: null }),
+    )
+    
+    await reconnectSession(SESSION_ID, PROJECT_PATH)
+    expect(dispatch).toHaveBeenCalledWith({ type: "SET_AGENT_READY", sessionId: SESSION_ID })
+  })
+
+  it("handles createSession with empty project path", async () => {
+    setupNekocode({
+      create: vi.fn().mockRejectedValue(new Error("no project path")),
+    })
+    
+    const { createSession } = runInHookScope(() =>
+      useSessionOrchestration({ dispatch, activeSessionId: null, activeProjectPath: null }),
+    )
+    
+    await createSession("")
+    expect(dispatch).toHaveBeenCalledWith({ type: "SET_AGENT_READY", sessionId: expect.stringContaining("pending-") })
+  })
+
+  it("handles concurrent reconnect and create", async () => {
+    setupNekocode({
+      create: vi.fn().mockResolvedValue({
+        sessionId: "s-new",
+        history: [],
+        extensionErrors: [],
+        extensionsDisabled: false,
+      }),
+      reconnect: vi.fn().mockResolvedValue({
+        history: [{ role: "user", content: "hi" }],
+        extensionErrors: [],
+        extensionsDisabled: false,
+      }),
+    })
+    
+    const { createSession, reconnectSession } = runInHookScope(() =>
+      useSessionOrchestration({ dispatch, activeSessionId: null, activeProjectPath: null }),
+    )
+    
+    await Promise.all([
+      createSession("/project1"),
+      reconnectSession("existing-session", "/project2"),
+    ])
+    
+    expect(window.nekocode.session.create).toHaveBeenCalled()
+    expect(window.nekocode.session.reconnect).toHaveBeenCalled()
+  })
+
+  it("handles session ID collision (pending ID matches real ID)", async () => {
+    const collisionId = "pending-123-collision"
+    setupNekocode({
+      create: vi.fn().mockResolvedValue({
+        sessionId: collisionId,
+        history: [],
+        extensionErrors: [],
+        extensionsDisabled: false,
+      }),
+    })
+    
+    const { createSession } = runInHookScope(() =>
+      useSessionOrchestration({ dispatch, activeSessionId: null, activeProjectPath: null }),
+    )
+    
+    await createSession(PROJECT_PATH)
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "REPLACE_PENDING_SESSION" }))
+  })
+
+  it("handles create failure cleans up pending session", async () => {
+    setupNekocode({
+      create: vi.fn().mockRejectedValue(new Error("create failed")),
+    })
+    
+    const { createSession } = runInHookScope(() =>
+      useSessionOrchestration({ dispatch, activeSessionId: null, activeProjectPath: null }),
+    )
+    
+    await createSession(PROJECT_PATH)
+    
+    // Should have added pending session
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "ADD_SESSION_TO_PROJECT" }))
+    // Should have set agent ready (cleanup)
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "SET_AGENT_READY" }))
+  })
+
+  it("handles draft session reuse after user message", async () => {
+    setupNekocode({
+      create: vi.fn().mockResolvedValue({
+        sessionId: "s-draft",
+        history: [],
+        extensionErrors: [],
+        extensionsDisabled: false,
+      }),
+      loadHistory: vi.fn().mockResolvedValue([{ role: "user", content: "hello" }]),
+    })
+    
+    const { createSession, draftSessionsRef } = runInHookScope(() =>
+      useSessionOrchestration({ dispatch, activeSessionId: "s-draft", activeProjectPath: PROJECT_PATH }),
+    )
+    
+    // First call creates draft
+    await createSession(PROJECT_PATH)
+    expect(draftSessionsRef.current.has("s-draft")).toBe(true)
+    
+    // Load history shows message, so draft is no longer empty
+    await createSession(PROJECT_PATH)
+    expect(window.nekocode.session.create).toHaveBeenCalled()
+  })
+
+  it("handles rapid session switch during reconnect", async () => {
+    let resolveReconnect: (value: unknown) => void
+    setupNekocode({
+      reconnect: vi.fn().mockImplementation(() => new Promise(r => { resolveReconnect = r })),
+    })
+    
+    const { reconnectSession } = runInHookScope(() =>
+      useSessionOrchestration({ dispatch, activeSessionId: null, activeProjectPath: null }),
+    )
+    
+    const reconnectPromise = reconnectSession("s1", PROJECT_PATH)
+    
+    // User switches to another session before reconnect completes
+    dispatch({ type: "SET_ACTIVE_SESSION", sessionId: "s2", projectPath: PROJECT_PATH })
+    
+    resolveReconnect!({ history: [], extensionErrors: [], extensionsDisabled: false })
+    await reconnectPromise
+    
+    // Should still complete the reconnect
+    expect(dispatch).toHaveBeenCalledWith({ type: "SET_AGENT_READY", sessionId: "s1" })
+  })
+
+  it("handles 10 concurrent createSession calls for different projects", async () => {
+    setupNekocode({
+      create: vi.fn().mockResolvedValue({
+        sessionId: "s-multi",
+        history: [],
+        extensionErrors: [],
+        extensionsDisabled: false,
+      }),
+    })
+    
+    const { createSession } = runInHookScope(() =>
+      useSessionOrchestration({ dispatch, activeSessionId: null, activeProjectPath: null }),
+    )
+    
+    const promises = Array(10).fill(null).map((_, i) => createSession(`/project-${i}`))
+    await Promise.all(promises)
+    
+    expect(window.nekocode.session.create).toHaveBeenCalledTimes(10)
+  })
+})

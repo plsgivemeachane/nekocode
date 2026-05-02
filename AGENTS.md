@@ -24,3 +24,5 @@ For every change, run all commands below and fix all errors before committing, e
 - `bun run test`
 - `bun run lint`
 - `bun run type-check`
+
+BIGGEST RULE: NEVER, EVER, EVER REMOVE ANY COMMENTS FROM THE CODE!!!. IF YOU NEED TO ALTER THE COMMENTS, PLEASE ADD MORE COMMENTS INSTEAD OF REMOVING THE OLD ONES.

@@ -23,8 +23,7 @@ import type {
   ModelInfo,
   UpdateAvailableInfo,
 } from '../shared/ipc-types'
-import { PiSessionManager } from './session-manager'
-import type { ProjectManager } from './project-manager'
+import type { ISessionManager, IProjectManager } from './manager-types'
 import { createLogger } from './logger'
 import { checkForUpdate, downloadUpdate, quitAndInstall } from './updater'
 
@@ -36,8 +35,8 @@ const execFileAsync = promisify(execFile)
  * Called once from main process startup.
  */
 export function registerIpcHandlers(
-  sessionManager: PiSessionManager,
-  projectManager: ProjectManager,
+  sessionManager: ISessionManager,
+  projectManager: IProjectManager,
 ): void {
   // --- Session handlers ---
 
@@ -96,7 +95,7 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC_CHANNELS.SESSION_LOAD_HISTORY, async (_event, payload: SessionLoadHistoryPayload): Promise<ChatMessageIPC[]> => {
     logger.debug(`SESSION_LOAD_HISTORY sessionId=${payload.sessionId}`)
-    return sessionManager.getHistory(payload.sessionId)
+    return await sessionManager.getHistory(payload.sessionId)
   })
 
   ipcMain.handle(IPC_CHANNELS.SESSION_LOAD_HISTORY_DISK, async (_event, payload: SessionLoadHistoryDiskPayload): Promise<ChatMessageIPC[]> => {

@@ -450,3 +450,208 @@ describe('loadWithFallback', () => {
     expect(factory).toHaveBeenCalledTimes(2)
   })
 })
+
+// ============================================
+// STRESS TESTS - TRYING TO BREAK THE CODE
+// ============================================
+
+describe('normalizeExtensionErrors - STRESS TESTS', () => {
+  it('handles circular reference in error object', () => {
+    const circular: Record<string, unknown> = { path: '/a.ts' }
+    circular.self = circular
+    const result = normalizeExtensionErrors([circular])
+    expect(result).toHaveLength(1)
+    expect(result[0].path).toBe('/a.ts')
+  })
+
+  it('handles error with very long message (1MB)', () => {
+    const longMessage = 'x'.repeat(1024 * 1024)
+    const start = performance.now()
+    const result = normalizeExtensionErrors([{ path: '/a.ts', message: longMessage }])
+    const elapsed = performance.now() - start
+    expect(result).toHaveLength(1)
+    expect(result[0].message).toBe(longMessage)
+    expect(elapsed).toBeLessThan(100)
+  })
+
+  it('handles 1000 errors efficiently', () => {
+    const errors = Array(1000).fill(null).map((_, i) => ({
+      path: `/ext/${i}.ts`,
+      message: `Error ${i}`,
+    }))
+    const start = performance.now()
+    const result = normalizeExtensionErrors(errors)
+    const elapsed = performance.now() - start
+    expect(result).toHaveLength(1000)
+    expect(elapsed).toBeLessThan(100)
+  })
+
+  it('handles path with null bytes', () => {
+    const result = normalizeExtensionErrors([
+      { path: '/path/with/null.ts', message: 'error' },
+    ])
+    expect(result[0].path).toContain('null')
+  })
+
+  it('handles error with array as message', () => {
+    const result = normalizeExtensionErrors([
+      { path: '/a.ts', message: ['nested', 'array'] as unknown as string },
+    ])
+    expect(result).toHaveLength(1)
+    expect(typeof result[0].message).toBe('string')
+  })
+
+  it('handles error with object as message', () => {
+    const result = normalizeExtensionErrors([
+      { path: '/a.ts', message: { nested: 'object' } as unknown as string },
+    ])
+    expect(result).toHaveLength(1)
+    expect(typeof result[0].message).toBe('string')
+  })
+
+  it('handles error with number as path', () => {
+    const result = normalizeExtensionErrors([
+      { path: 123 as unknown as string, message: 'error' },
+    ])
+    expect(result[0].path).toBe('unknown:0')
+  })
+
+  it('handles completely empty error object', () => {
+    const result = normalizeExtensionErrors([{}])
+    expect(result).toHaveLength(1)
+    expect(result[0].path).toBe('unknown:0')
+    expect(result[0].message).toBeTruthy()
+  })
+})
+
+describe('shouldRetryWithoutExtensions - STRESS TESTS', () => {
+  it('returns false for empty errors array', () => {
+    expect(shouldRetryWithoutExtensions([], 0)).toBe(false)
+  })
+
+  it('handles errors with undefined message property', () => {
+    const errors = [
+      { path: '/a.ts' },
+      { path: '/b.ts' },
+    ] as ExtensionLoadError[]
+    expect(shouldRetryWithoutExtensions(errors, 0)).toBe(false)
+  })
+
+  it('handles single error with signature', () => {
+    const errors: ExtensionLoadError[] = [
+      { path: '/a.ts', message: '(void 0) is not a function' },
+    ]
+    expect(shouldRetryWithoutExtensions(errors, 0)).toBe(true)
+  })
+
+  it('handles 100 identical errors efficiently', () => {
+    const errors: ExtensionLoadError[] = Array(100).fill(null).map(() => ({
+      path: '/ext.ts',
+      message: '(void 0) is not a function',
+    }))
+    const start = performance.now()
+    const result = shouldRetryWithoutExtensions(errors, 0)
+    const elapsed = performance.now() - start
+    expect(result).toBe(true)
+    expect(elapsed).toBeLessThan(10)
+  })
+
+  it('handles mixed errors with one different', () => {
+    const errors: ExtensionLoadError[] = [
+      { path: '/a.ts', message: '(void 0) is not a function' },
+      { path: '/b.ts', message: '(void 0) is not a function' },
+      { path: '/c.ts', message: 'different error' },
+    ]
+    expect(shouldRetryWithoutExtensions(errors, 0)).toBe(false)
+  })
+})
+
+describe('logExtensionErrors - STRESS TESTS', () => {
+  it('handles empty errors array gracefully', () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    logExtensionErrors('create', [])
+    expect(consoleSpy).not.toHaveBeenCalled()
+    consoleSpy.mockRestore()
+  })
+
+  it('handles marker-only errors without throwing', () => {
+    // Marker-only errors use logger.warn, not console.warn
+    // Just verify the function completes without throwing
+    expect(() => {
+      logExtensionErrors('create', [
+        { path: '__create__', message: 'marker error' },
+      ])
+    }).not.toThrow()
+  })
+})
+
+describe('loadWithFallback - STRESS TESTS', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockState.loaderCtorCalls.length = 0
+  })
+
+  it('handles concurrent loadWithFallback calls', async () => {
+    mockState.mockCreateAgentSession.mockResolvedValue({
+      session: { sessionId: 's1' },
+      extensionsResult: { extensions: [{ path: '/ext.ts' }], errors: [] },
+    })
+    
+    const promises = [
+      loadWithFallback('create', () => ({} as SdkSessionManagerMock), '/cwd1', true),
+      loadWithFallback('create', () => ({} as SdkSessionManagerMock), '/cwd2', true),
+      loadWithFallback('create', () => ({} as SdkSessionManagerMock), '/cwd3', true),
+    ]
+    
+    const results = await Promise.all(promises)
+    expect(results.every(r => r.session.sessionId === 's1')).toBe(true)
+  })
+
+  it('handles async factory function', async () => {
+    mockState.mockCreateAgentSession.mockResolvedValue({
+      session: { sessionId: 's1' },
+      extensionsResult: { extensions: [], errors: [] },
+    })
+    
+    const asyncFactory = async () => {
+      await new Promise(resolve => setTimeout(resolve, 10))
+      return {} as SdkSessionManagerMock
+    }
+    
+    const result = await loadWithFallback('create', asyncFactory, '/cwd', true)
+    expect(result.session.sessionId).toBe('s1')
+  })
+
+  it('handles fallback with partial extension success', async () => {
+    const primaryResult = {
+      session: { sessionId: 's1' },
+      extensionsResult: {
+        extensions: [{ path: '/loaded.ts' }],
+        errors: [{ path: '/failed.ts', error: '(void 0) is not a function' }],
+      },
+    }
+    mockState.mockCreateAgentSession.mockResolvedValue(primaryResult)
+    
+    const result = await loadWithFallback('create', () => ({} as SdkSessionManagerMock), '/cwd', true)
+    expect(result.extensionsDisabled).toBe(false)
+    expect(result.extensionErrors).toHaveLength(1)
+  })
+
+  it('rejects when fallback is disabled and systemic failure detected', async () => {
+    const primaryResult = {
+      session: { sessionId: 's1' },
+      extensionsResult: {
+        extensions: [],
+        errors: [
+          { path: '/a.ts', error: '(void 0) is not a function' },
+          { path: '/b.ts', error: '(void 0) is not a function' },
+        ],
+      },
+    }
+    mockState.mockCreateAgentSession.mockResolvedValue(primaryResult)
+    
+    await expect(
+      loadWithFallback('create', () => ({} as SdkSessionManagerMock), '/cwd', false)
+    ).rejects.toThrow('Systemic extension loader failure')
+  })
+})

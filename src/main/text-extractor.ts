@@ -6,8 +6,10 @@ import type { TextContent } from '@mariozechner/pi-ai'
  * Non-text blocks are silently filtered out.
  */
 export function extractTextContent(
-  content: string | Array<{ type: string }>,
+  content: string | Array<{ type: string }> | null | undefined,
 ): string {
+  // Handle null/undefined content gracefully - return empty string
+  if (content == null) return ''
   if (typeof content === 'string') return content
   return content
     .filter((block): block is TextContent => block.type === 'text')
