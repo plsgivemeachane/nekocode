@@ -1,7 +1,8 @@
 import { Worker } from 'worker_threads'
 import { app } from 'electron'
-import { join } from 'path'
+import { join, dirname } from 'path'
 import { randomUUID } from 'crypto'
+import { existsSync } from 'fs'
 import {
   type ThreadPoolConfig,
   type ThreadPoolStats,
@@ -92,14 +93,26 @@ export class ThreadOperationQueue {
 
     // Resolve worker path - the worker is built to workers/worker-bootstrap.mjs
     // This is a separate directory that won't be wiped by electron-vite during builds
-    const isDev = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV
-    if (isDev) {
+    if (!app.isPackaged) {
       // In development, use absolute path to the built worker file
       // The worker is built by scripts/build-worker.cjs to workers/
       this.workerPath = join(process.cwd(), 'workers', 'worker-bootstrap.mjs')
     } else {
-      // In production, the worker is in the workers directory relative to the app
-      this.workerPath = join(process.cwd(), 'workers', 'worker-bootstrap.mjs')
+      // In production, the worker is in resources/workers/ (extraResources)
+      // process.resourcesPath should point to the resources directory in packaged apps
+      // but on Windows NSIS builds, it sometimes points to the install root instead.
+      // We check multiple possible locations to handle this edge case.
+      const possiblePaths = [
+        // Standard: resourcesPath already includes 'resources' subdirectory
+        join(process.resourcesPath, 'workers', 'worker-bootstrap.mjs'),
+        // NSIS fallback: resourcesPath is the install root, need to add 'resources'
+        join(process.resourcesPath, 'resources', 'workers', 'worker-bootstrap.mjs'),
+        // Ultimate fallback: derive from executable path
+        join(dirname(app.getPath('exe')), 'resources', 'workers', 'worker-bootstrap.mjs'),
+      ]
+      
+      this.workerPath = possiblePaths.find(p => existsSync(p)) ?? possiblePaths[0]
+      logger.info(`Worker path resolved to: ${this.workerPath}`)
     }
 
     this.initializePool()
