@@ -2,6 +2,9 @@ import { defineConfig } from 'electron-vite'
 import tailwindcss from '@tailwindcss/vite'
 import type { Plugin } from 'vite'
 import { buildWorker } from './scripts/build-worker-plugin'
+import { readFileSync } from 'fs'
+
+const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'))
 
 /**
  * Vite plugin to build the worker-bootstrap.js file after the main build completes.
@@ -24,6 +27,9 @@ export default defineConfig({
   },
   preload: {},
   renderer: {
-    plugins: [tailwindcss()]
+    plugins: [tailwindcss()],
+    define: {
+      __APP_VERSION__: JSON.stringify(pkg.version),
+    },
   }
 })

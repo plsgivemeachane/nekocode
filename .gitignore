@@ -34,3 +34,4 @@ out
 package-lock.json
 bun.lock
 tsconfig.tsbuildinfo
+workers

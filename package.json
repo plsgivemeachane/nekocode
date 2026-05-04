@@ -1,6 +1,6 @@
 {
   "name": "nekocode",
-  "version": "0.2.14",
+  "version": "0.2.30",
   "description": "AI-powered coding assistant desktop app",
   "main": "./out/main/index.js",
   "scripts": {
@@ -21,10 +21,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "prepackage": "bun run test && bun run lint && bun run type-check"
   },
   "dependencies": {
-    "@mariozechner/pi-coding-agent": "^0.64.0",
+    "@mariozechner/pi-coding-agent": "^0.72.1",
     "@tanstack/react-virtual": "^3.13.23",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -161,5 +162,8 @@
       "owner": "plsgivemeachane",
       "repo": "nekocode"
     }
-  }
+  },
+  "trustedDependencies": [
+    "patch-package"
+  ]
 }
