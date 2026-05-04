@@ -29,6 +29,8 @@ interface ProjectState {
   activeSessionId: string | null
   activeProjectPath: string | null
   sessionStatuses: Record<string, SessionStatus>
+  /** Error messages for sessions in error state, keyed by sessionId */
+  sessionErrorMessages: Record<string, string>
   /** Preloaded message history keyed by sessionId (lightweight disk read, no agent) */
   preloadedHistory: Record<string, ChatMessageIPC[]>
   /** Whether the agent for the active session is fully connected and ready */
@@ -43,7 +45,7 @@ export type ProjectAction =
   | { type: 'ADD_SESSION_TO_PROJECT'; projectPath: string; session: SessionInfoDisplay }
   | { type: 'SET_ACTIVE_SESSION'; sessionId: string; projectPath: string }
   | { type: 'RECONNECT_SESSION'; sessionId: string; projectPath: string }
-  | { type: 'UPDATE_SESSION_STATUS'; sessionId: string; status: SessionStatus }
+  | { type: 'UPDATE_SESSION_STATUS'; sessionId: string; status: SessionStatus; errorMessage?: string }
   | { type: 'CLEAR_ACTIVE_SESSION' }
   | { type: 'UPDATE_SESSION_FIRST_MESSAGE'; sessionId: string; firstMessage: string }
   | { type: 'SET_SESSION_MESSAGE_COUNT'; sessionId: string; messageCount: number }
@@ -61,6 +63,7 @@ const INITIAL_STATE: ProjectState = {
   activeSessionId: null,
   activeProjectPath: null,
   sessionStatuses: {},
+  sessionErrorMessages: {},
   preloadedHistory: {},
   agentReady: true,
 }
@@ -138,14 +141,25 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
         activeProjectPath: action.projectPath,
       }
 
-    case 'UPDATE_SESSION_STATUS':
+    case 'UPDATE_SESSION_STATUS': {
+      if (action.status === 'error') {
+        logger.error(`Session ${action.sessionId.slice(0, 8)}... entered error state${action.errorMessage ? `: ${action.errorMessage}` : ''}`)
+      }
+      const newErrorMessages = { ...state.sessionErrorMessages }
+      if (action.status === 'error' && action.errorMessage) {
+        newErrorMessages[action.sessionId] = action.errorMessage
+      } else if (action.status !== 'error') {
+        delete newErrorMessages[action.sessionId]
+      }
       return {
         ...state,
         sessionStatuses: {
           ...state.sessionStatuses,
           [action.sessionId]: action.status,
         },
+        sessionErrorMessages: newErrorMessages,
       }
+    }
 
     case 'CLEAR_ACTIVE_SESSION':
       logger.debug('CLEAR_ACTIVE_SESSION')
@@ -303,8 +317,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           break
 
         case 'error':
-          logger.debug(`[global] error sessionId=${sessionId.slice(0, 8)}... message=${event.message}`)
-          dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId, status: 'error' })
+          logger.error(`[global] error sessionId=${sessionId.slice(0, 8)}... message=${event.message}`)
+          dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId, status: 'error', errorMessage: event.message })
           break
 
         case 'user_message':

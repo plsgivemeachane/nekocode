@@ -31,8 +31,8 @@ export function useSessionOrchestration({
       try {
         const wasRuntimeDraft = draftSessionsRef.current.get(sessionId) === projectPath
         const result = await window.nekocode.session.reconnect(sessionId, projectPath)
-        logExtensionLoadWarnings('reconnect', sessionId, result.extensionErrors, result.extensionsDisabled, (sid) => {
-          dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId: sid, status: 'error' })
+        logExtensionLoadWarnings('reconnect', sessionId, result.extensionErrors, result.extensionsDisabled, (sid, errorMessage) => {
+          dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId: sid, status: 'error', errorMessage })
         })
         dispatch({ type: 'SET_SESSION_MESSAGE_COUNT', sessionId, messageCount: result.history.length })
         if (result.history.length > 0) {
@@ -43,8 +43,9 @@ export function useSessionOrchestration({
         logger.info(`reconnectSession OK: ${sessionId.slice(0, 8)}...`)
         dispatch({ type: 'SET_AGENT_READY', sessionId })
       } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err)
         logger.error('reconnectSession failed:', err)
-        dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId, status: 'error' })
+        dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId, status: 'error', errorMessage })
         dispatch({ type: 'SET_AGENT_READY', sessionId })
       }
     },
@@ -102,8 +103,8 @@ export function useSessionOrchestration({
 
       try {
         const result = await window.nekocode.session.create(projectPath)
-        logExtensionLoadWarnings('create', result.sessionId, result.extensionErrors, result.extensionsDisabled, (sid) => {
-          dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId: sid, status: 'error' })
+        logExtensionLoadWarnings('create', result.sessionId, result.extensionErrors, result.extensionsDisabled, (sid, errorMessage) => {
+          dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId: sid, status: 'error', errorMessage })
         })
         draftSessionsRef.current.set(result.sessionId, projectPath)
         logger.info(`createSession OK: ${result.sessionId.slice(0, 8)}... cwd=${projectPath}`)
@@ -144,8 +145,8 @@ export function useSessionOrchestration({
       dispatch({ type: 'SET_ACTIVE_SESSION', sessionId, projectPath })
       try {
         const result = await window.nekocode.session.reconnect(sessionId, projectPath)
-        logExtensionLoadWarnings('reconnect', sessionId, result.extensionErrors, result.extensionsDisabled, (sid) => {
-          dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId: sid, status: 'error' })
+        logExtensionLoadWarnings('reconnect', sessionId, result.extensionErrors, result.extensionsDisabled, (sid, errorMessage) => {
+          dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId: sid, status: 'error', errorMessage })
         })
         dispatch({ type: 'SET_SESSION_MESSAGE_COUNT', sessionId, messageCount: result.history.length })
         if (result.history.length > 0) {
@@ -153,8 +154,9 @@ export function useSessionOrchestration({
         }
         dispatch({ type: 'SET_AGENT_READY', sessionId })
       } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err)
         logger.error('Failed to reconnect restored session', err)
-        dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId, status: 'error' })
+        dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId, status: 'error', errorMessage })
         dispatch({ type: 'SET_AGENT_READY', sessionId })
       }
     },

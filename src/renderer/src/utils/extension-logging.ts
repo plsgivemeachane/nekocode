@@ -12,7 +12,7 @@ export function logExtensionLoadWarnings(
   sessionId: string,
   errors: ExtensionLoadError[] | undefined,
   extensionsDisabled: boolean | undefined,
-  onError?: (sessionId: string) => void,
+  onError?: (sessionId: string, errorMessage: string) => void,
 ): void {
   if (!errors || errors.length === 0) return
   if (extensionsDisabled) {
@@ -26,6 +26,7 @@ export function logExtensionLoadWarnings(
     }
   }
   if (!extensionsDisabled) {
-    onError?.(sessionId)
+    const summary = `${errors.length} extension(s) failed: ${errors[0]?.message ?? 'unknown'}`
+    onError?.(sessionId, summary)
   }
 }

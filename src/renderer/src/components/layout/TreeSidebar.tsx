@@ -3,6 +3,8 @@ import { useProjectStore, type SessionStatus } from '../../stores/project-store'
 import { ContextMenu, type ContextMenuEntry } from '../ui/ContextMenu'
 import { createLogger } from '../../utils/logger'
 
+declare const __APP_VERSION__: string
+
 const logger = createLogger('TreeSidebar')
 
 function folderName(path: string): string {
@@ -13,13 +15,13 @@ function truncate(str: string, max: number): string {
   return str.length > max ? str.slice(0, max) + '\u2026' : str
 }
 
-function StatusDot({ status }: { status: SessionStatus }) {
+function StatusDot({ status, errorMessage }: { status: SessionStatus; errorMessage?: string }) {
   if (status === 'idle') return null
   const color =
     status === 'streaming'
       ? 'bg-accent-400 animate-glow-pulse'
       : 'bg-error'
-  return <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${color}`} />
+  return <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${color}`} title={status === 'error' && errorMessage ? errorMessage : undefined} />
 }
 
 const VISIBLE_SESSIONS = 6
@@ -28,6 +30,7 @@ function SessionList({
   sessions,
   activeSessionId,
   sessionStatuses,
+  sessionErrorMessages,
   onReconnect,
   onHoverSession,
   onContextMenu,
@@ -36,6 +39,7 @@ function SessionList({
   sessions: { id: string; firstMessage?: string }[]
   activeSessionId: string | null
   sessionStatuses: Record<string, SessionStatus>
+  sessionErrorMessages: Record<string, string>
   onReconnect: (sessionId: string) => void
   onHoverSession: (sessionId: string) => void
   onContextMenu: (e: React.MouseEvent, sessionId: string) => void
@@ -95,7 +99,7 @@ function SessionList({
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
               </svg>
             ) : (
-              <StatusDot status={status} />
+              <StatusDot status={status} errorMessage={sessionErrorMessages[session.id]} />
             )}
           </div>
         )
@@ -232,7 +236,7 @@ export function TreeSidebar() {
       {/* Header */}
       <div className="px-5 pt-5 pb-4">
         <div className="flex items-center justify-between">
-          <span className="text-2xl font-display font-semibold tracking-tight"><span className="text-pink-400">Neko</span><span className="text-white">code</span></span>
+          <span className="text-2xl font-display font-semibold tracking-tight"><span className="text-pink-400">Neko</span><span className="text-white">code</span><sub className="text-[9px] text-[#9CA3AF] font-normal ml-0.5">v{__APP_VERSION__}</sub></span>
           <button
             onClick={handleAddProject}
             className="p-1 text-text-secondary hover:text-text-primary hover:bg-surface-800/80 rounded-md border border-transparent hover:border-surface-600 transition-colors duration-200"
@@ -296,6 +300,7 @@ export function TreeSidebar() {
                   sessions={project.sessions}
                   activeSessionId={state.activeSessionId}
                   sessionStatuses={state.sessionStatuses}
+                  sessionErrorMessages={state.sessionErrorMessages}
                   onReconnect={(sessionId) => reconnectSession(sessionId, project.path)}
                   onHoverSession={(sessionId) => preloadSession(sessionId, project.path)}
                   onContextMenu={(e, sessionId) => openSessionMenu(e, sessionId, project.path, project.id)}
