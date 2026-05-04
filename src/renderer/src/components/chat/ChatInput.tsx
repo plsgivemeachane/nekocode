@@ -147,10 +147,10 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
                     <div className="absolute bottom-full left-0 mb-1 w-56 bg-surface-800 border border-surface-700 rounded-lg shadow-xl p-2 max-h-64 overflow-y-auto z-50">
                       {visibleModels.map(m => (
                         <button
-                          key={m.id}
+                          key={`${m.provider}:${m.id}`}
                           type="button"
                           onClick={() => { setModel(m.provider, m.id); setShowModelDropdown(false) }}
-                          className={`w-full text-left px-3.5 py-2 text-xs hover:bg-surface-700 transition-colors flex items-center justify-between rounded-md border border-transparent hover:border-surface-600 ${activeModel?.id === m.id ? "text-accent-400" : "text-text-secondary"}`}
+                          className={`w-full text-left px-3.5 py-2 text-xs hover:bg-surface-700 transition-colors flex items-center justify-between rounded-md border border-transparent hover:border-surface-600 ${activeModel?.id === m.id && activeModel?.provider === m.provider ? "text-accent-400" : "text-text-secondary"}`}
                         >
                           <span>{m.name}</span>
                           <span className="text-text-tertiary text-[10px] ml-2">{m.provider}</span>
