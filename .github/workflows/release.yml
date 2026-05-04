@@ -1,0 +1,104 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  check-version:
+    name: Check version change
+    runs-on: ubuntu-latest
+    outputs:
+      version_changed: ${{ steps.diff.outputs.changed }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          fetch-depth: 2
+
+      - name: Check version change
+        id: diff
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Tag push detected -- skipping version diff check"
+          elif git diff HEAD~1 --name-only | grep -q '^package\.json$'; then
+            OLD_VERSION=$(git show HEAD~1:package.json | grep -oP '"version\"\s*:\s*\"\K[^\"]+"')
+            NEW_VERSION=$(grep -oP '"version\"\s*:\s*\"\K[^\"]+"' package.json)
+            if [ "$OLD_VERSION" != "$NEW_VERSION" ]; then
+              echo "changed=true" >> "$GITHUB_OUTPUT"
+              echo "Version changed: $OLD_VERSION -> $NEW_VERSION"
+            else
+              echo "changed=false" >> "$GITHUB_OUTPUT"
+              echo "package.json was modified but version did not change -- skipping release"
+            fi
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "package.json was not modified -- skipping release"
+          fi
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build Windows EXE
+    needs: check-version
+    if: needs.check-version.outputs.version_changed == 'true'
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Verify patches
+        run: bun run verify:patches
+
+      - name: Build app (electron-vite)
+        run: bun run electron-vite build
+
+      - name: Build worker
+        run: node ./scripts/build-worker.cjs
+
+      - name: Determine release tag
+        id: tag
+        run: |
+          if ("${{ github.ref }}" -like "refs/tags/*") {
+            echo "tag=${{ github.ref_name }}" >> "$env:GITHUB_OUTPUT"
+          } else {
+            $version = node -p "require('./package.json').version"
+            echo "tag=v$version" >> "$env:GITHUB_OUTPUT"
+          }
+        shell: pwsh
+
+      - name: Build & publish Windows installer
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --win --publish always
+
+      - name: Build summary
+        run: |
+          echo "## Release Build Complete" >> "$env:GITHUB_STEP_SUMMARY"
+          echo "**Version:** ${{ needs.check-version.outputs.version }}" >> "$env:GITHUB_STEP_SUMMARY"
+          echo "**Tag:** ${{ steps.tag.outputs.tag }}" >> "$env:GITHUB_STEP_SUMMARY"
+          echo "**Trigger:** ${{ github.event_name }} on ${{ github.ref }}" >> "$env:GITHUB_STEP_SUMMARY"
+        shell: pwsh
