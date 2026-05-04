@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react'
 
+declare const __APP_VERSION__: string
+
 const QUOTES = [
   { text: 'First, solve the problem. Then, write the code.', author: 'John Johnson' },
   { text: 'Code is like humor. When you have to explain it, it\u2019s bad.', author: 'Cory House' },
@@ -218,6 +220,7 @@ export function WelcomeScreen() {
       {/* Title */}
       <h1 className="text-text-primary text-lg font-semibold tracking-tight mb-1.5 font-mono">
         nekocode
+        <sub className="text-[9px] text-[#9CA3AF] font-normal ml-0.5">v{__APP_VERSION__}</sub>
       </h1>
       <p className="text-[#9CA3AF] text-sm mb-10">
         Your coding agent, ready to build.

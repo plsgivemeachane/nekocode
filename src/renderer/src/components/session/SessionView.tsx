@@ -3,6 +3,8 @@ import { useSession } from '../../hooks/useSession'
 import { WelcomeScreen } from '../ui/WelcomeScreen'
 import { createLogger } from '../../utils/logger'
 
+declare const __APP_VERSION__: string
+
 const logger = createLogger('SessionView')
 
 interface SessionViewProps {
@@ -74,7 +76,7 @@ export function SessionView({ sessionId, cwd, onCreateSession, onDisposeSession 
   return (
     <div className="min-h-screen bg-surface-950 text-text-primary flex flex-col">
       <header className="border-b border-surface-800 px-6 py-3.5 flex items-center justify-between">
-        <h1 className="text-xl font-display font-bold tracking-tight"><span className="text-pink-400">Neko</span><span className="text-white">code</span></h1>
+        <h1 className="text-xl font-display font-bold tracking-tight"><span className="text-pink-400">Neko</span><span className="text-white">code</span><sub className="text-[9px] text-[#9CA3AF] font-normal ml-0.5">v{__APP_VERSION__}</sub></h1>
         <div className="flex items-center gap-3">
           {cwd && (
             <span className="text-xs text-text-tertiary font-mono truncate max-w-xs" title={cwd}>
