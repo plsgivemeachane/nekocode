@@ -28,6 +28,7 @@ const mockProjectState: {
   activeSessionId: string | null
   activeProjectPath: string
   sessionStatuses: Record<string, string>
+  sessionErrorMessages: Record<string, string>
   preloadedHistory: Record<string, unknown>
   agentReady: boolean
 } = {
@@ -35,6 +36,7 @@ const mockProjectState: {
   activeSessionId: null,
   activeProjectPath: "/test/project",
   sessionStatuses: {},
+  sessionErrorMessages: {},
   preloadedHistory: {},
   agentReady: true,
 }
@@ -115,6 +117,7 @@ describe("TreeSidebar", () => {
     mockProjectState.activeSessionId = null
     mockProjectState.activeProjectPath = "/test/project"
     mockProjectState.sessionStatuses = {}
+    mockProjectState.sessionErrorMessages = {}
     mockCreateSession.mockClear()
     mockReconnectSession.mockClear()
     mockPreloadSession.mockClear()

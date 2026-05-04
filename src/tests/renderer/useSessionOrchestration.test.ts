@@ -168,7 +168,7 @@ describe("useSessionOrchestration", () => {
         useSessionOrchestration({ dispatch, activeSessionId: null, activeProjectPath: null }),
       )
       await reconnectSession(SESSION_ID, PROJECT_PATH)
-      expect(dispatch).toHaveBeenCalledWith({ type: "UPDATE_SESSION_STATUS", sessionId: SESSION_ID, status: "error" })
+      expect(dispatch).toHaveBeenCalledWith({ type: "UPDATE_SESSION_STATUS", sessionId: SESSION_ID, status: "error", errorMessage: "reconnect failed" })
       expect(dispatch).toHaveBeenCalledWith({ type: "SET_AGENT_READY", sessionId: SESSION_ID })
     })
 
@@ -184,14 +184,14 @@ describe("useSessionOrchestration", () => {
       // Make the mock actually invoke the onError callback
       mockLogExtensionLoadWarnings.mockImplementation(
         (_mode, _sessionId, _errs, _disabled, onError) => {
-          onError?.("sess-abc123def456")
+          onError?.("sess-abc123def456", "extension error")
         },
       )
       const { reconnectSession } = runInHookScope(() =>
         useSessionOrchestration({ dispatch, activeSessionId: null, activeProjectPath: null }),
       )
       await reconnectSession(SESSION_ID, PROJECT_PATH)
-      expect(dispatch).toHaveBeenCalledWith({ type: "UPDATE_SESSION_STATUS", sessionId: SESSION_ID, status: "error" })
+      expect(dispatch).toHaveBeenCalledWith({ type: "UPDATE_SESSION_STATUS", sessionId: SESSION_ID, status: "error", errorMessage: "extension error" })
     })
   })
 
@@ -467,7 +467,7 @@ describe("useSessionOrchestration", () => {
         useSessionOrchestration({ dispatch, activeSessionId: null, activeProjectPath: null }),
       )
       await initReconnect(SESSION_ID, PROJECT_PATH)
-      expect(dispatch).toHaveBeenCalledWith({ type: "UPDATE_SESSION_STATUS", sessionId: SESSION_ID, status: "error" })
+      expect(dispatch).toHaveBeenCalledWith({ type: "UPDATE_SESSION_STATUS", sessionId: SESSION_ID, status: "error", errorMessage: "init reconnect failed" })
       expect(dispatch).toHaveBeenCalledWith({ type: "SET_AGENT_READY", sessionId: SESSION_ID })
     })
   })
