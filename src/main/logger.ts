@@ -19,6 +19,8 @@ class SimpleConsoleLogger {
   private fileStream: ReturnType<typeof createWriteStream> | null = null
   private logFilePath: string | null = null
   private static globalLogFileInit = false
+  // Silences all console + file logging when running in test environment
+  private readonly isSilent: boolean = process.env.NODE_ENV === 'test'
 
   constructor(private label: string) {
     this.initFileLogging()
@@ -60,6 +62,9 @@ class SimpleConsoleLogger {
   }
 
   private initFileLogging(): void {
+    // Skip file logging initialization in test environment to avoid writing log files during tests
+    if (this.isSilent) return
+
     // Initialize file logging for workers - writes to same directory as main thread
     // This ensures workers have file-based logging even in production
     try {
@@ -121,6 +126,9 @@ class SimpleConsoleLogger {
   }
 
   private log(level: LogLevel, message: string, meta?: any): void {
+    // Skip all logging when in test environment (keeps vitest output clean)
+    if (this.isSilent) return
+
     const formatted = this.formatMessage(level, message, meta)
 
     // Always log to console (useful in development)
@@ -263,6 +271,8 @@ if (winston && DailyRotateFile) {
 
   rootLogger = winston.createLogger({
     level: 'debug',
+    // Silences Winston when running in test environment (keeps vitest output clean)
+    silent: process.env.NODE_ENV === 'test',
     transports,
     exitOnError: false,
   })

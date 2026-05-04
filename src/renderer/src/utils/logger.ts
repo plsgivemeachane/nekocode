@@ -1,6 +1,8 @@
 /// <reference types="vite/client" />
 
 const isDev = import.meta.env.DEV
+// Silences all logging when running in test environment (keeps vitest output clean)
+const isTest = process.env.NODE_ENV === 'test'
 
 export interface Logger {
   error(message: string, ...meta: unknown[]): void
@@ -18,16 +20,20 @@ export function createLogger(moduleLabel: string): Logger {
 
   return {
     error(message: string, ...meta: unknown[]) {
-      if (isDev) console.error(`${formatTimestamp()} ${prefix} error: ${message}`, ...meta)
+      if (isTest || !isDev) return
+      console.error(`${formatTimestamp()} ${prefix} error: ${message}`, ...meta)
     },
     warn(message: string, ...meta: unknown[]) {
-      if (isDev) console.warn(`${formatTimestamp()} ${prefix} warn: ${message}`, ...meta)
+      if (isTest || !isDev) return
+      console.warn(`${formatTimestamp()} ${prefix} warn: ${message}`, ...meta)
     },
     info(message: string, ...meta: unknown[]) {
-      if (isDev) console.log(`${formatTimestamp()} ${prefix} info: ${message}`, ...meta)
+      if (isTest || !isDev) return
+      console.log(`${formatTimestamp()} ${prefix} info: ${message}`, ...meta)
     },
     debug(message: string, ...meta: unknown[]) {
-      if (isDev) console.log(`${formatTimestamp()} ${prefix} debug: ${message}`, ...meta)
+      if (isTest || !isDev) return
+      console.log(`${formatTimestamp()} ${prefix} debug: ${message}`, ...meta)
     },
   }
 }
