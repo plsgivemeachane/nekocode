@@ -61,9 +61,16 @@ autoUpdater.on('update-downloaded', (info) => {
 })
 
 autoUpdater.on('error', (err) => {
+  const code = (err as Error & { code?: string }).code
+  // No published versions on GitHub is expected for dev/private repos — log as info, not error
+  const isNoVersions = code === 'ERR_XML_MISSED_ELEMENT' && err.message.includes('No published versions on GitHub')
+  if (isNoVersions) {
+    logger.info('No published versions on GitHub, skipping update check')
+    return
+  }
   const payload: UpdateErrorInfo = {
     message: err.message,
-    code: (err as Error & { code?: string }).code,
+    code,
   }
   logger.error('Auto-updater error:', err)
   sendToRenderer(IPC_CHANNELS.UPDATE_ERROR, payload)
@@ -116,6 +123,12 @@ export function initAutoUpdater(getMainWindow: () => BrowserWindow | null): void
     // Delay initial check slightly to avoid blocking app startup
     setTimeout(() => {
       autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+        const code = (err as Error & { code?: string }).code
+        // No published versions is expected for dev/private repos — not a real error
+        if (code === 'ERR_XML_MISSED_ELEMENT' && err.message.includes('No published versions on GitHub')) {
+          logger.info('No published versions on GitHub, skipping update check')
+          return
+        }
         logger.error('Initial update check failed:', err)
       })
     }, 3000)
