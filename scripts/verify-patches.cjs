@@ -3,7 +3,7 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const packageJsonPath = path.join(root, "package.json");
-const requiredPatch = "@mariozechner+pi-coding-agent+0.64.0.patch";
+const requiredPatch = "@mariozechner+pi-coding-agent+0.72.1.patch";
 const patchPath = path.join(root, "patches", requiredPatch);
 
 function fail(message) {

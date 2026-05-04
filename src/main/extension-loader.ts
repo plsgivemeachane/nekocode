@@ -44,7 +44,7 @@ export function createResourceLoader(cwd: string, options?: { noExtensions?: boo
   return new DefaultResourceLoader({
     cwd,
     agentDir: getAgentDir(),
-    settingsManager: SettingsManager.create(),
+    settingsManager: SettingsManager.create(cwd, getAgentDir()),
     noExtensions: options?.noExtensions,
   })
 }
