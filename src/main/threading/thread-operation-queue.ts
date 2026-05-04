@@ -224,11 +224,32 @@ export class ThreadOperationQueue {
   private createWorker(): WorkerState {
     logger.debug('Creating new worker...')
 
+    // Verify pi-package directory exists before starting the worker.
+    // The SDK needs this to find package.json at runtime (for version info,
+    // pi_docs, pi_changelog, etc.). Without it, getPackageDir() falls back
+    // to walking up from __dirname and may fail with ENOENT.
+    const piPackageDir = join(dirname(this.workerPath), 'pi-package')
+    if (!existsSync(piPackageDir)) {
+      logger.warn(
+        `pi-package directory not found at ${piPackageDir}. ` +
+        `The SDK may fail to find package.json at runtime. ` +
+        `Run 'bun run build:worker' to create it.`
+      )
+    }
+
     const worker = new Worker(this.workerPath, {
+      workerData: {
+        // SDK is now bundled with the worker, no need to pass path
+      },
       env: {
         ...process.env,
         NODE_ENV: process.env.NODE_ENV || 'development',
         USERDATA_PATH: app.getPath('userData'),
+        // Set PI_PACKAGE_DIR so the bundled SDK can find its package.json,
+        // README, docs, CHANGELOG, etc. at runtime. The build script copies
+        // these static assets to workers/pi-package/ (a real directory on disk,
+        // not inside app.asar). Worker threads can't read from asar.
+        PI_PACKAGE_DIR: join(dirname(this.workerPath), 'pi-package'),
       },
     })
 

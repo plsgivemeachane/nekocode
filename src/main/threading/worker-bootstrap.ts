@@ -23,6 +23,51 @@ const logger = createLogger('worker')
  */
 
 // ============================================================================
+// SDK Import Helper
+// ============================================================================
+
+/**
+ * Import the SDK module.
+ * The SDK is now bundled with the worker to avoid module resolution issues
+ * in production where the SDK would be inside app.asar but the worker is outside.
+ * 
+ * Previous approach: Dynamic import from resolved path
+ * New approach: Direct import (SDK is bundled by esbuild)
+ */
+async function importSdk(): Promise<typeof import('@mariozechner/pi-coding-agent')> {
+  try {
+    // The SDK is now bundled with the worker, so we can import it directly
+    // Using dynamic import() for consistency with the existing code pattern
+    const module = await import('@mariozechner/pi-coding-agent')
+
+    // Validate critical exports exist. When the SDK partially loads (e.g., due to
+    // a dynamic require failure like 'Dynamic require of "os" is not supported'),
+    // some exports like SessionManager may be undefined while the module itself
+    // appears to have loaded. This provides a clear error message instead of the
+    // cryptic 'Cannot read properties of undefined (reading list)' cascade.
+    if (!module.SessionManager) {
+      throw new Error(
+        'SDK module loaded but SessionManager is undefined. ' +
+        'This typically means a CJS dependency failed during module evaluation ' +
+        '(e.g., "Dynamic require of X is not supported"). ' +
+        'Available exports: ' + Object.keys(module).join(', ')
+      )
+    }
+    if (!module.ModelRegistry) {
+      throw new Error(
+        'SDK module loaded but ModelRegistry is undefined. ' +
+        'Available exports: ' + Object.keys(module).join(', ')
+      )
+    }
+
+    return module
+  } catch (error) {
+    logger.error('Failed to import SDK:', error)
+    throw error
+  }
+}
+
+// ============================================================================
 // Session State Management
 // ============================================================================
 
@@ -290,7 +335,7 @@ async function handleSessionCreate(input: { cwd: string }): Promise<{
   logger.debug(`Creating session for cwd: ${input.cwd}`)
 
   const { loadWithFallback } = await import('../extension-loader')
-  const { SessionManager: SdkSessionManager } = await import('@mariozechner/pi-coding-agent')
+  const { SessionManager: SdkSessionManager } = await importSdk()
 
   const allowExtensionFallback = process.env.NEKOCODE_ALLOW_EXTENSION_FALLBACK === '1'
 
@@ -341,7 +386,7 @@ async function handleSessionReconnect(input: {
   }
 
   const { loadWithFallback } = await import('../extension-loader')
-  const { SessionManager: SdkSessionManager } = await import('@mariozechner/pi-coding-agent')
+  const { SessionManager: SdkSessionManager } = await importSdk()
   const { extractHistoryFromSdkMessages } = await import('../message-store')
 
   // Find session file
@@ -468,7 +513,7 @@ async function handleSessionLoadHistoryDisk(input: {
   logger.debug(`Load history from disk: ${input.sessionId}`)
 
   // Dynamically import SDK to avoid static import issues in worker thread
-  const { SessionManager: SdkSessionManager } = await import('@mariozechner/pi-coding-agent')
+  const { SessionManager: SdkSessionManager } = await importSdk()
   const { extractHistoryFromSdkMessages } = await import('../message-store')
 
   const infos = await SdkSessionManager.list(input.cwd)
@@ -496,7 +541,7 @@ async function handleSessionLoadHistoryDisk(input: {
 async function handleSessionListModels(): Promise<{ models: Array<{ id: string; name: string; provider: string }> }> {
   logger.debug('Listing available models')
 
-  const { ModelRegistry, AuthStorage } = await import('@mariozechner/pi-coding-agent')
+  const { ModelRegistry, AuthStorage } = await importSdk()
   const authStorage = AuthStorage.create()
   const modelRegistry = ModelRegistry.create(authStorage)
 
@@ -575,7 +620,7 @@ async function handleProjectDiscoverSessions(input: { path: string }): Promise<{
 }> }> {
   logger.debug(`Discovering sessions for path: ${input.path}`)
 
-  const { SessionManager } = await import('@mariozechner/pi-coding-agent')
+  const { SessionManager } = await importSdk()
 
   try {
     const sessionList = await SessionManager.list(input.path)
