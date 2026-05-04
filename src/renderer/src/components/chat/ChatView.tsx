@@ -24,7 +24,7 @@ interface ChatViewProps {
 
 export function ChatView({ sessionId, className }: ChatViewProps) {
   const { state: projectState } = useProjectStore()
-  const { messages, isHistoryLoading, isStreaming, error, input, setInput, sendPrompt, abortPrompt, activeModel, modelList, setModel, usage, streamStartTime } =
+  const { messages, isHistoryLoading, isStreaming, error, clearError, input, setInput, sendPrompt, abortPrompt, activeModel, modelList, setModel, usage, streamStartTime } =
     useSession({ sessionId })
   const isAgentConnecting = sessionId != null && !projectState.agentReady
 
@@ -273,8 +273,18 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
       </main>
 
       {error && (
-        <div className="px-6 py-2 bg-error-surface border-t border-error/30 text-error text-sm">
-          {error}
+        <div className="px-6 py-2.5 bg-error-surface/60 border-t border-error/20 text-error text-sm flex items-center gap-3 backdrop-blur-sm">
+          <svg className="w-4 h-4 shrink-0 text-error" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+          </svg>
+          <span className="flex-1 min-w-0 truncate">{error}</span>
+          <button
+            onClick={clearError}
+            className="shrink-0 px-2 py-0.5 text-xs font-medium text-error/80 hover:text-error hover:bg-error/10 rounded transition-colors"
+            aria-label="Dismiss error"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 

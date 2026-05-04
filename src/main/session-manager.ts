@@ -497,6 +497,13 @@ export class PiSessionManager {
         logger.debug(`agent_end: total accumulated messages=${managed.messages.length}`)
         emit({ type: 'done' })
         break
+      case 'turn_start': {
+        // A new turn is starting (e.g. after tool execution).
+        // Emit agent_start so the renderer updates status to "Working".
+        logger.debug(`turn_start: emitting agent_start for continued work`)
+        emit({ type: 'agent_start' })
+        break
+      }
       case 'turn_end':
         break
       case 'agent_start':

@@ -197,10 +197,20 @@ describe('PiSessionManager', () => {
     expect(events[1].event).toEqual({ type: 'done' })
   })
 
+  it('should emit agent_start on turn_start for continued agent work', async () => {
+    await manager.create('/tmp/project')
+
+    mockSession().emit({ type: 'turn_start' } as AgentSessionEvent)
+
+    // turn_start now emits agent_start so the renderer knows the agent is still working
+    expect(events).toHaveLength(1)
+    expect(events[0].event).toEqual({ type: 'agent_start' })
+  })
+
   it('should ignore purely internal bookkeeping events', async () => {
     await manager.create('/tmp/project')
 
-    const internalTypes = ['turn_start', 'turn_end'] as const
+    const internalTypes = ['turn_end'] as const
     for (const type of internalTypes) {
       mockSession().emit({ type } as AgentSessionEvent)
     }

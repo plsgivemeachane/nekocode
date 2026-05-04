@@ -241,10 +241,27 @@ function handleAgentEvent(sessionId: string, event: AgentSessionEvent, managed: 
       }
       break
     }
+    case 'agent_start': {
+      logger.debug(`agent_start: emitting agent_start to renderer`)
+      emitEvent(sessionId, { type: 'agent_start' })
+      break
+    }
     case 'agent_end': {
       finalizeAssistantMessage(managed)
       logger.debug(`agent_end: total messages=${managed.messages.length}`)
       emitEvent(sessionId, { type: 'done' })
+      break
+    }
+    case 'turn_start': {
+      // A new turn is starting (e.g. after tool execution completed).
+      // Emit agent_start so the renderer knows the agent is still working.
+      logger.debug(`turn_start: emitting agent_start for continued work`)
+      emitEvent(sessionId, { type: 'agent_start' })
+      break
+    }
+    case 'turn_end': {
+      // Turn completed (agent may start another turn or finish)
+      logger.debug(`turn_end`)
       break
     }
     default: {
@@ -426,9 +443,14 @@ async function handleSessionReconnect(input: {
 }
 
 /**
- * Send a prompt to a session - CPU intensive due to AI processing
+ * Send a prompt to a session - CPU intensive due to AI processing.
+ *
+ * IMPORTANT: This is fire-and-forget. The prompt() call can run for minutes
+ * (multiple LLM turns, tool calls, etc.) and must NOT be awaited. The 60s
+ * thread pool timeout would kill it mid-stream. Events flow through the
+ * subscription channel independently of this operation's resolution.
  */
-async function handleSessionPrompt(input: { sessionId: string; text: string }): Promise<void> {
+async function handleSessionPrompt(input: { sessionId: string; text: string }): Promise<{ started: boolean }> {
   logger.debug(`Prompt for session: ${input.sessionId}`)
 
   const managed = sessions.get(input.sessionId)
@@ -436,7 +458,20 @@ async function handleSessionPrompt(input: { sessionId: string; text: string }): 
     throw new Error(`Session not found: ${input.sessionId}`)
   }
 
-  await managed.session.prompt(input.text, { streamingBehavior: 'steer' })
+  // Fire-and-forget: start prompt in background.
+  // All streaming events (text_delta, tool_call, agent_start, done, etc.)
+  // flow through the existing subscription → emitEvent → parentPort channel.
+  // Errors are caught and emitted as error events so the renderer can display them.
+  managed.session.prompt(input.text, { streamingBehavior: 'steer' }).catch((err) => {
+    logger.error(`Prompt failed for ${input.sessionId}:`, err)
+    emitEvent(input.sessionId, {
+      type: 'error',
+      message: `Prompt failed: ${err instanceof Error ? err.message : String(err)}`,
+    })
+    emitEvent(input.sessionId, { type: 'done' })
+  })
+
+  return { started: true }
 }
 
 /**

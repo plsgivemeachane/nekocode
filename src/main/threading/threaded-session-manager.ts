@@ -114,15 +114,28 @@ export class ThreadedSessionManager implements ISessionManager {
   /**
    * Send a user prompt to an active session.
    * Offloaded to worker thread (CPU intensive: AI processing).
+   *
+   * IMPORTANT: This is fire-and-forget. The prompt can run for minutes
+   * (multiple LLM turns, tool calls) and must NOT block the caller.
+   * Streaming events flow through the event channel independently.
+   * Errors are caught and forwarded as error events to the renderer.
    */
   async prompt(sessionId: string, text: string): Promise<void> {
-    logger.debug(`prompt: ${sessionId} - offloading to worker thread`)
+    logger.debug(`prompt: ${sessionId} - offloading to worker thread (fire-and-forget)`)
 
-    await this.operationQueue.execute<{ sessionId: string; text: string }, void>(
+    this.operationQueue.execute<{ sessionId: string; text: string }, { started: boolean }>(
       'session:prompt',
       { sessionId, text },
       'high'
-    )
+    ).catch(err => {
+      logger.error(`Prompt dispatch failed for ${sessionId}:`, err)
+      // Emit error event so the renderer can display it
+      this.eventCallback(sessionId, {
+        type: 'error',
+        message: `Prompt dispatch failed: ${err instanceof Error ? err.message : String(err)}`,
+      })
+      this.eventCallback(sessionId, { type: 'done' })
+    })
   }
 
   /**

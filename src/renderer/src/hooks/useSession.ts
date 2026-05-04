@@ -23,6 +23,7 @@ interface UseSessionOutput {
   isHistoryLoading: boolean
   isStreaming: boolean
   error: string | null
+  clearError: () => void
   input: string
   setInput: (v: string) => void
   sendPrompt: (text: string) => Promise<void>
@@ -236,5 +237,9 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
     }
   }, [sessionId])
 
-  return { messages, isHistoryLoading, isStreaming, error, input, setInput, sendPrompt, abortPrompt, activeModel, modelList, setModel, usage, streamStartTime }
+  const clearError = useCallback(() => {
+    setError(null)
+  }, [])
+
+  return { messages, isHistoryLoading, isStreaming, error, clearError, input, setInput, sendPrompt, abortPrompt, activeModel, modelList, setModel, usage, streamStartTime }
 }
