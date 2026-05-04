@@ -160,7 +160,8 @@
     "publish": {
       "provider": "github",
       "owner": "plsgivemeachane",
-      "repo": "nekocode"
+      "repo": "nekocode",
+      "releaseType": "release"
     }
   },
   "trustedDependencies": [
