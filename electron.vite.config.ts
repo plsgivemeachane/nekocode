@@ -1,4 +1,4 @@
-import { defineConfig } from 'electron-vite'
+import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import tailwindcss from '@tailwindcss/vite'
 import type { Plugin } from 'vite'
 import { buildWorker } from './scripts/build-worker-plugin'
@@ -23,18 +23,16 @@ function buildWorkerPlugin(): Plugin {
 
 export default defineConfig({
   main: {
-    plugins: [buildWorkerPlugin()],
-    build: {
-      rollupOptions: {
-        // Externalize moment and file-stream-rotator to prevent esbuild from mangling
-        // moment's CJS default export (module.exports = function).
-        // These are transitive dependencies of winston-daily-rotate-file that electron-vite
-        // doesn't auto-externalize (only direct dependencies are auto-externalized).
-        external: ['moment', 'file-stream-rotator'],
-      },
-    },
+    plugins: [
+      externalizeDepsPlugin({
+        exclude: ['@mariozechner/pi-coding-agent'],
+      }),
+      buildWorkerPlugin(),
+    ],
   },
-  preload: {},
+  preload: {
+    plugins: [externalizeDepsPlugin()],
+  },
   renderer: {
     plugins: [tailwindcss()],
     define: {
