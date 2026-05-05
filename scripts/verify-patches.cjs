@@ -3,8 +3,6 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const packageJsonPath = path.join(root, "package.json");
-const requiredPatch = "@mariozechner+pi-coding-agent+0.72.1.patch";
-const patchPath = path.join(root, "patches", requiredPatch);
 
 function fail(message) {
   console.error(`[verify:patches] ${message}`);
@@ -32,6 +30,10 @@ function main() {
   if (typeof scripts.postinstall !== "string" || !scripts.postinstall.includes("patch-package")) {
     fail("scripts.postinstall must include patch-package");
   }
+
+  const agentVersion = deps["@mariozechner/pi-coding-agent"];
+  const requiredPatch = `@mariozechner+pi-coding-agent+${agentVersion}.patch`;
+  const patchPath = path.join(root, "patches", requiredPatch);
 
   if (!fs.existsSync(patchPath)) {
     fail(`required patch file is missing: patches/${requiredPatch}`);
