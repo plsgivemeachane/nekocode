@@ -1,8 +1,8 @@
 diff --git a/node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/loader.js b/node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/loader.js
-index 0b62659..56e2769 100644
+index 0b62659..010513c 100644
 --- a/node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/loader.js
 +++ b/node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/loader.js
-@@ -46,14 +46,28 @@ const require = createRequire(import.meta.url);
+@@ -46,21 +46,42 @@ const require = createRequire(import.meta.url);
   * In Bun binary mode, virtualModules is used instead.
   */
  let _aliases = null;
@@ -35,7 +35,22 @@ index 0b62659..56e2769 100644
      const packagesRoot = path.resolve(__dirname, "../../../../");
      const resolveWorkspaceOrImport = (workspaceRelativePath, specifier) => {
          const workspacePath = path.join(packagesRoot, workspaceRelativePath);
-@@ -75,6 +89,7 @@ function getAliases() {
+         if (fs.existsSync(workspacePath)) {
+             return workspacePath;
+         }
+-        return fileURLToPath(import.meta.resolve(specifier));
++        try {
++            return fileURLToPath(import.meta.resolve(specifier));
++        } catch {
++            // In bundled worker context (production), node_modules doesn't exist
++            // on disk, so import.meta.resolve throws ERR_MODULE_NOT_FOUND.
++            // Return the specifier itself so jiti falls through to VIRTUAL_MODULES.
++            return specifier;
++        }
+     };
+     _aliases = {
+         "@mariozechner/pi-coding-agent": packageIndex,
+@@ -75,6 +96,7 @@ function getAliases() {
          "@sinclair/typebox/compile": typeboxCompileEntry,
          "@sinclair/typebox/value": typeboxValueEntry,
      };
@@ -43,7 +58,7 @@ index 0b62659..56e2769 100644
      return _aliases;
  }
  const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g;
-@@ -268,16 +283,37 @@ function createExtensionAPI(extension, runtime, cwd, eventBus) {
+@@ -268,16 +290,37 @@ function createExtensionAPI(extension, runtime, cwd, eventBus) {
      };
      return api;
  }
@@ -86,7 +101,7 @@ index 0b62659..56e2769 100644
      return typeof factory !== "function" ? undefined : factory;
  }
  /**
-@@ -314,7 +350,8 @@ async function loadExtension(extensionPath, cwd, eventBus, runtime) {
+@@ -314,7 +357,8 @@ async function loadExtension(extensionPath, cwd, eventBus, runtime) {
      }
      catch (err) {
          const message = err instanceof Error ? err.message : String(err);
