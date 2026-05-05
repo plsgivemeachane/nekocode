@@ -222,7 +222,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
               </div>
             </div>
           ) : messages.length === 0 ? (
-            <WelcomeScreen />
+            <WelcomeScreen isAgentConnecting={isAgentConnecting} />
           ) : (
             <div className="max-w-3xl mx-auto pt-4">
               <MessagesTimeline

@@ -31,6 +31,7 @@ function SessionList({
   activeSessionId,
   sessionStatuses,
   sessionErrorMessages,
+  isAgentConnecting,
   onReconnect,
   onHoverSession,
   onContextMenu,
@@ -40,6 +41,8 @@ function SessionList({
   activeSessionId: string | null
   sessionStatuses: Record<string, SessionStatus>
   sessionErrorMessages: Record<string, string>
+  /** Whether the agent for the active session is still connecting */
+  isAgentConnecting: boolean
   onReconnect: (sessionId: string) => void
   onHoverSession: (sessionId: string) => void
   onContextMenu: (e: React.MouseEvent, sessionId: string) => void
@@ -93,7 +96,7 @@ function SessionList({
               {session.firstMessage ? truncate(session.firstMessage, 26) : 'Untitled'}
             </span>
 
-            {isPending ? (
+            {(isPending || (isActiveSession && isAgentConnecting)) ? (
               <svg className="animate-spin w-3 h-3 text-text-tertiary" viewBox="0 0 24 24" fill="none">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
@@ -305,6 +308,7 @@ export function TreeSidebar() {
                   onHoverSession={(sessionId) => preloadSession(sessionId, project.path)}
                   onContextMenu={(e, sessionId) => openSessionMenu(e, sessionId, project.path, project.id)}
                   onCreateSession={() => createSession(project.path)}
+                  isAgentConnecting={!state.agentReady && state.activeSessionId != null}
                 />
               )}
             </div>

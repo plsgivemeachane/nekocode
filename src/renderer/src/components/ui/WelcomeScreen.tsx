@@ -200,7 +200,7 @@ function useRotatingTip(intervalMs: number = 6000) {
   return { tip: TIPS[index], visible }
 }
 
-export function WelcomeScreen() {
+export function WelcomeScreen({ isAgentConnecting }: { isAgentConnecting?: boolean }) {
   const { quote, visible: quoteVisible } = useRotatingQuote()
   const { tip, visible: tipVisible } = useRotatingTip()
 
@@ -222,8 +222,8 @@ export function WelcomeScreen() {
         nekocode
         <sub className="text-[9px] text-[#9CA3AF] font-normal ml-0.5">v{__APP_VERSION__}</sub>
       </h1>
-      <p className="text-[#9CA3AF] text-sm mb-10">
-        Your coding agent, ready to build.
+      <p className={`text-sm mb-10 ${isAgentConnecting ? 'text-warning-400 animate-pulse' : 'text-[#9CA3AF]'}>`}>
+        {isAgentConnecting ? 'Connecting to agent…' : 'Your coding agent, ready to build.'}
       </p>
 
       {/* Quote */}
