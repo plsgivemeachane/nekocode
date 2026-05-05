@@ -88,28 +88,17 @@ Since `getAliases()` throws, the entire `loadExtensionModule()` call fails, and 
 
 ---
 
-## 3. The Gap in the v0.73.0 Patch
+## 3. The Gap in the v0.73.0 Patch (now fixed)
 
 The current patch (`patches/@mariozechner+pi-coding-agent+0.73.0.patch`) addresses:
 - ✅ TypeBox `require.resolve` try/catch
 - ✅ Cache key invalidation (`_aliasesKey`)
+- ✅ `resolveWorkspaceOrImport` try/catch for `import.meta.resolve()` (added in commit `62b6f41`)
 - ✅ `interopDefault` for extension module loading
 - ✅ Always providing `virtualModules` to jiti
 - ✅ Stack traces in extension load errors
 
-But it does **NOT** address:
-- ❌ `resolveWorkspaceOrImport` crashing on `import.meta.resolve()` for `@mariozechner/pi-agent-core`
-- ❌ `resolveWorkspaceOrImport` crashing on `import.meta.resolve()` for `@mariozechner/pi-tui`
-- ❌ `resolveWorkspaceOrImport` crashing on `import.meta.resolve()` for `@mariozechner/pi-ai`
-- ❌ `resolveWorkspaceOrImport` crashing on `import.meta.resolve()` for `@mariozechner/pi-ai/oauth`
-
-The `PATCH_GUIDE.md` (written for v0.72.1) describes this fix in Patch 1, including fallback paths:
-
-```js
-"@mariozechner/pi-agent-core": resolveWorkspaceOrImport("agent/dist/index.js", "@mariozechner/pi-agent-core", /* fallbackPath */),
-```
-
-But the v0.73.0 patch was generated without this fix — the third `fallbackPath` parameter and the `resolveWorkspaceOrImport` error handling are missing.
+The `PATCH_GUIDE.md` (updated for v0.73.0, now at `docs/PATCH_GUIDE.md`) describes this fix in Patch 2 — wrapping `resolveWorkspaceOrImport` in try/catch so `import.meta.resolve()` failures fall through to `VIRTUAL_MODULES`.
 
 ---
 
@@ -132,7 +121,7 @@ In production, the worker is a bundled ESM file at `C:\Program Files\Nekocode\re
 | `worker-esm-dynamic-require-os-bug.md` | Historical: `require('os')` in ESM context. Fixed by require polyfill banner. Not directly related but same bundled worker context. |
 | `pi-extension-load-failure-bug.md` | `(void 0) is not a function` from jiti default export handling. Different root cause but same symptom (all extensions fail). |
 | `m2m-extension-load-failure.md` | M2M headless pipeline extension failures. Documents the `(void 0) is not a function` error pattern and the `getAliases()` alias cache issue. Section 5 (Root Cause Hypothesis) identifies stale alias cache as a contributing factor. |
-| `PATCH_GUIDE.md` | Describes the intended fix for this exact issue in Patch 1 — `resolveWorkspaceOrImport` with `fallbackPath` parameter. The fix was not carried forward to the v0.73.0 patch. |
+| `docs/PATCH_GUIDE.md` | Documents all SDK patches including the `resolveWorkspaceOrImport` try/catch fix (Patch 2). |
 
 ### Evidence from log output
 

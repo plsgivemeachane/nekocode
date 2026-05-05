@@ -1,9 +1,9 @@
 # SDK Patch Guide: `@mariozechner/pi-coding-agent`
 
-> **Target version:** `0.72.1`  
-> **Patch file:** `patches/@mariozechner+pi-coding-agent+0.72.1.patch`  
+> **Target version:** `0.73.0`  
+> **Patch file:** `patches/@mariozechner+pi-coding-agent+0.73.0.patch`  
 > **Purpose:** Recreate the patch-package diff from this document alone.  
-> **Bug references:** `docs/bugs/extension-typebox-resolve-failure.md`, `docs/bugs/pi-extension-load-failure-bug.md`
+> **Bug references:** `docs/bugs/extension-typebox-resolve-failure.md`, `docs/bugs/pi-extension-load-failure-bug.md`, `docs/bugs/extension-load-pi-agent-core-resolution-bug.md`
 
 ---
 
@@ -26,7 +26,7 @@ Source maps (`.map`) and declaration maps (`.d.ts.map`) should be regenerated or
 
 ### Problem
 
-`getAliases()` calls `require.resolve("@sinclair/typebox")` unconditionally. In the bundled worker
+`getAliases()` calls `require.resolve("typebox")` unconditionally. In the bundled worker
 context there is no `node_modules/` on disk, so this throws `ERR_MODULE_NOT_FOUND` and all 19
 extensions fail to load.
 
@@ -39,8 +39,9 @@ extensions fail to load.
 Find the `getAliases()` function. It contains:
 
 ```js
-const typeboxEntry = require.resolve("@sinclair/typebox");
-const typeboxRoot = typeboxEntry.replace(/[\\/]build[\\/]cjs[\\/]index\.js$/, "");
+const typeboxEntry = require.resolve("typebox");
+const typeboxCompileEntry = require.resolve("typebox/compile");
+const typeboxValueEntry = require.resolve("typebox/value");
 ```
 
 ### Replace with
@@ -66,24 +67,6 @@ try {
 } catch {}
 ```
 
-Also update the `_aliases` object to use the new variables and include the TypeBox 1.x names:
-
-```js
-_aliases = {
-    "@mariozechner/pi-coding-agent": packageIndex,
-    "@mariozechner/pi-agent-core": resolveWorkspaceOrImport("agent/dist/index.js", "@mariozechner/pi-agent-core", /* fallbackPath */),
-    "@mariozechner/pi-tui": resolveWorkspaceOrImport("tui/dist/index.js", "@mariozechner/pi-tui", /* fallbackPath */),
-    "@mariozechner/pi-ai": resolveWorkspaceOrImport("ai/dist/index.js", "@mariozechner/pi-ai", /* fallbackPath */),
-    "@mariozechner/pi-ai/oauth": resolveWorkspaceOrImport("ai/dist/oauth.js", "@mariozechner/pi-ai/oauth", /* fallbackPath */),
-    typebox: typeboxEntry,
-    "typebox/compile": typeboxCompileEntry,
-    "typebox/value": typeboxValueEntry,
-    "@sinclair/typebox": typeboxEntry,
-    "@sinclair/typebox/compile": typeboxCompileEntry,
-    "@sinclair/typebox/value": typeboxValueEntry,
-};
-```
-
 Also add a cache key so the alias map is invalidated when `cwd` or `NODE_PATH` changes:
 
 ```js
@@ -101,7 +84,64 @@ function getAliases() {
 
 ---
 
-## Patch 2 — `interopDefault` for extension module loading
+## Patch 2 — `resolveWorkspaceOrImport` try/catch for `import.meta.resolve`
+
+**Bug:** `docs/bugs/extension-load-pi-agent-core-resolution-bug.md`
+
+### Problem
+
+`getAliases()` calls `resolveWorkspaceOrImport()` for each workspace package
+(`@mariozechner/pi-agent-core`, `@mariozechner/pi-tui`, `@mariozechner/pi-ai`,
+`@mariozechner/pi-ai/oauth`). When the workspace path doesn't exist on disk (production worker),
+the function falls through to `import.meta.resolve(specifier)`, which throws `ERR_MODULE_NOT_FOUND`
+because `node_modules/` doesn't exist adjacent to the bundled worker.
+
+This crash happens **before** jiti is created, so `VIRTUAL_MODULES` (which already has the correct
+mappings) is never reached. All 19 extensions fail identically.
+
+### File
+
+Same file: `node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/loader.js`
+
+### Locate
+
+Find the `resolveWorkspaceOrImport` arrow function inside `getAliases()`:
+
+```js
+const resolveWorkspaceOrImport = (workspaceRelativePath, specifier) => {
+    const workspacePath = path.join(packagesRoot, workspaceRelativePath);
+    if (fs.existsSync(workspacePath)) {
+        return workspacePath;
+    }
+    return fileURLToPath(import.meta.resolve(specifier));
+};
+```
+
+### Replace with
+
+Wrap `import.meta.resolve()` in a try/catch. When resolution fails, return the specifier itself
+so jiti treats it as a no-op alias and falls through to `VIRTUAL_MODULES`:
+
+```js
+const resolveWorkspaceOrImport = (workspaceRelativePath, specifier) => {
+    const workspacePath = path.join(packagesRoot, workspaceRelativePath);
+    if (fs.existsSync(workspacePath)) {
+        return workspacePath;
+    }
+    try {
+        return fileURLToPath(import.meta.resolve(specifier));
+    } catch {
+        // In bundled worker context (production), node_modules doesn't exist
+        // on disk, so import.meta.resolve throws ERR_MODULE_NOT_FOUND.
+        // Return the specifier itself so jiti falls through to VIRTUAL_MODULES.
+        return specifier;
+    }
+};
+```
+
+---
+
+## Patch 3 — `interopDefault` for extension module loading
 
 **Bug:** `docs/bugs/pi-extension-load-failure-bug.md`
 
@@ -161,7 +201,7 @@ return typeof factory !== "function" ? undefined : factory;
 
 ---
 
-## Patch 3 — Always provide `virtualModules`
+## Patch 4 — Always provide `virtualModules`
 
 ### Problem
 
@@ -200,106 +240,7 @@ const jiti = createJiti(import.meta.url, {
 
 ---
 
-## Patch 4 — TypeBox 1.x `VIRTUAL_MODULES` entries
-
-### Problem
-
-The SDK migrated from `@sinclair/typebox` (0.x) to `typebox` (1.x). Extensions that import from
-`typebox`, `typebox/compile`, or `typebox/value` need virtual module entries for the new package
-names.
-
-### File
-
-Same file, at the top where `VIRTUAL_MODULES` is defined.
-
-### Locate
-
-```js
-const VIRTUAL_MODULES = {
-    "@sinclair/typebox": _bundledTypebox,
-    // ...
-};
-```
-
-### Extend with
-
-```js
-const VIRTUAL_MODULES = {
-    typebox: _bundledTypebox,
-    "typebox/compile": _bundledTypeboxCompile,
-    "typebox/value": _bundledTypeboxValue,
-    "@sinclair/typebox": _bundledTypebox,
-    "@sinclair/typebox/compile": _bundledTypeboxCompile,
-    "@sinclair/typebox/value": _bundledTypeboxValue,
-    "@mariozechner/pi-agent-core": _bundledPiAgentCore,
-    "@mariozechner/pi-tui": _bundledPiTui,
-    "@mariozechner/pi-ai": _bundledPiAi,
-    "@mariozechner/pi-ai/oauth": _bundledPiAiOauth,
-    "@mariozechner/pi-coding-agent": _bundledPiCodingAgent,
-};
-```
-
-> **Note:** The imports `_bundledTypeboxCompile` and `_bundledTypeboxValue` must also be added at
-> the top of the file alongside the existing `_bundledTypebox` import:
-> ```js
-> import * as _bundledTypebox from "typebox";
-> import * as _bundledTypeboxCompile from "typebox/compile";
-> import * as _bundledTypeboxValue from "typebox/value";
-> ```
-
----
-
-## Patch 5 — Stale extension context protection (optional, recommended)
-
-### Problem
-
-After session replacement (`ctx.newSession()`, `ctx.fork()`, `ctx.switchSession()`), captured
-references to the old `pi` API or command `ctx` silently target the wrong session. This causes
-confusing bugs in extensions.
-
-### File
-
-Same file: `node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/loader.js`
-
-### Logic
-
-1. In `createExtensionRuntime()`, add a `state` object and an `assertActive()` guard:
-
-```js
-const state = {};
-const assertActive = () => {
-    if (state.staleMessage) {
-        throw new Error(state.staleMessage);
-    }
-};
-```
-
-2. Add `assertActive` and `invalidate` to the runtime object:
-
-```js
-const runtime = {
-    // ... existing fields ...
-    assertActive,
-    invalidate: (message) => {
-        state.staleMessage ??=
-            message ??
-            "This extension ctx is stale after session replacement or reload. " +
-            "Do not use a captured pi or command ctx after ctx.newSession(), " +
-            "ctx.fork(), ctx.switchSession(), or ctx.reload().";
-    },
-};
-```
-
-3. Call `runtime.assertActive()` at the top of every method in the `api` object returned by
-   `createExtensionAPI()` — `on()`, `registerTool()`, `registerCommand()`, `registerShortcut()`,
-   `registerFlag()`, `registerMessageRenderer()`, `getFlag()`, `sendMessage()`, `sendUserMessage()`,
-   `appendEntry()`, `setSessionName()`, `getSessionName()`, `setLabel()`, `exec()`,
-   `getActiveTools()`, `getAllTools()`, `setActiveTools()`, `getCommands()`, `setModel()`,
-   `getThinkingLevel()`, `setThinkingLevel()`, `registerProvider()`, `unregisterProvider()`.
-
----
-
-## Patch 6 — Extension error stack traces (minor)
+## Patch 5 — Extension error stack traces (minor)
 
 ### Problem
 
@@ -328,26 +269,6 @@ catch (err) {
 
 ---
 
-## Patch 7 — Configurable `CONFIG_DIR_NAME` for project-local extensions (minor)
-
-### Locate
-
-The discovery path for project-local extensions:
-
-```js
-const localExtDir = path.join(cwd, ".pi", "extensions");
-```
-
-### Replace with
-
-```js
-const localExtDir = path.join(cwd, CONFIG_DIR_NAME, "extensions");
-```
-
-This requires importing `CONFIG_DIR_NAME` from `../../config.js` (already imported in 0.72.1).
-
----
-
 ## Regenerating the patch file
 
 After applying all edits to `node_modules/@mariozechner/pi-coding-agent/`:
@@ -356,7 +277,7 @@ After applying all edits to `node_modules/@mariozechner/pi-coding-agent/`:
 bunx patch-package @mariozechner/pi-coding-agent
 ```
 
-This creates/updates `patches/@mariozechner+pi-coding-agent+0.72.1.patch`.
+This creates/updates `patches/@mariozechner+pi-coding-agent+0.73.0.patch`.
 
 > **Important:** Delete `.map` files from the patch if they bloat the diff. Source maps are not
 > needed at runtime and can be regenerated. The patch file should ideally contain only `.js` and
@@ -372,5 +293,5 @@ After patching:
 2. `bun run test` — all tests pass
 3. `bun run lint` — no lint errors
 4. `bun run type-check` — type check passes
-5. Launch app → extensions load successfully (check console for `Extensions loaded: N` with no errors)
-6. Session reconnect works without `Cannot find module '@sinclair/typebox'`
+5. Launch app -> extensions load successfully (check console for `Extensions loaded: N` with no errors)
+6. Session reconnect works without `Cannot find module 'typebox'` or `Cannot find package '@mariozechner/pi-agent-core'`
