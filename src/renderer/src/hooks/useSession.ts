@@ -21,6 +21,8 @@ interface UseSessionInput {
 interface UseSessionOutput {
   messages: ChatMessage[]
   isHistoryLoading: boolean
+  /** True during the ~1 frame window after sessionId changes but before messages are updated for the new session. */
+  isMessagesStale: boolean
   isStreaming: boolean
   error: string | null
   clearError: () => void
@@ -63,6 +65,11 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
   const drafts = useRef<Map<string, string>>(new Map())
   const messagesBySession = useRef<Map<string, ChatMessage[]>>(new Map())
 
+  // Tracks which sessionId the current `messages` state was last loaded for.
+  // When sessionId changes but this ref still points to the old session, messages are stale.
+  // This catches the ~1 frame window between sessionId update and messages update.
+  const messagesLoadedForRef = useRef<string | null>(null)
+
   // Keep a snapshot of each session's latest rendered messages for instant restore on switch.
   useEffect(() => {
     if (!sessionId) return
@@ -99,6 +106,7 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
     if (!sessionId) {
       setMessages(INITIAL_MESSAGES)
       setIsHistoryLoading(false)
+      messagesLoadedForRef.current = null
       prevSessionRef.current = sessionId
       return () => { cancelled = true }
     }
@@ -107,6 +115,7 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
       logger.debug(`pending session ${sessionId.slice(0, 8)}... — skipping history load`)
       setMessages(INITIAL_MESSAGES)
       setIsHistoryLoading(false)
+      messagesLoadedForRef.current = sessionId
       prevSessionRef.current = sessionId
       return () => { cancelled = true }
     }
@@ -119,12 +128,14 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
       messagesBySession.current.set(sessionId, chatMessages)
       usedPreloadedRef.current = true
       setIsHistoryLoading(false)
+      messagesLoadedForRef.current = sessionId
     } else {
       // No preloaded data — restore from cache or trigger full load
       const cachedMessages = messagesBySession.current.get(sessionId)
       if (cachedMessages) {
         setMessages(cachedMessages)
         setIsHistoryLoading(false)
+        messagesLoadedForRef.current = sessionId
 
         // Reconcile cached view with canonical session history to prevent stale
         // messages from previous reconnect/cache state.
@@ -152,6 +163,7 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
         // First time opening this session with no preload — full load
         setMessages(INITIAL_MESSAGES)
         setIsHistoryLoading(true)
+        messagesLoadedForRef.current = sessionId
         logger.debug(`loading history for ${sessionId.slice(0, 8)}...`)
 
         // When the agent is not yet connected (e.g. startup auto-resume),
@@ -244,5 +256,9 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
     setError(null)
   }, [])
 
-  return { messages, isHistoryLoading, isStreaming, error, clearError, input, setInput, sendPrompt, abortPrompt, activeModel, modelList, setModel, usage, streamStartTime }
+  // Compute staleness: messages are stale when sessionId has changed but messages
+  // haven't been updated yet (the ~1 frame window between store update and effect).
+  const isMessagesStale = sessionId != null && messagesLoadedForRef.current !== sessionId
+
+  return { messages, isHistoryLoading, isMessagesStale, isStreaming, error, clearError, input, setInput, sendPrompt, abortPrompt, activeModel, modelList, setModel, usage, streamStartTime }
 }

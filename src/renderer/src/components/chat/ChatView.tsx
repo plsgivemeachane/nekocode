@@ -24,7 +24,7 @@ interface ChatViewProps {
 
 export function ChatView({ sessionId, className }: ChatViewProps) {
   const { state: projectState } = useProjectStore()
-  const { messages, isHistoryLoading, isStreaming, error, clearError, input, setInput, sendPrompt, abortPrompt, activeModel, modelList, setModel, usage, streamStartTime } =
+  const { messages, isHistoryLoading, isMessagesStale, isStreaming, error, clearError, input, setInput, sendPrompt, abortPrompt, activeModel, modelList, setModel, usage, streamStartTime } =
     useSession({ sessionId })
   const isAgentConnecting = sessionId != null && !projectState.agentReady
 
@@ -217,43 +217,60 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
             </div>
           ) : isHistoryLoading && messages.length === 0 ? (
             <div className="max-w-3xl mx-auto pt-8">
-              <div className="rounded-xl border border-surface-700/70 bg-surface-900/60 px-4 py-3 text-sm text-text-secondary">
-                Loading session messages...
+              <div className="rounded-xl border border-surface-700/70 bg-surface-900/60 px-4 py-3 text-sm text-text-secondary flex items-center gap-2.5">
+                <svg className="w-4 h-4 shrink-0 animate-spin text-text-tertiary" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2.5" strokeDasharray="31.4 31.4" strokeLinecap="round" />
+                </svg>
+                {isAgentConnecting ? 'Connecting to agent…' : 'Loading session messages…'}
               </div>
             </div>
           ) : messages.length === 0 ? (
             <WelcomeScreen isAgentConnecting={isAgentConnecting} />
           ) : (
-            <div className="max-w-3xl mx-auto pt-4">
-              <MessagesTimeline
-                rows={messageGroups}
-                isStreaming={isStreaming}
-                scrollContainerRef={scrollContainerRef}
-                getRowKey={(group) => group.key}
-                renderRow={(group) => {
-                  if (group.type === 'tool-group') {
-                    return (
-                      <ToolCallGroup
-                        toolCalls={group.msgs.map((m) => ({
-                          id: m.id,
-                          toolName: m.toolName,
-                          status: m.status,
-                          isError: m.isError,
-                          args: m.args,
-                        }))}
-                      />
-                    )
-                  }
-                  return <div>{renderMessage(group.msg)}</div>
-                }}
-              />
-              <StatusIndicator
-                isStreaming={isStreaming}
-                isAgentConnecting={isAgentConnecting}
-                modelName={activeModel?.name ?? null}
-                usage={usage}
-                streamStartTime={streamStartTime}
-              />
+            <div className="relative">
+              {/* Blur overlay when messages are stale (old session's messages still visible during the ~1 frame switch window) */}
+              <div className={`max-w-3xl mx-auto pt-4 transition-all duration-300 ease-out ${isMessagesStale ? 'blur-[3px] opacity-40 pointer-events-none select-none' : ''}`}>
+                <MessagesTimeline
+                  rows={messageGroups}
+                  isStreaming={isStreaming}
+                  scrollContainerRef={scrollContainerRef}
+                  getRowKey={(group) => group.key}
+                  renderRow={(group) => {
+                    if (group.type === 'tool-group') {
+                      return (
+                        <ToolCallGroup
+                          toolCalls={group.msgs.map((m) => ({
+                            id: m.id,
+                            toolName: m.toolName,
+                            status: m.status,
+                            isError: m.isError,
+                            args: m.args,
+                          }))}
+                        />
+                      )
+                    }
+                    return <div>{renderMessage(group.msg)}</div>
+                  }}
+                />
+                <StatusIndicator
+                  isStreaming={isStreaming}
+                  isAgentConnecting={isAgentConnecting}
+                  modelName={activeModel?.name ?? null}
+                  usage={usage}
+                  streamStartTime={streamStartTime}
+                />
+              </div>
+              {/* Stale-messages overlay centered on top of blurred content */}
+              {isMessagesStale && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-surface-900/90 border border-surface-700/60 shadow-lg shadow-black/20 backdrop-blur-sm">
+                    <svg className="w-4 h-4 shrink-0 animate-spin text-accent-400" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2.5" strokeDasharray="31.4 31.4" strokeLinecap="round" />
+                    </svg>
+                    <span className="text-sm text-text-secondary">Switching session…</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
