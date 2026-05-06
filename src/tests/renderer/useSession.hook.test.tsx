@@ -148,24 +148,30 @@ describe("useSession", () => {
       expect(result.current.streamStartTime).toBe(0)
     })
 
-    it("delegates to getStreamStartTime when sessionId is set", () => {
+    it("delegates to getStreamStartTime when sessionId is set", async () => {
       mockGetStreamStartTime.mockReturnValue(12345)
       const { result } = renderHook(() => useSession({ sessionId: "sess-1" }))
+      // Flush async loadHistory microtask triggered by non-null sessionId
+      await act(async () => {})
       expect(result.current.streamStartTime).toBe(12345)
     })
   })
 
   describe("error/usage restoration from useSessionEvents caches", () => {
-    it("restores cached error on session switch", () => {
+    it("restores cached error on session switch", async () => {
       mockGetCachedError.mockReturnValue("cached error" as unknown as null)
       const { result } = renderHook(() => useSession({ sessionId: "sess-1" }))
+      // Flush async loadHistory microtask triggered by non-null sessionId
+      await act(async () => {})
       expect(result.current.error).toBe("cached error")
     })
 
-    it("restores cached usage on session switch", () => {
+    it("restores cached usage on session switch", async () => {
       const cachedUsage: UsageData = { inputTokens: 50, outputTokens: 25, totalCost: 0.001, contextPercent: 5, contextWindow: 128000 }
       mockGetCachedUsage.mockReturnValue(cachedUsage)
       const { result } = renderHook(() => useSession({ sessionId: "sess-1" }))
+      // Flush async loadHistory microtask triggered by non-null sessionId
+      await act(async () => {})
       expect(result.current.usage).toEqual(cachedUsage)
     })
 
@@ -266,6 +272,8 @@ describe("useSession", () => {
       const preloaded = [{ role: "user", content: "hello", id: "1" }]
       mockProjectState.preloadedHistory = { "sess-1": preloaded }
       const { result } = renderHook(() => useSession({ sessionId: "sess-1" }))
+      // Flush async loadHistory microtask triggered by non-null sessionId
+      await act(async () => {})
       // Messages should be set from preloaded data
       expect(result.current.messages).toHaveLength(1)
       expect(result.current.messages[0].role).toBe("user")
@@ -273,18 +281,24 @@ describe("useSession", () => {
   })
 
   describe("delegation to useModelSelection", () => {
-    it("returns activeModel from useModelSelection", () => {
+    it("returns activeModel from useModelSelection", async () => {
       const { result } = renderHook(() => useSession({ sessionId: "sess-1" }))
+      // Flush async loadHistory microtask triggered by non-null sessionId
+      await act(async () => {})
       expect(result.current.activeModel).toBe("test-model")
     })
 
-    it("returns modelList from useModelSelection", () => {
+    it("returns modelList from useModelSelection", async () => {
       const { result } = renderHook(() => useSession({ sessionId: "sess-1" }))
+      // Flush async loadHistory microtask triggered by non-null sessionId
+      await act(async () => {})
       expect(result.current.modelList).toEqual([])
     })
 
-    it("returns setModel from useModelSelection", () => {
+    it("returns setModel from useModelSelection", async () => {
       const { result } = renderHook(() => useSession({ sessionId: "sess-1" }))
+      // Flush async loadHistory microtask triggered by non-null sessionId
+      await act(async () => {})
       expect(typeof result.current.setModel).toBe("function")
     })
   })
