@@ -124,15 +124,19 @@ describe("useSession", () => {
   })
 
   describe("isStreaming derivation", () => {
-    it("returns false when session status is not streaming", () => {
+    it("returns false when session status is not streaming", async () => {
       mockProjectState.sessionStatuses = { "sess-1": "idle" }
       const { result } = renderHook(() => useSession({ sessionId: "sess-1" }))
+      // Flush async loadHistory microtask triggered by non-null sessionId
+      await act(async () => {})
       expect(result.current.isStreaming).toBe(false)
     })
 
-    it("returns true when session status is streaming", () => {
+    it("returns true when session status is streaming", async () => {
       mockProjectState.sessionStatuses = { "sess-1": "streaming" }
       const { result } = renderHook(() => useSession({ sessionId: "sess-1" }))
+      // Flush async loadHistory microtask triggered by non-null sessionId
+      await act(async () => {})
       expect(result.current.isStreaming).toBe(true)
     })
   })
