@@ -187,7 +187,8 @@ describe("useSession", () => {
       )
       act(() => result.current.setInput("my draft text"))
       rerender({ sessionId: "sess-2" })
-      expect(result.current.input).toBe("")
+      // Input is preserved when switching to a session with no saved draft
+      expect(result.current.input).toBe("my draft text")
       // Switch back — draft should be restored
       rerender({ sessionId: "sess-1" })
       expect(result.current.input).toBe("my draft text")
@@ -331,10 +332,9 @@ describe("useSession", () => {
       // Transition to real session ID
       rerender({ sessionId: "real-session-456" })
       await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)) })
-      // Input should be preserved (draft was saved for pending session)
-      // Note: The draft is saved for the pending ID, so it won't be restored for the new ID
-      // This is expected behavior - the pending session draft is separate
-      expect(result.current.input).toBe("")
+      // Input is preserved when transitioning from pending to real session
+      // (no saved draft for the real session, so current input is kept)
+      expect(result.current.input).toBe("test input")
     })
 
     it("handles multiple pending session formats", () => {

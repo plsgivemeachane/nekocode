@@ -92,8 +92,10 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
     if (draft) {
       logger.debug(`draft restored for ${sessionId!.slice(0, 8)}...`)
     }
-    // Preserve current input when switching to a session with no saved draft
-    setInput(draft ?? input)
+    // Preserve current input when switching to a non-null session with no saved draft.
+    // When sessionId is null, clear the input (no active session = no input).
+    // When sessionId is non-null but has no draft (e.g. new session), keep current text.
+    setInput(sessionId !== null ? (draft ?? input) : "")
     if (!sessionId) {
       setMessages(INITIAL_MESSAGES)
       setIsHistoryLoading(false)
