@@ -28,6 +28,7 @@
     "@mariozechner/pi-coding-agent": "0.73.0",
     "@tanstack/react-virtual": "^3.13.23",
     "react": "^19.0.0",
+    "react-virtuoso": "^4.12.3",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.0",

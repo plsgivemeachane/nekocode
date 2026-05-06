@@ -1,104 +1,113 @@
-import React, { useEffect } from 'react'
-import { useVirtualizer } from '@tanstack/react-virtual'
+import React, { useCallback, useEffect, useImperativeHandle, forwardRef, useState, useRef } from 'react'
+import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 
-const ALWAYS_UNVIRTUALIZED_TAIL_ROWS = 24
-const STREAMING_UNVIRTUALIZED_TAIL_ROWS = 48
-const ESTIMATED_ROW_HEIGHT_PX = 100
-const OVERSCAN_ROWS = 8
+/**
+ * MessagesTimeline — virtualized message list powered by react-virtuoso.
+ *
+ * Key design decisions (see docs/research/virtual-scrolling-libraries.md):
+ * - react-virtuoso manages its own scroll container, eliminating the
+ *   fragile hybrid "virtualized prefix + unvirtualized tail" pattern
+ *   that @tanstack/react-virtual required.
+ * - followOutput="smooth" handles auto-scroll during streaming without
+ *   manual ResizeObserver / scroll-position bookkeeping.
+ * - atBottomStateChange replaces the manual isAtBottomRef tracking in
+ *   useAutoScroll for the scroll-to-bottom button visibility.
+ * - Dynamic row heights (code blocks, images, Shiki highlighting) are
+ *   measured automatically by react-virtuoso — no custom ResizeObserver
+ *   wiring needed.
+ */
 
-export function getUnvirtualizedTailRows(isStreaming: boolean): number {
-  return isStreaming ? STREAMING_UNVIRTUALIZED_TAIL_ROWS : ALWAYS_UNVIRTUALIZED_TAIL_ROWS
+export interface MessagesTimelineHandle {
+  /** Scroll to the bottom of the list */
+  scrollToBottom: (smooth?: boolean) => void
 }
 
-export function getVirtualizedPrefixCount(totalRows: number, isStreaming: boolean): number {
-  return Math.max(0, totalRows - getUnvirtualizedTailRows(isStreaming))
-}
-
-interface MessagesTimelineProps<TRow> {
-  rows: TRow[]
+// Using `any` for the row type to avoid TypeScript's forwardRef+generic
+// limitation (TS cannot infer generic params through forwardRef).
+// Consumers should type their renderRow callback parameter explicitly
+// if they need type safety on the row data.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type MessagesTimelineProps<T = any> = {
+  rows: T[]
   isStreaming: boolean
-  scrollContainerRef: React.RefObject<HTMLDivElement | null>
-  getRowKey: (row: TRow, index: number) => string
-  renderRow: (row: TRow, index: number) => React.ReactNode
+  /** Called with (isAtBottom: boolean) when the user scrolls away from / back to bottom */
+  atBottomStateChange?: (isAtBottom: boolean) => void
+  getRowKey: (row: T, index: number) => string
+  renderRow: (row: T, index: number) => React.ReactNode
 }
 
-export function MessagesTimeline<TRow>({
-  rows,
-  isStreaming,
-  scrollContainerRef,
-  getRowKey,
-  renderRow,
-}: MessagesTimelineProps<TRow>) {
-  const virtualizedPrefixCount = getVirtualizedPrefixCount(rows.length, isStreaming)
-  const virtualRows = rows.slice(0, virtualizedPrefixCount)
-  const liveTailRows = rows.slice(virtualizedPrefixCount)
+// Cast through `any` to bridge forwardRef with generic props.
+// This is a well-known TypeScript limitation — see:
+// https://github.com/DefinitelyTyped/DefinitelyTyped/issues/34757
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const MessagesTimeline = forwardRef<MessagesTimelineHandle, MessagesTimelineProps<any>>(
+  function MessagesTimeline(
+    { rows, isStreaming, atBottomStateChange, renderRow },
+    ref,
+  ) {
+    const virtuosoRef = useRef<VirtuosoHandle>(null)
 
-  const rowVirtualizer = useVirtualizer({
-    count: virtualRows.length,
-    getScrollElement: () => scrollContainerRef.current,
-    estimateSize: () => ESTIMATED_ROW_HEIGHT_PX,
-    overscan: OVERSCAN_ROWS,
-    measureElement: (el) => el.getBoundingClientRect().height,
-  })
+    useImperativeHandle(ref, () => ({
+      scrollToBottom(smooth = false) {
+        virtuosoRef.current?.scrollToIndex({
+          index: rows.length - 1,
+          align: 'end',
+          behavior: smooth ? 'smooth' : 'auto',
+        })
+      },
+    }))
 
-  useEffect(() => {
-    const scrollElement = scrollContainerRef.current
-    if (!scrollElement) return
+    const itemContent = useCallback(
+      (index: number) => {
+        const row = rows[index]
+        return <div className="pb-5">{renderRow(row, index)}</div>
+      },
+      [rows, renderRow],
+    )
 
-    const observer = new ResizeObserver(() => {
-      rowVirtualizer.measure()
-    })
+    // Scroll to bottom when switching to a new set of rows (session change)
+    // by resetting initialTopMostItemIndex. Using a key on Virtuoso would
+    // also work but causes a full remount; this is lighter.
+    const prevLengthRef = useRef(rows.length)
+    const [initialIndex, setInitialIndex] = useState(rows.length - 1)
 
-    const onLoadCapture = (event: Event) => {
-      if (event.target instanceof HTMLImageElement) {
-        rowVirtualizer.measure()
+    useEffect(() => {
+      // Detect session switch: rows array was fully replaced (length dropped
+      // or content changed entirely). A simple heuristic: if length decreased
+      // significantly, snap to bottom.
+      const prev = prevLengthRef.current
+      if (rows.length === 0) {
+        setInitialIndex(0)
+      } else if (prev === 0 && rows.length > 0) {
+        // First load: rows went from 0 to N — snap to bottom
+        setInitialIndex(rows.length - 1)
+      } else if (rows.length < prev * 0.5) {
+        // Length dropped significantly — likely a session switch
+        setInitialIndex(rows.length - 1)
       }
+      prevLengthRef.current = rows.length
+    }, [rows.length])
+
+    if (rows.length === 0) {
+      return null
     }
 
-    observer.observe(scrollElement)
-    scrollElement.addEventListener('load', onLoadCapture, true)
-
-    return () => {
-      observer.disconnect()
-      scrollElement.removeEventListener('load', onLoadCapture, true)
-    }
-  }, [rowVirtualizer, scrollContainerRef])
-
-  return (
-    <div>
-      {virtualRows.length > 0 && (
-        <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}>
-          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-            const row = virtualRows[virtualRow.index]
-            return (
-              <div
-                key={getRowKey(row, virtualRow.index)}
-                data-index={virtualRow.index}
-                ref={rowVirtualizer.measureElement}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  transform: `translateY(${virtualRow.start}px)`,
-                }}
-                className="pb-5"
-              >
-                {renderRow(row, virtualRow.index)}
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {liveTailRows.map((row, index) => {
-        const absoluteIndex = virtualizedPrefixCount + index
-        return (
-          <div key={getRowKey(row, absoluteIndex)} className="pb-5">
-            {renderRow(row, absoluteIndex)}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
+    return (
+      <Virtuoso
+        ref={virtuosoRef}
+        data={rows}
+        initialTopMostItemIndex={initialIndex}
+        itemContent={itemContent}
+        followOutput={isStreaming ? 'smooth' : false}
+        atBottomStateChange={atBottomStateChange}
+        atBottomThreshold={40}
+        overscan={200}
+        // Increase the default measured item size for code-heavy messages
+        defaultItemHeight={100}
+        className="outline-none"
+      />
+    )
+  },
+) as <T>(
+  props: MessagesTimelineProps<T> & React.RefAttributes<MessagesTimelineHandle>,
+) => React.ReactElement | null

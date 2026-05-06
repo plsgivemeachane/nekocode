@@ -1,10 +1,9 @@
-import React, { useRef, useEffect, useCallback } from 'react'
+import React, { useRef, useEffect, useCallback, useState } from 'react'
 import { useSession } from '../../hooks/useSession'
-import { useAutoScroll } from '../../hooks/useAutoScroll'
 import { UserMessage } from './UserMessage'
 import { AssistantMessage } from './AssistantMessage'
 import { ToolCallGroup } from './ToolCallSection'
-import { MessagesTimeline } from './MessagesTimeline'
+import { MessagesTimeline, type MessagesTimelineHandle } from './MessagesTimeline'
 import { StatusIndicator } from '../layout/StatusIndicator'
 import { WelcomeScreen } from '../ui/WelcomeScreen'
 import { NavBar } from '../layout/NavBar'
@@ -28,22 +27,19 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
     useSession({ sessionId })
   const isAgentConnecting = sessionId != null && !projectState.agentReady
 
-  const scrollContainerRef = useRef<HTMLDivElement>(null)
-  const messageContentRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<ChatInputHandle>(null)
+  const timelineRef = useRef<MessagesTimelineHandle>(null)
+  const [showScrollBtn, setShowScrollBtn] = useState(false)
   const [gitBranch, setGitBranch] = React.useState<string | null>(null)
 
-  // --- Auto-scroll ---
-  const { showScrollBtn, scrollToBottom, handleScroll } = useAutoScroll({
-    scrollContainerRef,
-    messageContentRef,
-    scrollDeps: [messages],
-    isStreaming,
-    sessionId,
-    isAgentConnecting,
-    isHistoryLoading,
-    messageCount: messages.length,
-  })
+  // --- Scroll-to-bottom button state (driven by react-virtuoso's atBottomStateChange) ---
+  const handleAtBottomChange = useCallback((atBottom: boolean) => {
+    setShowScrollBtn(!atBottom && messages.length > 0)
+  }, [messages.length])
+
+  const handleScrollToBottom = useCallback((smooth = false) => {
+    timelineRef.current?.scrollToBottom(smooth)
+  }, [])
 
   // --- Focus management ---
   const focusInput = useCallback(() => {
@@ -150,11 +146,9 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
       <NavBar />
 
       <main
-        ref={scrollContainerRef}
-        onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-6 pt-8 pb-10 relative"
+        className="flex-1 overflow-hidden relative"
       >
-        <div ref={messageContentRef} className="min-h-full">
+        <div className="h-full overflow-hidden px-6 pt-8 pb-10">
           {!sessionId ? (
             <div className="flex flex-col items-center justify-center h-full select-none pt-16">
               {/* Logo */}
@@ -227,38 +221,35 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
           ) : messages.length === 0 ? (
             <WelcomeScreen isAgentConnecting={isAgentConnecting} />
           ) : (
-            <div className="relative">
+            <div className="relative h-full">
               {/* Blur overlay when messages are stale (old session's messages still visible during the ~1 frame switch window) */}
-              <div className={`max-w-3xl mx-auto pt-4 transition-all duration-300 ease-out ${isMessagesStale ? 'blur-[3px] opacity-40 pointer-events-none select-none' : ''}`}>
-                <MessagesTimeline
-                  rows={messageGroups}
-                  isStreaming={isStreaming}
-                  scrollContainerRef={scrollContainerRef}
-                  getRowKey={(group) => group.key}
-                  renderRow={(group) => {
-                    if (group.type === 'tool-group') {
-                      return (
-                        <ToolCallGroup
-                          toolCalls={group.msgs.map((m) => ({
-                            id: m.id,
-                            toolName: m.toolName,
-                            status: m.status,
-                            isError: m.isError,
-                            args: m.args,
-                          }))}
-                        />
-                      )
-                    }
-                    return <div>{renderMessage(group.msg)}</div>
-                  }}
-                />
-                <StatusIndicator
-                  isStreaming={isStreaming}
-                  isAgentConnecting={isAgentConnecting}
-                  modelName={activeModel?.name ?? null}
-                  usage={usage}
-                  streamStartTime={streamStartTime}
-                />
+              <div className={`max-w-3xl mx-auto pt-4 h-full flex flex-col transition-all duration-300 ease-out ${isMessagesStale ? 'blur-[3px] opacity-40 pointer-events-none select-none' : ''}`}>
+                {/* flex-1 min-h-0 ensures Virtuoso gets a defined height from the flex layout */}
+                <div className="flex-1 min-h-0">
+                  <MessagesTimeline
+                    ref={timelineRef}
+                    rows={messageGroups}
+                    isStreaming={isStreaming}
+                    atBottomStateChange={handleAtBottomChange}
+                    getRowKey={(group) => group.key}
+                    renderRow={(group) => {
+                      if (group.type === 'tool-group') {
+                        return (
+                          <ToolCallGroup
+                            toolCalls={group.msgs.map((m) => ({
+                              id: m.id,
+                              toolName: m.toolName,
+                              status: m.status,
+                              isError: m.isError,
+                              args: m.args,
+                            }))}
+                          />
+                        )
+                      }
+                      return <div>{renderMessage(group.msg)}</div>
+                    }}
+                  />
+                </div>
               </div>
               {/* Stale-messages overlay centered on top of blurred content */}
               {isMessagesStale && (
@@ -278,7 +269,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
         {/* Scroll-to-bottom button */}
         {showScrollBtn && (
           <button
-            onClick={() => scrollToBottom(true)}
+            onClick={() => handleScrollToBottom(true)}
             className="fixed bottom-24 right-8 w-9 h-9 flex items-center justify-center bg-surface-800 hover:bg-surface-700 text-text-secondary rounded-full shadow-lg shadow-surface-950/50 border border-surface-700 transition-all duration-200 opacity-0 translate-y-2 animate-slide-up"
             aria-label="Scroll to bottom"
           >
@@ -302,6 +293,20 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
           >
             Dismiss
           </button>
+        </div>
+      )}
+
+      {messages.length > 0 && (
+        <div className="px-6 pb-1">
+          <div className="max-w-3xl mx-auto">
+            <StatusIndicator
+              isStreaming={isStreaming}
+              isAgentConnecting={isAgentConnecting}
+              modelName={activeModel?.name ?? null}
+              usage={usage}
+              streamStartTime={streamStartTime}
+            />
+          </div>
         </div>
       )}
 

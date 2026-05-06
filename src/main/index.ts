@@ -53,8 +53,14 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' }
   })
 
-  // Keyboard shortcuts for zoom
+  // Keyboard shortcuts for zoom and DevTools
   mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F12' && !input.control && !input.meta && !input.alt && !input.shift) {
+      event.preventDefault()
+      mainWindow.webContents.toggleDevTools()
+      return
+    }
+
     if (input.control || input.meta) {
       if (input.key === '=' || input.key === '+') {
         event.preventDefault()
