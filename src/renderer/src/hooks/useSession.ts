@@ -71,8 +71,13 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
   const messagesLoadedForRef = useRef<string | null>(null)
 
   // Keep a snapshot of each session's latest rendered messages for instant restore on switch.
+  // Guard: only write to cache when messages have been loaded for the CURRENT session.
+  // Without this guard, a sessionId change triggers this effect before the session-switch
+  // effect updates messages, causing the OLD session's messages to be written under the
+  // NEW session's key — corrupting the cache and showing stale data on switch-back.
   useEffect(() => {
     if (!sessionId) return
+    if (messagesLoadedForRef.current !== sessionId) return
     messagesBySession.current.set(sessionId, messages)
   }, [sessionId, messages])
 
@@ -119,48 +124,52 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
       prevSessionRef.current = sessionId
       return () => { cancelled = true }
     }
-    // Check for preloaded history FIRST (instant, no flash)
-    const preloaded = projectState.preloadedHistory[sessionId]
-    if (preloaded && preloaded.length > 0) {
-      logger.info(`using preloaded history: ${preloaded.length} messages for ${sessionId.slice(0, 8)}...`)
-      const chatMessages = ipcToChatMessages(preloaded)
-      setMessages(chatMessages)
-      messagesBySession.current.set(sessionId, chatMessages)
-      usedPreloadedRef.current = true
+    // Priority 1: Check renderer-side message cache (most up-to-date — updated in real-time during streaming).
+    // This must be checked BEFORE preloadedHistory because preloadedHistory is a snapshot from startup/hover
+    // that becomes stale as the user interacts with the session. Using stale preloaded data would overwrite
+    // the good cache and cause "lost messages" when switching back to a session.
+    const cachedMessages = messagesBySession.current.get(sessionId)
+    if (cachedMessages) {
+      setMessages(cachedMessages)
       setIsHistoryLoading(false)
       messagesLoadedForRef.current = sessionId
+
+      // Reconcile cached view with canonical session history to prevent stale
+      // messages from previous reconnect/cache state.
+      window.nekocode.session.loadHistory(sessionId).catch((err) => {
+        if (isSessionNotReadyError(err) && projectState.activeProjectPath) {
+          logger.debug(`reconcile fallback to disk for ${sessionId.slice(0, 8)}...`)
+          return window.nekocode.session.loadHistoryFromDisk(sessionId, projectState.activeProjectPath, 0)
+        }
+        throw err
+      }).then((ipcMessages) => {
+        if (cancelled) return
+        const canonicalMessages = ipcToChatMessages(ipcMessages)
+        const canonicalSig = messageSignature(canonicalMessages)
+        setMessages((prev) => {
+          const prevSig = messageSignature(prev)
+          if (prevSig === canonicalSig) return prev
+          logger.info(`history reconciled: ${prev.length} -> ${canonicalMessages.length} messages for ${sessionId.slice(0, 8)}...`)
+          return canonicalMessages
+        })
+        messagesBySession.current.set(sessionId, canonicalMessages)
+      }).catch((err) => {
+        if (!cancelled) logger.warn('Failed to reconcile cached history', err)
+      })
     } else {
-      // No preloaded data — restore from cache or trigger full load
-      const cachedMessages = messagesBySession.current.get(sessionId)
-      if (cachedMessages) {
-        setMessages(cachedMessages)
+      // Priority 2: Check preloaded history (from startup initReconnect or sidebar hover preload).
+      // Only used when there's no renderer cache — e.g. first time opening a session in this window.
+      const preloaded = projectState.preloadedHistory[sessionId]
+      if (preloaded && preloaded.length > 0) {
+        logger.info(`using preloaded history: ${preloaded.length} messages for ${sessionId.slice(0, 8)}...`)
+        const chatMessages = ipcToChatMessages(preloaded)
+        setMessages(chatMessages)
+        messagesBySession.current.set(sessionId, chatMessages)
+        usedPreloadedRef.current = true
         setIsHistoryLoading(false)
         messagesLoadedForRef.current = sessionId
-
-        // Reconcile cached view with canonical session history to prevent stale
-        // messages from previous reconnect/cache state.
-        window.nekocode.session.loadHistory(sessionId).catch((err) => {
-          if (isSessionNotReadyError(err) && projectState.activeProjectPath) {
-            logger.debug(`reconcile fallback to disk for ${sessionId.slice(0, 8)}...`)
-            return window.nekocode.session.loadHistoryFromDisk(sessionId, projectState.activeProjectPath, 0)
-          }
-          throw err
-        }).then((ipcMessages) => {
-          if (cancelled) return
-          const canonicalMessages = ipcToChatMessages(ipcMessages)
-          const canonicalSig = messageSignature(canonicalMessages)
-          setMessages((prev) => {
-            const prevSig = messageSignature(prev)
-            if (prevSig === canonicalSig) return prev
-            logger.info(`history reconciled: ${prev.length} -> ${canonicalMessages.length} messages for ${sessionId.slice(0, 8)}...`)
-            return canonicalMessages
-          })
-          messagesBySession.current.set(sessionId, canonicalMessages)
-        }).catch((err) => {
-          if (!cancelled) logger.warn('Failed to reconcile cached history', err)
-        })
       } else {
-        // First time opening this session with no preload — full load
+        // Priority 3: First time opening this session with no preload — full load
         setMessages(INITIAL_MESSAGES)
         setIsHistoryLoading(true)
         messagesLoadedForRef.current = sessionId
