@@ -1,42 +1,40 @@
 ## Bug: Session cache shows stale messages after switching sessions
 
 ### Date
-2026-05-06
+2026-05-09
 
 ### Symptoms
-After typing a prompt in a session, waiting for the agent to finish, switching to another session, and then switching back, the new messages (user prompt + agent response) disappear. The old cached version of the session is displayed instead.
+After typing a prompt in a session, waiting for the agent to finish, switching to another session, and then switching back, the new messages (user prompt + agent response) disappear. The old cached version of the session (from before the prompt) is displayed instead. The cache never reflects the streaming updates.
 
 ### Root Cause
-In `src/renderer/src/hooks/useSession.ts`, the `messagesBySession` cache snapshot effect had both `sessionId` and `messages` in its dependency array:
+Two bugs in `src/renderer/src/hooks/useSession.ts` working together:
 
-```js
-useEffect(() => {
-  if (!sessionId) return
-  messagesBySession.current.set(sessionId, messages)
-}, [sessionId, messages])
-```
+**Bug 1 — Cross-session cache corruption in the cache snapshot effect:**
 
-When `sessionId` changes (e.g., switching from session A to session B), React runs this effect because `sessionId` is in the dependency array. However, at this point `messages` still contains the **previous session's** messages (the session-switch effect hasn't updated `messages` yet). This causes:
+The `messagesBySession` cache effect (line ~72) has both `sessionId` and `messages` in its dependency array. When `sessionId` changes during a session switch, React runs this effect. However, at that point `messages` still holds the **previous session's** messages (the session-switch effect hasn't updated messages yet).
 
-1. **Switch A to B**: The effect writes session A's messages under session B's key. The session-switch effect then overwrites this with B's correct data - no visible problem yet.
+When switching back to session A:
+1. React renders with `sessionId=A` but `messages=B's latest`
+2. Cache effect fires: `messagesBySession.set(A, B's messages)` — **corrupts A's cache**
+3. Session switch effect reads corrupted cache and shows wrong data
 
-2. **Switch B to A**: The effect writes session B's messages under session A's key. The session-switch effect then finds this **corrupted cache entry** for A and uses it as the instant restore, showing stale/wrong data. The reconciliation step may eventually fix it, but the user sees a flash of incorrect content.
+**Bug 2 — Unconditional cache overwrite in reconciliation:**
+
+The reconciliation `.then()` callback (line ~153) unconditionally does `messagesBySession.current.set(sessionId, canonicalMessages)` — even when the signature comparison found no difference and `setMessages` returned `prev` unchanged. This meant even if the cache was correct, it would be overwritten with IPC data. If the IPC returned stale data (fewer messages than what the renderer had from streaming), the good cache was replaced with stale data.
 
 ### Fix
-Added a guard using the existing `messagesLoadedForRef` ref to prevent the cache effect from writing when `messages` haven't been loaded for the current session:
 
-```js
-useEffect(() => {
-  if (!sessionId) return
-  if (messagesLoadedForRef.current !== sessionId) return
-  messagesBySession.current.set(sessionId, messages)
-}, [sessionId, messages])
-```
+**Fix 1 — Guard on cache snapshot effect:**
+Added `if (messagesLoadedForRef.current !== sessionId) return` to prevent the cache effect from writing when messages haven't been loaded for the current session. `messagesLoadedForRef.current` is set synchronously in the session-switch effect after `setMessages` is called with correct data. During the stale window (sessionId changed but messages not yet updated), the ref still points to the old session, blocking the corrupt write.
 
-`messagesLoadedForRef.current` is set to `sessionId` synchronously within the session-switch effect, after `setMessages` is called with the correct data. During the stale window (when `sessionId` has changed but `messages` haven't been updated yet), `messagesLoadedForRef.current` still points to the old session, so the guard prevents the corrupt write.
+**Fix 2 — Remove unconditional cache overwrite in reconciliation:**
+Removed `messagesBySession.current.set(sessionId, canonicalMessages)` from the reconciliation `.then()`. The cache effect is the single source of truth for cache updates — it fires after any `setMessages` change and keeps the cache in sync automatically.
+
+**Fix 3 — Length guard in reconciliation:**
+Added a check: if the renderer has MORE messages than the IPC canonical data (`prev.length > canonicalMessages.length`), skip the reconciliation entirely. The renderer may have real-time streaming updates not yet reflected in IPC. This prevents stale IPC data from overwriting newer renderer state.
 
 ### Files Changed
-- `src/renderer/src/hooks/useSession.ts` - Added guard to cache snapshot effect (lines 72-80)
+- `src/renderer/src/hooks/useSession.ts` — Cache effect guard, reconciliation cache removal, reconciliation length guard
 
 ### Verification
 - All existing tests pass (`bun run test`)

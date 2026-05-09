@@ -149,10 +149,19 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
         setMessages((prev) => {
           const prevSig = messageSignature(prev)
           if (prevSig === canonicalSig) return prev
+          // Don't replace if renderer has MORE messages than IPC — the renderer
+          // cache may include real-time streaming updates not yet reflected in IPC.
+          if (prev.length > canonicalMessages.length) {
+            logger.debug(`reconciliation skipped: renderer has ${prev.length} msgs vs ${canonicalMessages.length} canonical for ${sessionId.slice(0, 8)}...`)
+            return prev
+          }
           logger.info(`history reconciled: ${prev.length} -> ${canonicalMessages.length} messages for ${sessionId.slice(0, 8)}...`)
           return canonicalMessages
         })
-        messagesBySession.current.set(sessionId, canonicalMessages)
+        // Cache is managed exclusively by the cache effect above — do not overwrite here.
+        // Unconditional overwrite was losing streaming-updated messages when IPC returned
+        // stale (fewer) messages. The cache effect fires after setMessages changes and
+        // keeps the cache in sync automatically.
       }).catch((err) => {
         if (!cancelled) logger.warn('Failed to reconcile cached history', err)
       })
