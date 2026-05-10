@@ -25,7 +25,7 @@ export default defineConfig({
   main: {
     plugins: [
       externalizeDepsPlugin({
-        exclude: ['@mariozechner/pi-coding-agent'],
+        exclude: ['@earendil-works/pi-coding-agent'],
       }),
       buildWorkerPlugin(),
     ],
