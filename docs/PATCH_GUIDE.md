@@ -269,6 +269,63 @@ catch (err) {
 
 ---
 
+## Patch 6 — `@aws-crypto` dependency version range fix (electron-builder)
+
+**Bug:** `docs/bugs/aws-crypto-smithy-version-mismatch.md`
+
+### Problem
+
+electron-builder's `traversalNodeModulesCollector` (used when Bun is the package manager) reads
+each `package.json` in `node_modules` and performs strict semver checks on declared dependencies.
+`@aws-crypto/util@5.2.0` and `@aws-crypto/sha256-browser@5.2.0` declare `@smithy/util-utf8: "^2.0.0"`,
+but the project's `resolutions` field forces `@smithy/util-utf8` to `4.2.2`. Since `4.2.2` does not
+satisfy `^2.0.0` (major version mismatch), electron-builder throws:
+
+```
+⨯ Production dependency @smithy/util-utf8 not found for package @aws-crypto/util
+```
+
+The packages are API-compatible at runtime — this is purely a stale version range in the `@aws-crypto`
+packages (a known AWS SDK ecosystem issue where the crypto helpers haven't been updated for `@smithy@4.x`).
+
+### Files
+
+- `node_modules/@aws-crypto/util/package.json`
+- `node_modules/@aws-crypto/sha256-browser/package.json`
+
+### Locate
+
+In both files, find the `@smithy/util-utf8` dependency:
+
+```json
+"@smithy/util-utf8": "^2.0.0",
+```
+
+### Replace with
+
+Widen the range to accept any version `>=2.0.0`:
+
+```json
+"@smithy/util-utf8": ">=2.0.0",
+```
+
+### When to regenerate
+
+These patches are **independent of the Pi SDK version**. They only need regeneration if:
+
+- `@aws-crypto/util` or `@aws-crypto/sha256-browser` change version (currently `5.2.0`)
+- The `@smithy/util-utf8` resolution changes in `package.json` `resolutions`
+- The `@aws-sdk/client-bedrock-runtime` version changes and pulls in different `@aws-crypto` versions
+
+After editing, regenerate with:
+
+```bash
+# Generate via temp git repo (patch-package has issues with Bun + scoped packages on Windows)
+# See: docs/bugs/aws-crypto-smithy-version-mismatch.md for the full procedure
+```
+
+---
+
 ## Regenerating the patch file
 
 After applying all edits to `node_modules/@mariozechner/pi-coding-agent/`:
@@ -293,5 +350,6 @@ After patching:
 2. `bun run test` — all tests pass
 3. `bun run lint` — no lint errors
 4. `bun run type-check` — type check passes
-5. Launch app -> extensions load successfully (check console for `Extensions loaded: N` with no errors)
-6. Session reconnect works without `Cannot find module 'typebox'` or `Cannot find package '@mariozechner/pi-agent-core'`
+5. `bun run package:local` — electron-builder packages successfully (validates `@aws-crypto` patches)
+6. Launch app -> extensions load successfully (check console for `Extensions loaded: N` with no errors)
+7. Session reconnect works without `Cannot find module 'typebox'` or `Cannot find package '@mariozechner/pi-agent-core'`

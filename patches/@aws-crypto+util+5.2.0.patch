@@ -1,0 +1,13 @@
+diff --git a/node_modules/@aws-crypto/util/package.json b/node_modules/@aws-crypto/util/package.json
+index 431107a..8b1a2f0 100644
+--- a/node_modules/@aws-crypto/util/package.json
++++ b/node_modules/@aws-crypto/util/package.json
+@@ -22,7 +22,7 @@
+   "license": "Apache-2.0",
+   "dependencies": {
+     "@aws-sdk/types": "^3.222.0",
+-    "@smithy/util-utf8": "^2.0.0",
++    "@smithy/util-utf8": ">=2.0.0",
+     "tslib": "^2.6.2"
+   },
+   "publishConfig": {

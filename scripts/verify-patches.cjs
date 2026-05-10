@@ -39,6 +39,20 @@ function main() {
     fail(`required patch file is missing: patches/${requiredPatch}`);
   }
 
+  // Verify @aws-crypto patches exist (required for electron-builder traversal with Bun)
+  // These patches widen @smithy/util-utf8 from ^2.0.0 to >=2.0.0 to match the installed 4.x version.
+  // See: docs/bugs/aws-crypto-smithy-version-mismatch.md
+  const awsCryptoPatches = [
+    "@aws-crypto+util+5.2.0.patch",
+    "@aws-crypto+sha256-browser+5.2.0.patch",
+  ];
+  for (const patchFile of awsCryptoPatches) {
+    const awsPatchPath = path.join(root, "patches", patchFile);
+    if (!fs.existsSync(awsPatchPath)) {
+      fail(`required patch file is missing: patches/${patchFile}`);
+    }
+  }
+
   console.log(`[verify:patches] OK - patch-package and patches/${requiredPatch} are present.`);
 }
 

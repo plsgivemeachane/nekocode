@@ -1,0 +1,13 @@
+diff --git a/node_modules/@aws-crypto/sha256-browser/package.json b/node_modules/@aws-crypto/sha256-browser/package.json
+index 2688ecf..e1cd06d 100644
+--- a/node_modules/@aws-crypto/sha256-browser/package.json
++++ b/node_modules/@aws-crypto/sha256-browser/package.json
+@@ -23,7 +23,7 @@
+     "@aws-crypto/util": "^5.2.0",
+     "@aws-sdk/types": "^3.222.0",
+     "@aws-sdk/util-locate-window": "^3.0.0",
+-    "@smithy/util-utf8": "^2.0.0",
++    "@smithy/util-utf8": ">=2.0.0",
+     "tslib": "^2.6.2"
+   },
+   "main": "./build/main/index.js",

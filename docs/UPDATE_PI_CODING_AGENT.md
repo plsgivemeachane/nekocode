@@ -7,6 +7,11 @@
 > **Patch guide:** `docs/PATCH_GUIDE.md`  
 > **Patch file:** `patches/@earendil-works+pi-coding-agent+<VERSION>.patch`
 
+> **⚠️ Important:** This project also carries `@aws-crypto` patches (`@aws-crypto+util+5.2.0.patch`
+> and `@aws-crypto+sha256-browser+5.2.0.patch`) that fix electron-builder's node module traversal.
+> These patches are independent of the Pi SDK version but depend on the transitive `@aws-sdk` versions.
+> See **Step 9b** and `docs/bugs/aws-crypto-smithy-version-mismatch.md`.
+
 ---
 
 ## Prerequisites
@@ -130,6 +135,29 @@ bun run build-worker
 
 All commands must pass. If any fail, re-check the manual edits from Step 5.
 
+### Step 9b — Verify `@aws-crypto` patches still apply
+
+The Pi SDK update may pull in different transitive `@aws-sdk` / `@aws-crypto` versions.
+After `bun install`, verify that the existing `@aws-crypto` patches still apply and that the
+electron-builder build succeeds:
+
+```bash
+bunx patch-package           # should show all 3 patches applying ✔
+bun run package:local        # must complete without "production dependency not found"
+```
+
+If `patch-package` fails to apply the `@aws-crypto` patches, the package versions likely changed.
+Check the installed versions:
+
+```bash
+node -e "console.log(require('./node_modules/@aws-crypto/util/package.json').version)"
+node -e "console.log(require('./node_modules/@aws-crypto/sha256-browser/package.json').version)"
+```
+
+If the versions changed from `5.2.0`, rename the patch files accordingly and update
+`scripts/verify-patches.cjs`. See `docs/bugs/aws-crypto-smithy-version-mismatch.md` for the
+full diagnostic and patch generation procedure.
+
 ### Step 10 — Cleanup
 
 Remove the temporary `package-lock.json`:
@@ -173,6 +201,7 @@ rm -f package-lock.json
 | 7 | `rm /tmp/...OLD_VERSION.patch` | Delete old patch |
 | 8 | `bunx patch-package @earendil-works/pi-coding-agent` | Generate new patch |
 | 9 | `bun run verify:patches && bun run test && bun run lint && bun run type-check` | Validate |
+| 9b | `bunx patch-package && bun run package:local` | Verify @aws-crypto patches + build |
 | 10 | `rm -f package-lock.json` | Cleanup |
 | 11 | Update docs, commit | Document & ship |
 
@@ -198,3 +227,20 @@ to re-apply patches against the new source, then regenerate.
    - `interopDefault` function
    - `virtualModules: VIRTUAL_MODULES` in jiti config
 3. Run `bun run build-worker` and check for build errors
+
+### `electron-builder` fails with "production dependency not found"
+
+This is the `@aws-crypto` / `@smithy` version mismatch. See `docs/bugs/aws-crypto-smithy-version-mismatch.md`.
+
+Quick fix:
+
+```bash
+# Check which @aws-crypto versions are installed
+ls node_modules/@aws-crypto/*/package.json | ForEach-Object { $_; node -e "const p=require('$_');console.log(p.name+'@'+p.version)" }
+
+# If versions changed from 5.2.0, regenerate the patches:
+# 1. Edit node_modules/@aws-crypto/util/package.json: "@smithy/util-utf8": "^2.0.0" → ">=2.0.0"
+# 2. Edit node_modules/@aws-crypto/sha256-browser/package.json: same change
+# 3. Generate patches via temp git repo (see bug doc)
+# 4. Update scripts/verify-patches.cjs with new version strings
+```

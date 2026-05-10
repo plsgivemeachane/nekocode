@@ -119,6 +119,7 @@ For every change, run **all** commands below and fix all errors before committin
 - `bun run test`
 - `bun run lint`
 - `bun run type-check`
+- `bun run package:local`
 
 ---
 
