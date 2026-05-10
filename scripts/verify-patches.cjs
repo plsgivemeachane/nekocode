@@ -19,8 +19,8 @@ function main() {
   const devDeps = packageJson.devDependencies || {};
   const scripts = packageJson.scripts || {};
 
-  if (!("@mariozechner/pi-coding-agent" in deps)) {
-    fail("@mariozechner/pi-coding-agent must exist in dependencies");
+  if (!("@earendil-works/pi-coding-agent" in deps)) {
+    fail("@earendil-works/pi-coding-agent must exist in dependencies");
   }
 
   if (!("patch-package" in deps) && !("patch-package" in devDeps)) {
@@ -31,8 +31,8 @@ function main() {
     fail("scripts.postinstall must include patch-package");
   }
 
-  const agentVersion = deps["@mariozechner/pi-coding-agent"];
-  const requiredPatch = `@mariozechner+pi-coding-agent+${agentVersion}.patch`;
+  const agentVersion = deps["@earendil-works/pi-coding-agent"];
+  const requiredPatch = `@earendil-works+pi-coding-agent+${agentVersion}.patch`;
   const patchPath = path.join(root, "patches", requiredPatch);
 
   if (!fs.existsSync(patchPath)) {

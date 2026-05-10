@@ -23,14 +23,14 @@ vi.mock('fs/promises', () => ({
 }))
 
 // Mock SessionManager.list to return controlled data
-vi.mock('@mariozechner/pi-coding-agent', () => ({
+vi.mock('@earendil-works/pi-coding-agent', () => ({
   SessionManager: {
     list: vi.fn(),
   },
 }))
 
 // Import the mocked module so we can control return values
-import { SessionManager } from '@mariozechner/pi-coding-agent'
+import { SessionManager } from '@earendil-works/pi-coding-agent'
 import { readFile, writeFile, mkdir } from 'fs/promises'
 
 const mockedList = vi.mocked(SessionManager.list)

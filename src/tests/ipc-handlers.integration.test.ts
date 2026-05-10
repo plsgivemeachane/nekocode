@@ -3,7 +3,7 @@ import { IPC_CHANNELS } from '../shared/ipc-channels'
 import { registerIpcHandlers } from '../main/ipc-handlers'
 import { ProjectManager } from '../main/project-manager'
 import type { ChatMessageIPC, ModelInfo } from '../shared/ipc-types'
-import { SessionManager } from '@mariozechner/pi-coding-agent'
+import { SessionManager } from '@earendil-works/pi-coding-agent'
 
 const handlers = new Map<string, (...args: unknown[]) => unknown>()
 
@@ -58,7 +58,7 @@ vi.mock('fs/promises', () => ({
   mkdir: vi.fn(async () => undefined),
 }))
 
-vi.mock('@mariozechner/pi-coding-agent', () => ({
+vi.mock('@earendil-works/pi-coding-agent', () => ({
   SessionManager: {
     list: vi.fn(async () => []),
   },

@@ -1,11 +1,11 @@
-# Update Pipeline: `@mariozechner/pi-coding-agent`
+# Update Pipeline: `@earendil-works/pi-coding-agent`
 
 > **Purpose:** Step-by-step procedure to update the Pi SDK dependency to the latest version
 > and re-apply NekoCode's patches.  
-> **Package:** `@mariozechner/pi-coding-agent`  
+> **Package:** `@earendil-works/pi-coding-agent`  
 > **Patch tool:** `patch-package` (via `bunx`)  
 > **Patch guide:** `docs/PATCH_GUIDE.md`  
-> **Patch file:** `patches/@mariozechner+pi-coding-agent+<VERSION>.patch`
+> **Patch file:** `patches/@earendil-works+pi-coding-agent+<VERSION>.patch`
 
 ---
 
@@ -34,7 +34,7 @@ Move the old patch file to a temporary location so that `patch-package`'s `posti
 hook doesn't fail when it tries to apply a patch that targets the previous version:
 
 ```bash
-mv patches/@mariozechner+pi-coding-agent+OLD_VERSION.patch /tmp/
+mv patches/@earendil-works+pi-coding-agent+OLD_VERSION.patch /tmp/
 ```
 
 > Replace `OLD_VERSION` with the current version string (e.g. `0.73.0`).
@@ -45,13 +45,13 @@ mv patches/@mariozechner+pi-coding-agent+OLD_VERSION.patch /tmp/
 Edit the `dependencies` entry:
 
 ```json
-"@mariozechner/pi-coding-agent": "<NEW_VERSION>"
+"@earendil-works/pi-coding-agent": "<NEW_VERSION>"
 ```
 
 You can find the latest version on npm:
 
 ```bash
-npm view @mariozechner/pi-coding-agent version
+npm view @earendil-works/pi-coding-agent version
 ```
 
 ### Step 4 — Install dependencies with Bun
@@ -71,7 +71,7 @@ You have two options:
 #### Option A — Use PATCH_GUIDE.md (preferred for major version bumps)
 
 Follow every patch in `docs/PATCH_GUIDE.md` against the newly installed
-`node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/loader.js`.
+`node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js`.
 
 Each patch section has a **Locate** and **Replace with** block. Apply them in order:
 
@@ -84,7 +84,7 @@ Each patch section has a **Locate** and **Replace with** block. Apply them in or
 #### Option B — Port from old patch file (faster for minor bumps)
 
 If the file `dist/core/extensions/loader.js` hasn't changed structurally between versions,
-you can read the old patch file (`patches/@mariozechner+pi-coding-agent+OLD_VERSION.patch`)
+you can read the old patch file (`patches/@earendil-works+pi-coding-agent+OLD_VERSION.patch`)
 and manually apply the same edits to the new version's file.
 
 Verify the edits are correct by checking that the surrounding code context matches.
@@ -105,16 +105,16 @@ npm install --package-lock-only
 Delete the old patch file that was moved to `/tmp/` in Step 2:
 
 ```bash
-rm /tmp/@mariozechner+pi-coding-agent+OLD_VERSION.patch
+rm /tmp/@earendil-works+pi-coding-agent+OLD_VERSION.patch
 ```
 
 ### Step 8 — Generate new patch file
 
 ```bash
-bunx patch-package @mariozechner/pi-coding-agent
+bunx patch-package @earendil-works/pi-coding-agent
 ```
 
-This creates `patches/@mariozechner+pi-coding-agent+NEW_VERSION.patch`.
+This creates `patches/@earendil-works+pi-coding-agent+NEW_VERSION.patch`.
 
 ### Step 9 — Verify the patch
 
@@ -147,7 +147,7 @@ rm -f package-lock.json
 
 2. Update the **patch file path** reference in `docs/PATCH_GUIDE.md`:
    ```
-   > **Patch file:** `patches/@mariozechner+pi-coding-agent+<NEW_VERSION>.patch`
+   > **Patch file:** `patches/@earendil-works+pi-coding-agent+<NEW_VERSION>.patch`
    ```
 
 3. Update this file's references if any steps changed.
@@ -155,7 +155,7 @@ rm -f package-lock.json
 4. Commit all changes:
    ```bash
    git add package.json patches/ docs/PATCH_GUIDE.md docs/UPDATE_PI_CODING_AGENT.md
-   git commit -m "chore: update @mariozechner/pi-coding-agent to <NEW_VERSION>"
+   git commit -m "chore: update @earendil-works/pi-coding-agent to <NEW_VERSION>"
    ```
 
 ---
@@ -171,7 +171,7 @@ rm -f package-lock.json
 | 5 | Manual edits per `PATCH_GUIDE.md` | Apply patches |
 | 6 | `npm install --package-lock-only` | Generate lockfile for patch-package |
 | 7 | `rm /tmp/...OLD_VERSION.patch` | Delete old patch |
-| 8 | `bunx patch-package @mariozechner/pi-coding-agent` | Generate new patch |
+| 8 | `bunx patch-package @earendil-works/pi-coding-agent` | Generate new patch |
 | 9 | `bun run verify:patches && bun run test && bun run lint && bun run type-check` | Validate |
 | 10 | `rm -f package-lock.json` | Cleanup |
 | 11 | Update docs, commit | Document & ship |
@@ -192,7 +192,7 @@ to re-apply patches against the new source, then regenerate.
 ### Extensions fail to load after update
 
 1. Check that all 5 patches from PATCH_GUIDE.md were applied
-2. Verify `node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/loader.js` contains:
+2. Verify `node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js` contains:
    - `try/catch` around `require.resolve("typebox")`
    - `try/catch` around `import.meta.resolve()`
    - `interopDefault` function

@@ -1,6 +1,6 @@
 import { parentPort } from 'worker_threads'
 import type { WorkerMessage, WorkerResponse, OperationType, WorkerEventMessage } from './types'
-import type { AgentSessionEvent, AgentSession, SessionMessageEntry } from '@mariozechner/pi-coding-agent'
+import type { AgentSessionEvent, AgentSession, SessionMessageEntry } from '@earendil-works/pi-coding-agent'
 import { createLogger } from '../logger'
 import type { SessionStreamEvent, ChatMessageIPC, ExtensionLoadError, UsageData } from '../../shared/ipc-types'
 
@@ -34,11 +34,11 @@ const logger = createLogger('worker')
  * Previous approach: Dynamic import from resolved path
  * New approach: Direct import (SDK is bundled by esbuild)
  */
-async function importSdk(): Promise<typeof import('@mariozechner/pi-coding-agent')> {
+async function importSdk(): Promise<typeof import('@earendil-works/pi-coding-agent')> {
   try {
     // The SDK is now bundled with the worker, so we can import it directly
     // Using dynamic import() for consistency with the existing code pattern
-    const module = await import('@mariozechner/pi-coding-agent')
+    const module = await import('@earendil-works/pi-coding-agent')
 
     // Validate critical exports exist. When the SDK partially loads (e.g., due to
     // a dynamic require failure like 'Dynamic require of "os" is not supported'),

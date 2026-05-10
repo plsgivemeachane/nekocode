@@ -5,7 +5,7 @@ import {
   SettingsManager,
   type AgentSession,
   type SessionManager as SdkSessionManager,
-} from '@mariozechner/pi-coding-agent'
+} from '@earendil-works/pi-coding-agent'
 import type { ExtensionLoadError } from '../shared/ipc-types'
 import { createLogger } from './logger'
 

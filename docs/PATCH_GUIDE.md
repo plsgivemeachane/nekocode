@@ -1,7 +1,7 @@
 # SDK Patch Guide: `@mariozechner/pi-coding-agent`
 
-> **Target version:** `0.73.1`  
-> **Patch file:** `patches/@mariozechner+pi-coding-agent+0.73.1.patch`  
+> **Target version:** `0.74.0`  
+> **Patch file:** `patches/@earendil-works+pi-coding-agent+0.74.0.patch`  
 > **Purpose:** Recreate the patch-package diff from this document alone.  
 > **Bug references:** `docs/bugs/extension-typebox-resolve-failure.md`, `docs/bugs/pi-extension-load-failure-bug.md`, `docs/bugs/extension-load-pi-agent-core-resolution-bug.md`
 

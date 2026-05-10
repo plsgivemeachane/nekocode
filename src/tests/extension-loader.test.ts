@@ -25,7 +25,7 @@ const mockState = vi.hoisted(() => {
   return { loaderCtorCalls, loaderReloadMock, mockCreateAgentSession, mockGetAgentDir, mockSettingsCreate }
 })
 
-vi.mock('@mariozechner/pi-coding-agent', () => ({
+vi.mock('@earendil-works/pi-coding-agent', () => ({
   createAgentSession: mockState.mockCreateAgentSession,
   DefaultResourceLoader: class MockDefaultResourceLoader {
     constructor(config: { cwd: string; agentDir: string; settingsManager: unknown; noExtensions?: boolean }) {

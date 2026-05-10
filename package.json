@@ -31,7 +31,7 @@
     "prepackage": "bun run test && bun run lint && bun run type-check"
   },
   "dependencies": {
-    "@mariozechner/pi-coding-agent": "0.73.1",
+    "@earendil-works/pi-coding-agent": "0.74.0",
     "@tanstack/react-virtual": "^3.13.23",
     "react": "^19.0.0",
     "react-virtuoso": "^4.12.3",

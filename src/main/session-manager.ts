@@ -1,6 +1,6 @@
-import { SessionManager as SdkSessionManager } from '@mariozechner/pi-coding-agent'
-import type { AgentSession, AgentSessionEvent } from '@mariozechner/pi-coding-agent'
-import type { TextContent } from '@mariozechner/pi-ai'
+import { SessionManager as SdkSessionManager } from '@earendil-works/pi-coding-agent'
+import type { AgentSession, AgentSessionEvent } from '@earendil-works/pi-coding-agent'
+import type { TextContent } from '@earendil-works/pi-ai'
 import { unlinkSync } from 'fs'
 import { StreamBatcher } from './stream-batcher'
 import type { SessionStreamEvent, ChatMessageIPC, ModelInfo, ExtensionLoadError, UsageData } from '../shared/ipc-types'
@@ -279,13 +279,13 @@ export class PiSessionManager {
 
   /** List all available models with valid API keys. */
   async listModels(): Promise<ModelInfo[]> {
-    let modelRegistry: import('@mariozechner/pi-coding-agent').ModelRegistry | null = null
+    let modelRegistry: import('@earendil-works/pi-coding-agent').ModelRegistry | null = null
     for (const [, managed] of this.sessions) {
       modelRegistry = managed.session.modelRegistry
       break
     }
     if (!modelRegistry) {
-      const { ModelRegistry, AuthStorage } = await import('@mariozechner/pi-coding-agent')
+      const { ModelRegistry, AuthStorage } = await import('@earendil-works/pi-coding-agent')
       const authStorage = AuthStorage.create()
       modelRegistry = ModelRegistry.create(authStorage)
     }

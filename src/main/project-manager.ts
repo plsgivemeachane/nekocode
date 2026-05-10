@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { SessionManager } from '@mariozechner/pi-coding-agent'
+import { SessionManager } from '@earendil-works/pi-coding-agent'
 import { join } from 'path'
 import { readFile, writeFile, mkdir } from 'fs/promises'
 import type { ProjectInfo, SessionInfoDisplay } from '../shared/ipc-types'

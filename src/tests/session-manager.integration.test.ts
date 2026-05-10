@@ -18,8 +18,8 @@ vi.mock('electron', () => ({
 
 import { PiSessionManager } from '../main/session-manager'
 import type { SessionStreamEvent } from '../shared/ipc-types'
-import type { SessionInfo } from '@mariozechner/pi-coding-agent'
-import type { Message, AssistantMessage } from '@mariozechner/pi-ai'
+import type { SessionInfo } from '@earendil-works/pi-coding-agent'
+import type { Message, AssistantMessage } from '@earendil-works/pi-ai'
 
 /** Create a minimal mock AssistantMessage for SDK messages */
 function mockAssistantMessage(overrides: Partial<AssistantMessage> = {}): AssistantMessage {
@@ -59,7 +59,7 @@ function createMockSession(id?: string) {
 
 let lastCreatedMockSession: ReturnType<typeof createMockSession> | null = null
 
-vi.mock('@mariozechner/pi-coding-agent', () => ({
+vi.mock('@earendil-works/pi-coding-agent', () => ({
   createAgentSession: sdkMocks.createAgentSessionMock,
   DefaultResourceLoader: class {
     constructor(config: { cwd: string; agentDir: string; settingsManager: unknown; noExtensions?: boolean }) {

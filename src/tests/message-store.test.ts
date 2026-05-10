@@ -24,7 +24,7 @@ const { mockSdkSessionManager, mockEntries } = vi.hoisted(() => {
   return { mockSdkSessionManager, mockEntries }
 })
 
-vi.mock('@mariozechner/pi-coding-agent', () => ({
+vi.mock('@earendil-works/pi-coding-agent', () => ({
   SessionManager: mockSdkSessionManager,
 }))
 
