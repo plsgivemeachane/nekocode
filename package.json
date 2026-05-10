@@ -1,13 +1,19 @@
 {
   "name": "nekocode",
-  "version": "0.2.43",
+  "version": "0.2.44",
   "description": "AI-powered coding assistant desktop app",
+  "author": {
+    "name": "Nekocode",
+    "email": "plsgivemeachane@users.noreply.github.com"
+  },
+  "packageManager": "bun@1.3.4",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "node ./scripts/build-worker.cjs && electron-vite dev",
     "build": "bun run verify:patches && electron-vite build && node ./scripts/build-worker.cjs",
     "preview": "electron-vite preview",
     "package": "bun run version:up && bun run verify:patches && electron-vite build && node ./scripts/build-worker.cjs && electron-builder --win",
+    "package:local": "bun run verify:patches && electron-vite build && node ./scripts/build-worker.cjs && electron-builder --win",
     "package:mac": "bun run verify:patches && electron-vite build && node ./scripts/build-worker.cjs && electron-builder --mac",
     "package:linux": "bun run verify:patches && electron-vite build && node ./scripts/build-worker.cjs && electron-builder --linux",
     "package:all": "bun run version:up && bun run verify:patches && electron-vite build && node ./scripts/build-worker.cjs && electron-builder -mwl",
@@ -25,7 +31,7 @@
     "prepackage": "bun run test && bun run lint && bun run type-check"
   },
   "dependencies": {
-    "@mariozechner/pi-coding-agent": "0.73.0",
+    "@mariozechner/pi-coding-agent": "0.73.1",
     "@tanstack/react-virtual": "^3.13.23",
     "react": "^19.0.0",
     "react-virtuoso": "^4.12.3",
@@ -167,5 +173,19 @@
   },
   "trustedDependencies": [
     "patch-package"
-  ]
+  ],
+  "resolutions": {
+    "@smithy/types": "4.14.1",
+    "@smithy/protocol-http": "5.3.14",
+    "@smithy/property-provider": "4.2.14",
+    "@smithy/shared-ini-file-loader": "4.4.9",
+    "@smithy/node-config-provider": "4.3.14",
+    "@smithy/smithy-client": "4.12.13",
+    "@smithy/core": "3.23.17",
+    "@smithy/util-middleware": "4.2.14",
+    "@smithy/util-utf8": "4.2.2",
+    "@aws-sdk/types": "3.973.8",
+    "@aws-sdk/core": "3.974.8",
+    "@aws-sdk/nested-clients": "3.997.6"
+  }
 }

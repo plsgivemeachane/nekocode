@@ -1,7 +1,7 @@
 # SDK Patch Guide: `@mariozechner/pi-coding-agent`
 
-> **Target version:** `0.73.0`  
-> **Patch file:** `patches/@mariozechner+pi-coding-agent+0.73.0.patch`  
+> **Target version:** `0.73.1`  
+> **Patch file:** `patches/@mariozechner+pi-coding-agent+0.73.1.patch`  
 > **Purpose:** Recreate the patch-package diff from this document alone.  
 > **Bug references:** `docs/bugs/extension-typebox-resolve-failure.md`, `docs/bugs/pi-extension-load-failure-bug.md`, `docs/bugs/extension-load-pi-agent-core-resolution-bug.md`
 
@@ -277,7 +277,7 @@ After applying all edits to `node_modules/@mariozechner/pi-coding-agent/`:
 bunx patch-package @mariozechner/pi-coding-agent
 ```
 
-This creates/updates `patches/@mariozechner+pi-coding-agent+0.73.0.patch`.
+This creates/updates `patches/@mariozechner+pi-coding-agent+0.73.1.patch`.
 
 > **Important:** Delete `.map` files from the patch if they bloat the diff. Source maps are not
 > needed at runtime and can be regenerated. The patch file should ideally contain only `.js` and
