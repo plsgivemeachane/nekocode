@@ -9,7 +9,7 @@ const {
   mockSend: vi.fn(),
   mockShow: vi.fn(),
   mockOn: vi.fn(),
-  mockNotificationConstructor: vi.fn(function(this: any) {
+  mockNotificationConstructor: vi.fn(function () {
     return { show: mockShow, on: mockOn }
   }),
   mockIsFocused: vi.fn(() => true),
@@ -264,7 +264,7 @@ describe('NotificationService', () => {
       mockMkdir.mockResolvedValue(undefined)
 
       const result = await service.updateSettings({
-        tasks: { aiResponseComplete: false },
+        tasks: { aiResponseComplete: false, fileOperationComplete: true, extensionOperationComplete: true },
       })
       expect(result.tasks.aiResponseComplete).toBe(false)
       expect(result.tasks.fileOperationComplete).toBe(true)

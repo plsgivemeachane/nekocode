@@ -75,7 +75,7 @@ beforeEach(() => {
       getSettings: vi.fn().mockResolvedValue(defaultSettings),
       onPlaySound: vi.fn(() => vi.fn()),
     },
-  } as unknown as Record<string, unknown>
+  } as unknown as typeof window.nekocode
 })
 
 afterEach(() => {
@@ -97,7 +97,7 @@ describe("SoundManager", () => {
 
     it("should be idempotent — only create AudioContext once", async () => {
       await soundManager.init()
-      const ctorSpy = vi.spyOn(globalThis, "AudioContext" as never)
+      const ctorSpy = vi.spyOn(globalThis, "AudioContext" as never) as ReturnType<typeof vi.spyOn>
       await soundManager.init()
       expect(ctorSpy).not.toHaveBeenCalled()
       ctorSpy.mockRestore()

@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { render, screen, fireEvent, waitFor } from "@testing-library/react"
 import React from "react"
+import type { NekoCodeIPC } from "@/shared/ipc-types"
 
 // ── Hoisted mock functions (safe for vi.mock factories) ────────────
 const { mockUpdateSettings, mockPlayPreview } = vi.hoisted(() => ({
@@ -51,7 +52,7 @@ beforeEach(() => {
       updateSettings: mockUpdateSettingsIpc,
       onPlaySound: vi.fn(),
     },
-  }
+  } as unknown as NekoCodeIPC
 })
 
 afterEach(() => {
@@ -155,7 +156,7 @@ describe("NotificationSettingsContent", () => {
 
     // Second switch is the sound effects toggle
     const toggle = screen.getAllByRole("switch")[1]
-    expect(toggle.disabled).toBe(true)
+    expect((toggle as HTMLButtonElement).disabled).toBe(true)
   })
 
   it("should disable per-task toggles when notifications are disabled", async () => {
@@ -169,7 +170,7 @@ describe("NotificationSettingsContent", () => {
     const allSwitches = screen.getAllByRole("switch")
     const taskSwitches = allSwitches.slice(2)
     taskSwitches.forEach((toggle) => {
-      expect(toggle.disabled).toBe(true)
+      expect((toggle as HTMLButtonElement).disabled).toBe(true)
     })
   })
 
