@@ -3,9 +3,12 @@ import { generateId } from '@/renderer/src/types/chat'
 import type { ChatMessageIPC } from '@/shared/ipc-types'
 import type { ChatMessage } from '@/renderer/src/types/chat'
 
-// We test the pure conversion functions by re-implementing them here
-// since they are not exported from useSession.ts. If they get exported
-// in the future, replace these with direct imports.
+// ── Import the ACTUAL source functions instead of duplicating them ──
+// Previous version re-implemented ipcToChatMessage/ipcToChatMessages inline,
+// which silently diverged from the source (missing `usage` field).
+// This version imports directly to ensure tests validate the real code.
+
+import { ipcToChatMessage, ipcToChatMessages } from '@/renderer/src/utils/message-transforms'
 
 /** Narrow a ChatMessage to a specific variant for test assertions */
 function asToolCall(m: ChatMessage) {
@@ -19,40 +22,6 @@ function asText(m: ChatMessage) {
 function asUser(m: ChatMessage) {
   if (m.role === 'user') return m
   throw new Error('Expected user message')
-}
-
-// ── Inline copies of the functions under test ─────────────────────
-// These match the source exactly. If source changes, these must too.
-
-function ipcToChatMessage(ipc: ChatMessageIPC): ChatMessage[] {
-  const msgs: ChatMessage[] = []
-  if (ipc.content) {
-    if (ipc.role === 'user') {
-      msgs.push({ role: 'user', content: ipc.content, id: ipc.id })
-    } else {
-      msgs.push({ role: 'assistant', type: 'text', content: ipc.content, id: ipc.id })
-    }
-  }
-  if (ipc.toolCalls) {
-    for (const tc of ipc.toolCalls) {
-      msgs.push({
-        role: 'assistant',
-        type: 'tool_call',
-        toolName: tc.name,
-        toolId: tc.id,
-        args: tc.args,
-        status: 'done',
-        result: tc.result,
-        isError: tc.isError,
-        id: generateId(),
-      })
-    }
-  }
-  return msgs
-}
-
-function ipcToChatMessages(ipcMessages: ChatMessageIPC[]): ChatMessage[] {
-  return ipcMessages.flatMap(ipcToChatMessage)
 }
 
 // ── Tests ──────────────────────────────────────────────────────────
@@ -147,6 +116,40 @@ describe('ipcToChatMessage', () => {
     expect(result).toHaveLength(3)
     expect(result.map((m) => { if (m.role === 'assistant' && 'toolName' in m) return m.toolName; return null })).toEqual(['read', 'bash', 'write'])
     expect(asToolCall(result[2]).isError).toBe(true)
+  })
+
+  it('preserves usage data on assistant text messages', () => {
+    const ipc: ChatMessageIPC = {
+      id: 'msg-usage',
+      role: 'assistant',
+      content: 'response text',
+      timestamp: 0,
+      usage: {
+        inputTokens: 100,
+        outputTokens: 50,
+        totalCost: 0.001,
+      },
+    }
+    const result = ipcToChatMessage(ipc)
+    expect(result).toHaveLength(1)
+    const txt = asText(result[0])
+    expect(txt.usage).toEqual({
+      inputTokens: 100,
+      outputTokens: 50,
+      totalCost: 0.001,
+    })
+  })
+
+  it('does not include usage when not provided in IPC', () => {
+    const ipc: ChatMessageIPC = {
+      id: 'msg-nousage',
+      role: 'assistant',
+      content: 'response',
+      timestamp: 0,
+    }
+    const result = ipcToChatMessage(ipc)
+    const txt = asText(result[0])
+    expect(txt.usage).toBeUndefined()
   })
 })
 

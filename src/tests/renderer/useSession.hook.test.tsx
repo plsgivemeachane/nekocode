@@ -195,22 +195,27 @@ describe("useSession", () => {
         ({ sessionId }) => useSession({ sessionId }),
         { initialProps: { sessionId: "sess-1" as string | null } },
       )
+      // Flush initial async loadHistory triggered by non-null sessionId
+      await act(async () => {})
       act(() => result.current.setInput("my draft text"))
-      rerender({ sessionId: "sess-2" })
+      // Wrap rerender in act() to suppress warnings from state updates during session switch
+      await act(async () => { rerender({ sessionId: "sess-2" }) })
       // Input is preserved when switching to a session with no saved draft
       expect(result.current.input).toBe("my draft text")
       // Switch back — draft should be restored
-      rerender({ sessionId: "sess-1" })
+      await act(async () => { rerender({ sessionId: "sess-1" }) })
       expect(result.current.input).toBe("my draft text")
     })
 
-    it("clears input when switching to null session", () => {
+    it("clears input when switching to null session", async () => {
       const { result, rerender } = renderHook(
         ({ sessionId }) => useSession({ sessionId }),
         { initialProps: { sessionId: "sess-1" as string | null } },
       )
+      // Flush initial async loadHistory
+      await act(async () => {})
       act(() => result.current.setInput("typed text"))
-      rerender({ sessionId: null })
+      await act(async () => { rerender({ sessionId: null }) })
       expect(result.current.input).toBe("")
     })
   })
@@ -332,9 +337,8 @@ describe("useSession", () => {
       // Pending session should have empty messages
       expect(result.current.messages).toEqual([])
       expect(mockLoadHistory).not.toHaveBeenCalled()
-      // Transition to real session ID
-      rerender({ sessionId: "real-session-456" })
-      await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)) })
+      // Transition to real session ID — wrap in act() to handle state updates
+      await act(async () => { rerender({ sessionId: "real-session-456" }) })
       // Now history should be loaded for the real session
       expect(mockLoadHistory).toHaveBeenCalledWith("real-session-456")
     })
@@ -347,9 +351,8 @@ describe("useSession", () => {
       // Set input while pending
       await act(async () => { result.current.setInput("test input") })
       expect(result.current.input).toBe("test input")
-      // Transition to real session ID
-      rerender({ sessionId: "real-session-456" })
-      await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)) })
+      // Transition to real session ID — wrap in act() to handle state updates
+      await act(async () => { rerender({ sessionId: "real-session-456" }) })
       // Input is preserved when transitioning from pending to real session
       // (no saved draft for the real session, so current input is kept)
       expect(result.current.input).toBe("test input")
