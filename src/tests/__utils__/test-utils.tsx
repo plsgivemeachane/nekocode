@@ -90,6 +90,32 @@ export function createMockIPC(): NekoCodeIPC {
       set: vi.fn().mockResolvedValue(undefined),
       reset: vi.fn().mockResolvedValue(undefined),
     },
+    notification: {
+      getSettings: vi.fn().mockResolvedValue({
+        enabled: true,
+        soundEnabled: true,
+        soundVolume: 0.5,
+        useCustomSounds: false,
+        tasks: {
+          aiResponseComplete: true,
+          fileOperationComplete: true,
+          extensionOperationComplete: true,
+        },
+      }),
+      updateSettings: vi.fn().mockImplementation((partial) => Promise.resolve({
+        enabled: true,
+        soundEnabled: true,
+        soundVolume: 0.5,
+        useCustomSounds: false,
+        tasks: {
+          aiResponseComplete: true,
+          fileOperationComplete: true,
+          extensionOperationComplete: true,
+        },
+        ...partial,
+      })),
+      onPlaySound: vi.fn().mockReturnValue(() => {}),
+    },
   }
 }
 

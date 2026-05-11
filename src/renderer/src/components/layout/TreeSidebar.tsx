@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useProjectStore, type SessionStatus } from '../../stores/project-store'
 import { ContextMenu, type ContextMenuEntry } from '../ui/ContextMenu'
+// NotificationSettingsPanel is now in SettingsView
 import { createLogger } from '../../utils/logger'
 
 declare const __APP_VERSION__: string
@@ -164,6 +165,7 @@ export function TreeSidebar() {
 
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; items: ContextMenuEntry[] } | null>(null)
   const closeCtxMenu = useCallback(() => setCtxMenu(null), [])
+  // NotificationSettingsPanel moved to central Settings page
 
   const openProjectMenu = useCallback((e: React.MouseEvent, project: { id: string; path: string }) => {
     e.preventDefault()
@@ -240,15 +242,17 @@ export function TreeSidebar() {
       <div className="px-5 pt-5 pb-4">
         <div className="flex items-center justify-between">
           <span className="text-2xl font-display font-semibold tracking-tight"><span className="text-pink-400">Neko</span><span className="text-white">code</span><sub className="text-[9px] text-[#9CA3AF] font-normal ml-0.5">v{__APP_VERSION__}</sub></span>
-          <button
-            onClick={handleAddProject}
-            className="p-1 text-text-secondary hover:text-text-primary hover:bg-surface-800/80 rounded-md border border-transparent hover:border-surface-600 transition-colors duration-200"
-            title="Add Project"
-          >
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-              <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={handleAddProject}
+              className="p-1 text-text-secondary hover:text-text-primary hover:bg-surface-800/80 rounded-md border border-transparent hover:border-surface-600 transition-colors duration-200"
+              title="Add Project"
+            >
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+                <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -324,6 +328,8 @@ export function TreeSidebar() {
           onClose={closeCtxMenu}
         />
       )}
+
+      {/* NotificationSettingsPanel moved to central Settings page */}
     </aside>
   )
 }

@@ -7,13 +7,31 @@ import { initAutoUpdater } from './updater'
 import { ThreadOperationQueue } from './threading'
 import { ThreadedProjectManager } from './threading/threaded-project-manager'
 import { ThreadedSessionManager } from './threading/threaded-session-manager'
+import { NotificationService } from './notification-service'
 import type { SessionStreamEvent } from '../shared/ipc-types'
 
 const logger = createLogger('main')
 
+// Set app user model ID for Windows notifications (required for toast notifications in dev)
+if (process.platform === 'win32') {
+  app.setAppUserModelId(process.execPath)
+}
+
+// Notification service for OS notifications and sound triggers
+const notificationService = new NotificationService()
+
 // Event callback for session events from worker threads
 const onSessionEvent = (sessionId: string, event: SessionStreamEvent): void => {
   sendEventToRenderer(sessionId, event)
+
+  // Trigger notification when AI response completes
+  if (event.type === 'done') {
+    notificationService.notify({
+      title: 'AI Response Ready',
+      body: `Session: ${sessionId.slice(0, 8)}`,
+      soundKey: 'task-complete',
+    })
+  }
 }
 
 // Initialize thread pool for offloading CPU-intensive operations
@@ -120,9 +138,10 @@ async function performShutdown(): Promise<void> {
 app.whenReady().then(async () => {
   logger.info('App ready, loading workspace')
   Menu.setApplicationMenu(null)
+  await notificationService.loadSettings()
   await projectManager.loadWorkspace()
   logger.info(`Workspace loaded, ${projectManager.listProjects().length} project(s)`)
-  registerIpcHandlers(sessionManager, projectManager)
+  registerIpcHandlers(sessionManager, projectManager, notificationService)
   createWindow()
   initAutoUpdater(() => mainWindowRef)
 

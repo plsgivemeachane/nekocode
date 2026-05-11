@@ -189,6 +189,34 @@ export interface ZoomInfo {
   factor: number
 }
 
+/** Sound key identifier for notification sounds */
+export type NotificationSoundKey = 'task-complete' | 'success' | 'error' | 'warning'
+
+/** Payload sent from main to renderer to trigger a sound playback */
+export interface NotificationPayload {
+  title: string
+  body: string
+  soundKey: NotificationSoundKey
+}
+
+/** Persistent notification settings */
+export interface NotificationSettings {
+  /** Master toggle for all notifications */
+  enabled: boolean
+  /** Sound on/off (independent of visual notification) */
+  soundEnabled: boolean
+  /** Playback volume 0.0 - 1.0 */
+  soundVolume: number
+  /** false = synthesized sounds, true = user-uploaded MP3s */
+  useCustomSounds: boolean
+  /** Per-task notification toggles */
+  tasks: {
+    aiResponseComplete: boolean
+    fileOperationComplete: boolean
+    extensionOperationComplete: boolean
+  }
+}
+
 export interface NekoCodeIPC {
   session: {
     create: (cwd: string) => Promise<SessionCreateResult>
@@ -234,5 +262,10 @@ export interface NekoCodeIPC {
     get: () => Promise<ZoomInfo>
     set: (factor: number) => Promise<void>
     reset: () => Promise<void>
+  }
+  notification: {
+    getSettings: () => Promise<NotificationSettings>
+    updateSettings: (partial: Partial<NotificationSettings>) => Promise<NotificationSettings>
+    onPlaySound: (callback: (payload: NotificationPayload) => void) => () => void
   }
 }

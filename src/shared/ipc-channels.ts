@@ -34,6 +34,9 @@ export const IPC_CHANNELS = {
   ZOOM_GET: 'zoom:get',
   ZOOM_SET: 'zoom:set',
   ZOOM_RESET: 'zoom:reset',
+  NOTIFICATION_PLAY_SOUND: 'notification:play-sound',
+  NOTIFICATION_SETTINGS_GET: 'notification:settings-get',
+  NOTIFICATION_SETTINGS_SET: 'notification:settings-set',
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]

@@ -24,10 +24,15 @@ const logger = createLogger('project-store')
 
 export type SessionStatus = 'idle' | 'streaming' | 'error'
 
+/** Which main view is currently shown in the content area */
+export type ActiveView = 'chat' | 'settings'
+
 interface ProjectState {
   projects: ProjectInfo[]
   activeSessionId: string | null
   activeProjectPath: string | null
+  /** Which main view is shown in the content area */
+  activeView: ActiveView
   sessionStatuses: Record<string, SessionStatus>
   /** Error messages for sessions in error state, keyed by sessionId */
   sessionErrorMessages: Record<string, string>
@@ -53,6 +58,7 @@ export type ProjectAction =
   | { type: 'SET_AGENT_CONNECTING' }
   | { type: 'SET_AGENT_READY'; sessionId: string }
   | { type: 'REPLACE_PENDING_SESSION'; projectPath: string; pendingId: string; realSession: SessionInfoDisplay }
+  | { type: 'SET_ACTIVE_VIEW'; view: ActiveView }
 
 // ---------------------------------------------------------------------------
 // Reducer (pure)
@@ -62,6 +68,7 @@ const INITIAL_STATE: ProjectState = {
   projects: [],
   activeSessionId: null,
   activeProjectPath: null,
+  activeView: 'chat',
   sessionStatuses: {},
   sessionErrorMessages: {},
   preloadedHistory: {},
@@ -127,6 +134,8 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
         ...state,
         activeSessionId: action.sessionId,
         activeProjectPath: action.projectPath,
+        // Always switch to chat view when selecting a session
+        activeView: 'chat',
       }
 
     case 'RECONNECT_SESSION':
@@ -209,6 +218,12 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
       }
       return { ...state, agentReady: true }
 
+    case 'SET_ACTIVE_VIEW':
+      return {
+        ...state,
+        activeView: action.view,
+      }
+
     case 'REPLACE_PENDING_SESSION': {
       // Replace a pending session with the real one, and update active session ID
       const { projectPath, pendingId, realSession } = action
@@ -238,6 +253,7 @@ interface ProjectStoreAPI {
   addProject: (path: string) => Promise<void>
   removeProject: (projectId: string) => Promise<void>
   setActiveSession: (sessionId: string, projectPath: string) => void
+  setActiveView: (view: ActiveView) => void
   reconnectSession: (sessionId: string, projectPath: string) => Promise<void>
   createSession: (projectPath: string) => Promise<void>
   refreshSessions: (projectId: string) => Promise<void>
@@ -405,11 +421,19 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     [state.preloadedHistory],
   )
 
+  const setActiveView = useCallback(
+    (view: ActiveView) => {
+      dispatch({ type: 'SET_ACTIVE_VIEW', view })
+    },
+    [],
+  )
+
   const api: ProjectStoreAPI = {
     state,
     addProject,
     removeProject,
     setActiveSession,
+    setActiveView,
     reconnectSession,
     createSession,
     refreshSessions,

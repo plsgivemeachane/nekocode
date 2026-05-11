@@ -14,6 +14,8 @@ import type {
   UpdateProgress,
   UpdateErrorInfo,
   ZoomInfo,
+  NotificationPayload,
+  NotificationSettings,
 } from '../shared/ipc-types'
 
 const sessionApi: NekoCodeIPC['session'] = {
@@ -144,5 +146,18 @@ contextBridge.exposeInMainWorld('nekocode', {
 
     reset: (): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.ZOOM_RESET),
+  },
+  notification: {
+    getSettings: (): Promise<NotificationSettings> =>
+      ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_SETTINGS_GET),
+
+    updateSettings: (partial: Partial<NotificationSettings>): Promise<NotificationSettings> =>
+      ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_SETTINGS_SET, partial),
+
+    onPlaySound: (callback: (payload: NotificationPayload) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: NotificationPayload) => callback(payload)
+      ipcRenderer.on(IPC_CHANNELS.NOTIFICATION_PLAY_SOUND, handler)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATION_PLAY_SOUND, handler)
+    },
   },
 })

@@ -22,8 +22,10 @@ import type {
   WorkspaceSetActivePayload,
   ModelInfo,
   UpdateAvailableInfo,
+  NotificationSettings,
 } from '../shared/ipc-types'
 import type { ISessionManager, IProjectManager } from './manager-types'
+import type { NotificationService } from './notification-service'
 import { createLogger } from './logger'
 import { checkForUpdate, downloadUpdate, quitAndInstall } from './updater'
 
@@ -37,6 +39,7 @@ const execFileAsync = promisify(execFile)
 export function registerIpcHandlers(
   sessionManager: ISessionManager,
   projectManager: IProjectManager,
+  notificationService?: NotificationService,
 ): void {
   // --- Session handlers ---
 
@@ -247,6 +250,20 @@ export function registerIpcHandlers(
       win.webContents.setZoomFactor(1.0)
     }
   })
+
+  // --- Notification handlers ---
+
+  if (notificationService) {
+    ipcMain.handle(IPC_CHANNELS.NOTIFICATION_SETTINGS_GET, async (): Promise<NotificationSettings> => {
+      logger.debug('NOTIFICATION_SETTINGS_GET')
+      return notificationService.getSettings()
+    })
+
+    ipcMain.handle(IPC_CHANNELS.NOTIFICATION_SETTINGS_SET, async (_event, partial: Partial<NotificationSettings>): Promise<NotificationSettings> => {
+      logger.debug('NOTIFICATION_SETTINGS_SET')
+      return notificationService.updateSettings(partial)
+    })
+  }
 }
 
 /**
