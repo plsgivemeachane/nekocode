@@ -3,6 +3,7 @@ import { useSession } from '../../hooks/useSession'
 import { UserMessage } from './UserMessage'
 import { AssistantMessage } from './AssistantMessage'
 import { ToolCallGroup } from './ToolCallSection'
+import { ThinkingBlock } from './ThinkingBlock'
 import { MessagesTimeline, type MessagesTimelineHandle } from './MessagesTimeline'
 import { StatusIndicator } from '../layout/StatusIndicator'
 import { WelcomeScreen } from '../ui/WelcomeScreen'
@@ -96,10 +97,13 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
   const lastMessageId = messages.length > 0 ? messages[messages.length - 1].id : null
 
   type ToolCallMsg = Extract<ChatMessage, { role: 'assistant'; type: 'tool_call' }>
+  type ThinkingMsg = Extract<ChatMessage, { role: 'assistant'; type: 'thinking' }>
   type MessageGroup =
     | { key: string; type: 'single'; msg: ChatMessage }
     | { key: string; type: 'tool-group'; msgs: ToolCallMsg[] }
+    | { key: string; type: 'thinking-group'; msgs: ThinkingMsg[] }
   const isToolCall = (msg: ChatMessage): msg is ToolCallMsg => msg.role === 'assistant' && msg.type === 'tool_call'
+  const isThinking = (msg: ChatMessage): msg is ThinkingMsg => msg.role === 'assistant' && msg.type === 'thinking'
   const messageGroups: MessageGroup[] = []
   let i = 0
   while (i < messages.length) {
@@ -113,12 +117,21 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
         current = messages[i]
       }
       messageGroups.push({ key: `tg-${toolMsgs[0].id}`, type: 'tool-group', msgs: toolMsgs })
+    } else if (isThinking(msg)) {
+      const thinkingMsgs: ThinkingMsg[] = []
+      let current = messages[i]
+      while (i < messages.length && isThinking(current)) {
+        thinkingMsgs.push(current)
+        i++
+        current = messages[i]
+      }
+      messageGroups.push({ key: `th-${thinkingMsgs[0].id}`, type: 'thinking-group', msgs: thinkingMsgs })
     } else {
       messageGroups.push({ key: msg.id, type: 'single', msg })
       i++
     }
   }
-  logger.debug(`messageGroups: ${messageGroups.length} groups (${messageGroups.filter(g => g.type === 'tool-group').length} tool-groups, ${messageGroups.filter(g => g.type === 'single' && g.msg.role === 'assistant' && g.msg.type === 'tool_call').length} orphan tool-calls), total messages: ${messages.length}`)
+  logger.debug(`messageGroups: ${messageGroups.length} groups (${messageGroups.filter(g => g.type === 'tool-group').length} tool-groups, ${messageGroups.filter(g => g.type === 'thinking-group').length} thinking-groups), total messages: ${messages.length}`)
 
   const renderMessage = (msg: ChatMessage) => {
     const isLast = msg.id === lastMessageId
@@ -150,7 +163,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
       <main
         className="flex-1 overflow-hidden relative"
       >
-        <div className={`h-full ${contentOverflow} px-6 pt-8 pb-10`}>
+        <div className={`h-full ${contentOverflow} px-6`}>
           {!sessionId ? (
             <div className="flex flex-col items-center justify-center min-h-full select-none pt-16">
               {/* Logo */}
@@ -225,7 +238,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
           ) : (
             <div className="relative h-full">
               {/* Blur overlay when messages are stale (old session's messages still visible during the ~1 frame switch window) */}
-              <div className={`max-w-3xl mx-auto pt-4 h-full flex flex-col transition-all duration-300 ease-out ${isMessagesStale ? 'blur-[3px] opacity-40 pointer-events-none select-none' : ''}`}>
+              <div className={`max-w-3xl mx-auto h-full flex flex-col transition-all duration-300 ease-out ${isMessagesStale ? 'blur-[3px] opacity-40 pointer-events-none select-none' : ''}`}>
                 {/* flex-1 min-h-0 ensures Virtuoso gets a defined height from the flex layout */}
                 <div className="flex-1 min-h-0">
                   <MessagesTimeline
@@ -245,6 +258,16 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
                               isError: m.isError,
                               args: m.args,
                             }))}
+                          />
+                        )
+                      }
+                      if (group.type === 'thinking-group') {
+                        const combinedContent = group.msgs.map(m => m.content).join('')
+                        const isLast = group.msgs.some(m => m.id === lastMessageId)
+                        return (
+                          <ThinkingBlock
+                            content={combinedContent}
+                            isStreaming={isStreaming && isLast}
                           />
                         )
                       }

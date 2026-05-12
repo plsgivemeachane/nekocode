@@ -22,6 +22,9 @@ interface ManagedSession {
   /** Tracks the current assistant message being streamed */
   currentAssistantId: string | null
   currentAssistantContent: string
+  /** Tracks the current thinking content being streamed */
+  currentThinkingId: string | null
+  currentThinkingContent: string
   /** Whether the user has sent at least one prompt in this session */
   hasPrompted: boolean
   /** Tracks cumulative token usage across all assistant messages */
@@ -343,6 +346,8 @@ export class PiSessionManager {
       messages: [],
       currentAssistantId: null,
       currentAssistantContent: '',
+      currentThinkingId: null,
+      currentThinkingContent: '',
       currentToolCallId: null,
       hasPrompted: false,
       usageTotals: { input: 0, output: 0, totalCost: 0 },
@@ -381,12 +386,39 @@ export class PiSessionManager {
           }
           managed.currentAssistantContent += sub.delta
           batcher.push({ type: 'text_delta', delta: sub.delta })
+        } else if (sub.type === 'thinking_start') {
+          if (!managed.currentThinkingId) {
+            managed.currentThinkingId = crypto.randomUUID()
+            managed.currentThinkingContent = ''
+          }
+          batcher.push({ type: 'thinking_start' })
+        } else if (sub.type === 'thinking_delta') {
+          if (!managed.currentThinkingId) {
+            managed.currentThinkingId = crypto.randomUUID()
+            managed.currentThinkingContent = ''
+          }
+          managed.currentThinkingContent += sub.delta
+          batcher.push({ type: 'thinking_delta', delta: sub.delta })
+        } else if (sub.type === 'thinking_end') {
+          batcher.push({ type: 'thinking_end' })
+          if (managed.currentThinkingId) {
+            managed.messages.push({
+              id: managed.currentThinkingId,
+              role: 'assistant',
+              content: managed.currentThinkingContent,
+              timestamp: Date.now(),
+              thinking: true,
+            })
+            managed.currentThinkingId = null
+            managed.currentThinkingContent = ''
+          }
         }
         break
       }
       case 'message_start': {
         logger.debug(`message_start: role=${event.message?.role ?? 'unknown'}`)
         if (event.message?.role === 'user') {
+          this.finalizeThinkingMessage(managed)
           this.finalizeAssistantMessage(managed)
           let content = ''
           if (typeof event.message.content === 'string') {
@@ -442,6 +474,7 @@ export class PiSessionManager {
         batcher.flush()
         logger.debug(`tool_execution_start: name=${event.toolName}, id=${event.toolCallId}, args=${JSON.stringify(event.args)?.slice(0, 200)}`)
         emit({ type: 'tool_call', toolCallId: event.toolCallId ?? managed.currentToolCallId ?? crypto.randomUUID(), toolName: event.toolName, args: event.args })
+        this.finalizeThinkingMessage(managed)
         this.finalizeAssistantMessage(managed)
         managed.currentToolCallId = event.toolCallId ?? crypto.randomUUID()
         const lastMsg = managed.messages[managed.messages.length - 1]
@@ -493,6 +526,7 @@ export class PiSessionManager {
         break
       case 'agent_end':
         batcher.flush()
+        this.finalizeThinkingMessage(managed)
         this.finalizeAssistantMessage(managed)
         logger.debug(`agent_end: total accumulated messages=${managed.messages.length}`)
         emit({ type: 'done' })
@@ -533,5 +567,24 @@ export class PiSessionManager {
     logger.debug(`finalizeAssistantMessage: total messages now ${managed.messages.length}`)
     managed.currentAssistantId = null
     managed.currentAssistantContent = ''
+  }
+
+  /**
+   * Finalize the current in-progress thinking message.
+   * Called on tool_execution_start, agent_end, or before a new user message.
+   */
+  private finalizeThinkingMessage(managed: ManagedSession): void {
+    if (!managed.currentThinkingId) return
+    logger.debug(`finalizeThinkingMessage: id=${managed.currentThinkingId} content=${managed.currentThinkingContent.length} chars`)
+    managed.messages.push({
+      id: managed.currentThinkingId,
+      role: 'assistant',
+      content: managed.currentThinkingContent,
+      timestamp: Date.now(),
+      thinking: true,
+    })
+    logger.debug(`finalizeThinkingMessage: total messages now ${managed.messages.length}`)
+    managed.currentThinkingId = null
+    managed.currentThinkingContent = ''
   }
 }

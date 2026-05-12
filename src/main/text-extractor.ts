@@ -16,3 +16,20 @@ export function extractTextContent(
     .map(block => block.text)
     .join('')
 }
+
+/**
+ * Extract thinking/reasoning text from a message content field.
+ * Handles arrays of content blocks and extracts ThinkingContent blocks.
+ * Returns empty string if no thinking content is found.
+ */
+export function extractThinkingContent(
+  content: string | Array<{ type: string }> | null | undefined,
+): string {
+  if (content == null) return ''
+  if (typeof content === 'string') return ''
+  return content
+    .filter((block): block is { type: 'thinking'; thinking: string; redacted?: boolean } =>
+      block.type === 'thinking' && !('redacted' in block && block.redacted))
+    .map(block => block.thinking)
+    .join('')
+}

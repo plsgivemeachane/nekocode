@@ -108,6 +108,8 @@ export function SessionView({ sessionId, cwd, onCreateSession, onDisposeSession 
                 text = msg.content
               } else if (msg.type === 'text') {
                 text = msg.content
+              } else if (msg.type === 'thinking') {
+                text = `[Thinking: ${msg.content.slice(0, 80)}${msg.content.length > 80 ? '...' : ''}]`
               } else {
                 const status = msg.status === 'running' ? '...' : msg.isError ? ' (error)' : ' (done)'
                 text = `[${msg.toolName}${status}]`

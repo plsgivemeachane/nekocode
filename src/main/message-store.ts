@@ -2,7 +2,7 @@ import { SessionManager as SdkSessionManager } from '@earendil-works/pi-coding-a
 import type { AgentSession, SessionMessageEntry } from '@earendil-works/pi-coding-agent'
 import type { ToolCall, Message } from '@earendil-works/pi-ai'
 import type { ChatMessageIPC } from '../shared/ipc-types'
-import { extractTextContent } from './text-extractor'
+import { extractTextContent, extractThinkingContent } from './text-extractor'
 import { createLogger } from './logger'
 
 const logger = createLogger('message-store')
@@ -37,6 +37,20 @@ export function extractHistoryFromSdkMessages(
     if (role !== 'user' && role !== 'assistant') continue
 
     const content = extractTextContent(m.content)
+
+    // Extract thinking content from assistant messages (before text content)
+    if (role === 'assistant' && Array.isArray(m.content)) {
+      const thinkingContent = extractThinkingContent(m.content)
+      if (thinkingContent) {
+        result.push({
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: thinkingContent,
+          timestamp: 'timestamp' in m ? m.timestamp : Date.now(),
+          thinking: true,
+        })
+      }
+    }
 
     // Extract tool calls from assistant messages
     let toolCalls: ChatMessageIPC['toolCalls']

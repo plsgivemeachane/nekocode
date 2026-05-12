@@ -8,6 +8,8 @@ export function ipcToChatMessage(ipc: ChatMessageIPC): ChatMessage[] {
   if (ipc.content) {
     if (ipc.role === 'user') {
       msgs.push({ role: 'user', content: ipc.content, id: ipc.id })
+    } else if (ipc.thinking) {
+      msgs.push({ role: 'assistant', type: 'thinking', content: ipc.content, id: ipc.id })
     } else {
       msgs.push({ role: 'assistant', type: 'text', content: ipc.content, id: ipc.id, usage: ipc.usage })
     }
@@ -45,6 +47,9 @@ export function messageSignature(messages: ChatMessage[]): string {
       if (msg.type === 'text') {
         return `a:t:${msg.content}`
       }
+      if (msg.type === 'thinking') {
+        return `a:th:${msg.content}`
+      }
       return [
         'a:c',
         msg.toolId,
@@ -66,6 +71,18 @@ export function handleTextDelta(messages: ChatMessage[], delta: string): ChatMes
     msgs[msgs.length - 1] = { ...last, content: last.content + delta }
   } else {
     msgs.push({ role: 'assistant', type: 'text', content: delta, id: generateId() })
+  }
+  return msgs
+}
+
+/** Append a thinking delta to the message list (pure function for thinking_delta events) */
+export function handleThinkingDelta(messages: ChatMessage[], delta: string): ChatMessage[] {
+  const msgs = [...messages]
+  const last = msgs[msgs.length - 1]
+  if (last && last.role === 'assistant' && last.type === 'thinking') {
+    msgs[msgs.length - 1] = { ...last, content: last.content + delta }
+  } else {
+    msgs.push({ role: 'assistant', type: 'thinking', content: delta, id: generateId() })
   }
   return msgs
 }

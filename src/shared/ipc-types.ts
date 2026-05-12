@@ -88,6 +88,8 @@ export interface ChatMessageIPC {
   timestamp: number
   /** Usage data for assistant messages (undefined for user messages) */
   usage?: MessageUsage
+  /** When true, this message contains thinking/reasoning content */
+  thinking?: boolean
 }
 
 /**
@@ -106,6 +108,9 @@ export interface UsageData {
 export type SessionStreamEvent =
   | { type: 'agent_start' }
   | { type: 'text_delta'; delta: string }
+  | { type: 'thinking_start' }
+  | { type: 'thinking_delta'; delta: string }
+  | { type: 'thinking_end' }
   | { type: 'tool_call'; toolCallId: string; toolName: string; args: unknown }
   | { type: 'tool_result'; toolCallId: string; toolName: string; result: unknown; isError: boolean }
   | { type: 'usage_update'; usage: UsageData }

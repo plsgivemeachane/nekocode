@@ -82,6 +82,9 @@ interface ManagedSession {
   messages: ChatMessageIPC[]
   currentAssistantId: string | null
   currentAssistantContent: string
+  /** Tracks the current thinking content being streamed */
+  currentThinkingId: string | null
+  currentThinkingContent: string
   currentToolCallId: string | null
   usageTotals: { input: number; output: number; totalCost: number }
 }
@@ -122,12 +125,39 @@ function handleAgentEvent(sessionId: string, event: AgentSessionEvent, managed: 
         }
         managed.currentAssistantContent += sub.delta
         emitEvent(sessionId, { type: 'text_delta', delta: sub.delta })
+      } else if (sub.type === 'thinking_start') {
+        if (!managed.currentThinkingId) {
+          managed.currentThinkingId = crypto.randomUUID()
+          managed.currentThinkingContent = ''
+        }
+        emitEvent(sessionId, { type: 'thinking_start' })
+      } else if (sub.type === 'thinking_delta') {
+        if (!managed.currentThinkingId) {
+          managed.currentThinkingId = crypto.randomUUID()
+          managed.currentThinkingContent = ''
+        }
+        managed.currentThinkingContent += sub.delta
+        emitEvent(sessionId, { type: 'thinking_delta', delta: sub.delta })
+      } else if (sub.type === 'thinking_end') {
+        emitEvent(sessionId, { type: 'thinking_end' })
+        if (managed.currentThinkingId) {
+          managed.messages.push({
+            id: managed.currentThinkingId,
+            role: 'assistant',
+            content: managed.currentThinkingContent,
+            timestamp: Date.now(),
+            thinking: true,
+          })
+          managed.currentThinkingId = null
+          managed.currentThinkingContent = ''
+        }
       }
       break
     }
     case 'message_start': {
       logger.debug(`message_start: role=${event.message?.role ?? 'unknown'}`)
       if (event.message?.role === 'user') {
+        finalizeThinkingMessage(managed)
         finalizeAssistantMessage(managed)
         
         let content = ''
@@ -192,6 +222,7 @@ function handleAgentEvent(sessionId: string, event: AgentSessionEvent, managed: 
         args: event.args,
       })
       
+      finalizeThinkingMessage(managed)
       finalizeAssistantMessage(managed)
       managed.currentToolCallId = event.toolCallId ?? crypto.randomUUID()
       
@@ -247,6 +278,7 @@ function handleAgentEvent(sessionId: string, event: AgentSessionEvent, managed: 
       break
     }
     case 'agent_end': {
+      finalizeThinkingMessage(managed)
       finalizeAssistantMessage(managed)
       logger.debug(`agent_end: total messages=${managed.messages.length}`)
       emitEvent(sessionId, { type: 'done' })
@@ -285,6 +317,23 @@ function finalizeAssistantMessage(managed: ManagedSession): void {
     managed.messages.push(assistantMsg)
     managed.currentAssistantId = null
     managed.currentAssistantContent = ''
+  }
+}
+
+/**
+ * Finalize the current thinking message being streamed
+ */
+function finalizeThinkingMessage(managed: ManagedSession): void {
+  if (managed.currentThinkingId && managed.currentThinkingContent) {
+    managed.messages.push({
+      id: managed.currentThinkingId,
+      role: 'assistant',
+      content: managed.currentThinkingContent,
+      timestamp: Date.now(),
+      thinking: true,
+    })
+    managed.currentThinkingId = null
+    managed.currentThinkingContent = ''
   }
 }
 
@@ -727,6 +776,8 @@ function wrapSession(
     messages: [],
     currentAssistantId: null,
     currentAssistantContent: '',
+    currentThinkingId: null,
+    currentThinkingContent: '',
     currentToolCallId: null,
     usageTotals: { input: 0, output: 0, totalCost: 0 },
   }

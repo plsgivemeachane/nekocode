@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import type { SessionStreamEvent, UsageData } from '../../../shared/ipc-types'
 import type { ChatMessage } from '../types/chat'
 import { createLogger } from '../utils/logger'
-import { handleTextDelta, handleToolCall, handleToolResult } from '../utils/message-transforms'
+import { handleTextDelta, handleThinkingDelta, handleToolCall, handleToolResult } from '../utils/message-transforms'
 
 const logger = createLogger('useSessionEvents')
 
@@ -60,6 +60,10 @@ export function useSessionEvents({
 
         case 'text_delta':
           onMessages(prev => handleTextDelta(prev, event.delta))
+          break
+
+        case 'thinking_delta':
+          onMessages(prev => handleThinkingDelta(prev, event.delta))
           break
 
         case 'tool_call':

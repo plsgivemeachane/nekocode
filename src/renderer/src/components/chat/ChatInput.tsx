@@ -113,12 +113,12 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
   }, [])
 
   return (
-    <footer className="px-6 py-4 bg-surface-950">
+    <footer className="px-6 py-2 bg-surface-950">
       <div className="max-w-3xl mx-auto">
         <form onSubmit={handleSubmit}>
           <div
             onMouseDown={handleInputContainerMouseDown}
-            className="rounded-[1.25rem] border border-surface-700 bg-surface-900 p-4 shadow-[0_0_20px_rgba(0,0,0,0.2)] cursor-text"
+            className="relative rounded-[1.25rem] border border-surface-700 bg-surface-900 px-4 py-3 pr-12 shadow-[0_0_20px_rgba(0,0,0,0.2)] cursor-text"
           >
             <textarea
               ref={textareaRef}
@@ -130,10 +130,10 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
               rows={1}
               className="w-full bg-transparent text-sm text-text-primary placeholder:text-text-tertiary/50 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed resize-none overflow-hidden leading-relaxed"
             />
-            <div className="flex items-center justify-between mt-2 pt-2">
+            <div className="flex items-center pt-5">
               <div className="flex items-center gap-0 text-xs text-text-secondary">
                 <div ref={modelDropdownRef} className="relative">
-                  <button type="button" onClick={() => setShowModelDropdown(v => !v)} className="flex items-center gap-1.5 px-3.5 py-2 rounded-md hover:bg-surface-800 transition-colors duration-150 border border-transparent hover:border-surface-600">
+                  <button type="button" onClick={() => setShowModelDropdown(v => !v)} className="flex items-center gap-1.5 px-1.5 py-2 rounded-none transition-colors duration-150 border border-transparent hover:border-surface-600">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-accent-400">
                       <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5"/>
                       <path d="M8 12h8M12 8v8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
@@ -165,33 +165,33 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
                   })()}
                 </div>
               </div>
-              {isStreaming ? (
-                <button
-                  type="button"
-                  onClick={() => void abortPrompt()}
-                  disabled={!sessionId}
-                  className="w-9 h-9 flex items-center justify-center rounded-full bg-error text-white hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-black/25"
-                  aria-label="Stop response"
-                  title="Stop"
-                >
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <rect x="3" y="3" width="8" height="8" rx="1.2" fill="currentColor" />
-                  </svg>
-                </button>
-              ) : (
-                <button
-                  type="submit"
-                  disabled={!sessionId || !input.trim()}
-                  className="w-9 h-9 flex items-center justify-center rounded-full bg-accent-700 text-white hover:bg-accent-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-accent-700/25 hover:shadow-accent-600/35"
-                  aria-label="Send message"
-                  title="Send"
-                >
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path d="M8 3v10M4 7l4-4 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
-              )}
             </div>
+            {isStreaming ? (
+              <button
+                type="button"
+                onClick={() => void abortPrompt()}
+                disabled={!sessionId}
+                className="absolute right-1.5 bottom-1.5 w-7 h-7 flex items-center justify-center rounded-full bg-error text-white hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-black/25"
+                aria-label="Stop response"
+                title="Stop"
+              >
+                <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+                  <rect x="3" y="3" width="8" height="8" rx="1.2" fill="currentColor" />
+                </svg>
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={!sessionId || !input.trim()}
+                className="absolute right-1.5 bottom-1.5 w-7 h-7 flex items-center justify-center rounded-full bg-accent-700 text-white hover:bg-accent-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-accent-700/25 hover:shadow-accent-600/35"
+                aria-label="Send message"
+                title="Send"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 3v10M4 7l4-4 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            )}
           </div>
         </form>
         <div className="flex items-center justify-between mt-2 px-1">
