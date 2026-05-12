@@ -80,17 +80,13 @@ export function ThinkingBlock({ content, isStreaming }: ThinkingBlockProps) {
             }
           `}
         >
-          <div className="relative px-3 py-2">
+          <div className="px-3 py-2">
             <p className="text-[12px] font-mono text-text-tertiary whitespace-pre-wrap break-words leading-relaxed">
               {content}
               {isStreaming && (
                 <span className="inline-block w-1.5 h-3 bg-accent-400 animate-glow-pulse ml-0.5 align-text-bottom" />
               )}
             </p>
-            {/* Fade overlay when streaming */}
-            {isStreaming && !expanded && (
-              <div className="absolute inset-x-0 top-0 h-full bg-gradient-to-t from-surface-900/50 to-transparent pointer-events-none" />
-            )}
           </div>
         </div>
       )}
