@@ -141,6 +141,8 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
     }
   }
 
+  const contentOverflow = messages.length > 0 ? 'overflow-hidden' : 'overflow-y-auto'
+
   return (
     <div className={`bg-surface-950 text-text-primary flex flex-col h-full ${className ?? ""}`}>
       <NavBar />
@@ -148,9 +150,9 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
       <main
         className="flex-1 overflow-hidden relative"
       >
-        <div className="h-full overflow-hidden px-6 pt-8 pb-10">
+        <div className={`h-full ${contentOverflow} px-6 pt-8 pb-10`}>
           {!sessionId ? (
-            <div className="flex flex-col items-center justify-center h-full select-none pt-16">
+            <div className="flex flex-col items-center justify-center min-h-full select-none pt-16">
               {/* Logo */}
               <div className="relative mb-6">
                 <div className="w-14 h-14 rounded-xl bg-surface-900/80 border border-surface-700/50 flex items-center justify-center overflow-hidden">
