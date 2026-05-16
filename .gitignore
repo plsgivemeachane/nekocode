@@ -32,6 +32,6 @@ out
 
 .firecrawl
 package-lock.json
-bun.lock
+# bun.lock — committed to ensure reproducible CI builds (see docs/bugs/)
 tsconfig.tsbuildinfo
 workers

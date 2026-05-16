@@ -1,6 +1,6 @@
 {
   "name": "nekocode",
-  "version": "0.2.49",
+  "version": "0.2.50",
   "description": "AI-powered coding assistant desktop app",
   "author": {
     "name": "Nekocode",
@@ -181,7 +181,7 @@
     "@smithy/shared-ini-file-loader": "4.4.9",
     "@smithy/node-config-provider": "4.3.14",
     "@smithy/smithy-client": "4.12.13",
-    "@smithy/core": "3.23.17",
+    "@smithy/core": "3.24.3",
     "@smithy/util-middleware": "4.2.14",
     "@smithy/util-utf8": "4.2.2",
     "@aws-sdk/types": "3.973.8",
