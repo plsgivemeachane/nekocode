@@ -15,19 +15,19 @@
   --color-accent-800: oklch(0.46 0.08 195);
   --color-accent-900: oklch(0.37 0.06 195);
 
-  /* Surface: neutral cool grays */
-  --color-surface-950: #0b0e14;
-  --color-surface-900: #262626;
-  --color-surface-850: #2d2d2d;
-  --color-surface-800: oklch(0.25 0.009 260);
-  --color-surface-700: oklch(0.30 0.008 260);
-  --color-surface-600: oklch(0.40 0.008 260);
-  --color-surface-500: oklch(0.52 0.006 260);
-  --color-surface-400: oklch(0.65 0.005 260);
-  --color-surface-300: oklch(0.76 0.004 260);
-  --color-surface-200: oklch(0.86 0.003 260);
-  --color-surface-100: oklch(0.94 0.002 260);
-  --color-surface-50: oklch(0.98 0.001 260);
+  /* Surface: neutral grays (no blue tint) */
+  --color-surface-950: #0a0a0a;
+  --color-surface-900: #171717;
+  --color-surface-850: #1f1f1f;
+  --color-surface-800: #262626;
+  --color-surface-700: #333333;
+  --color-surface-600: #4a4a4a;
+  --color-surface-500: #6b6b6b;
+  --color-surface-400: #8c8c8c;
+  --color-surface-300: #a3a3a3;
+  --color-surface-200: #d4d4d4;
+  --color-surface-100: #e5e5e5;
+  --color-surface-50: #f5f5f5;
 
   /* Text on surfaces */
   --color-text-primary: #bfbdb6;
@@ -91,7 +91,7 @@
 
   body {
     background-color: var(--color-surface-950);
-    background-image: radial-gradient(ellipse 80% 60% at 50% 0%, oklch(0.18 0.008 260 / 0.5), transparent 70%);
+    background-image: radial-gradient(ellipse 80% 60% at 50% 0%, oklch(0.18 0 0 / 0.5), transparent 70%);
     color: var(--color-text-primary);
   }
 
