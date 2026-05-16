@@ -126,4 +126,4 @@ bun run package:local
 
 ## License
 
-Copyright © 2026 Nekocode
+Copyright © 2026 Nekocode™
