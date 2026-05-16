@@ -1,6 +1,6 @@
 {
   "name": "nekocode",
-  "version": "0.2.50",
+  "version": "0.2.51",
   "description": "AI-powered coding assistant desktop app",
   "author": {
     "name": "Nekocode",
@@ -175,17 +175,17 @@
     "patch-package"
   ],
   "resolutions": {
-    "@smithy/types": "4.14.1",
-    "@smithy/protocol-http": "5.3.14",
-    "@smithy/property-provider": "4.2.14",
-    "@smithy/shared-ini-file-loader": "4.4.9",
-    "@smithy/node-config-provider": "4.3.14",
-    "@smithy/smithy-client": "4.12.13",
+    "@smithy/types": "4.14.2",
+    "@smithy/protocol-http": "5.4.3",
+    "@smithy/property-provider": "4.3.3",
+    "@smithy/shared-ini-file-loader": "4.5.3",
+    "@smithy/node-config-provider": "4.4.3",
+    "@smithy/smithy-client": "4.13.3",
     "@smithy/core": "3.24.3",
-    "@smithy/util-middleware": "4.2.14",
-    "@smithy/util-utf8": "4.2.2",
+    "@smithy/util-middleware": "4.3.3",
+    "@smithy/util-utf8": "4.3.3",
     "@aws-sdk/types": "3.973.8",
-    "@aws-sdk/core": "3.974.8",
-    "@aws-sdk/nested-clients": "3.997.6"
+    "@aws-sdk/core": "3.974.11",
+    "@aws-sdk/nested-clients": "3.997.9"
   }
 }
