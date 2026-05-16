@@ -59,6 +59,84 @@ export interface ExtensionLoadError {
   stack?: string
 }
 
+/** Information about a discoverable slash command */
+export interface CommandInfo {
+  /** Command name without / prefix (e.g., 'deploy', 'skill:brave-search') */
+  name: string
+  /** Human-readable description for autocomplete UI */
+  description?: string
+  /** Where the command originates from */
+  source: 'extension' | 'prompt' | 'skill' | 'workflow'
+}
+
+/** ── UI Protocol Types ────────────────────────────────────────────── */
+
+/** A UI request sent from an extension/workflow to the renderer for user interaction */
+export interface UIRequest {
+  /** Unique ID for correlating request ↔ response */
+  id: string
+  /** The session this request belongs to */
+  sessionId: string
+  /** The type of UI interaction requested */
+  type: 'select' | 'confirm' | 'input'
+  /** Title/heading for the dialog */
+  title: string
+  /** Optional description/body text */
+  description?: string
+  /** For 'select' type: the list of options to choose from */
+  options?: UISelectOption[]
+  /** For 'input' type: placeholder text */
+  placeholder?: string
+  /** For 'input' type: default value */
+  defaultValue?: string
+  /** For 'confirm' type: whether to show a destructive/danger style */
+  dangerous?: boolean
+}
+
+/** An option in a UI select request */
+export interface UISelectOption {
+  /** Display label */
+  label: string
+  /** Optional description */
+  description?: string
+  /** Optional value (defaults to label if not provided) */
+  value?: string
+}
+
+/** A response from the renderer back to the main process for a UI request */
+export interface UIResponse {
+  /** The ID of the original UIRequest */
+  requestId: string
+  /** The session this response belongs to */
+  sessionId: string
+  /** Whether the user confirmed/selected something (true) or cancelled (false) */
+  confirmed: boolean
+  /** For 'select' type: the selected option value */
+  selectedValue?: string
+  /** For 'input' type: the entered text */
+  inputValue?: string
+}
+
+/** Workflow step progress event streamed to renderer */
+export interface WorkflowStepEvent {
+  /** The session this workflow belongs to */
+  sessionId: string
+  /** Unique ID for this workflow execution */
+  workflowId: string
+  /** Human-readable workflow name */
+  workflowName: string
+  /** The current step index (0-based) */
+  stepIndex: number
+  /** Total number of steps */
+  totalSteps: number
+  /** Human-readable step name */
+  stepName: string
+  /** Step status */
+  status: 'running' | 'completed' | 'failed' | 'waiting'
+  /** Optional detail text */
+  detail?: string
+}
+
 /** Payload for loading session history */
 export interface SessionLoadHistoryPayload {
   sessionId: string
@@ -117,6 +195,8 @@ export type SessionStreamEvent =
   | { type: 'error'; message: string }
   | { type: 'done' }
   | { type: 'user_message'; text: string }
+  | { type: 'ui_request'; request: UIRequest }
+  | { type: 'workflow_step'; step: WorkflowStepEvent }
 
 /** Display info for a session shown in the sidebar */
 export interface SessionInfoDisplay {
@@ -236,6 +316,11 @@ export interface NekoCodeIPC {
     getModel: (sessionId: string) => Promise<ModelInfo | null>
     listModels: () => Promise<ModelInfo[]>
     setModel: (sessionId: string, provider: string, modelId: string) => Promise<ModelInfo>
+    getCommands: (sessionId: string) => Promise<CommandInfo[]>
+    /** Respond to a UI request (select/confirm/input) from an extension or workflow */
+    uiRespond: (response: UIResponse) => Promise<void>
+    /** Listen for UI requests from extensions/workflows */
+    onUIRequest: (callback: (request: UIRequest) => void) => () => void
   }
   dialog: {
     openFolder: () => Promise<string | null>

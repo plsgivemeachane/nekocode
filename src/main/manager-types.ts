@@ -5,9 +5,11 @@
 
 import type {
   ChatMessageIPC,
+  CommandInfo,
   ModelInfo,
   ExtensionLoadError,
   ProjectInfo,
+  UIResponse,
 } from '../shared/ipc-types'
 
 /**
@@ -34,6 +36,12 @@ export interface ISessionManager {
   getModel(sessionId: string): Promise<ModelInfo | null>
   listModels(): Promise<ModelInfo[]>
   setModel(sessionId: string, provider: string, modelId: string): Promise<ModelInfo>
+
+  // Command discovery
+  getCommands(sessionId: string): Promise<CommandInfo[]>
+
+  // UI protocol
+  handleUIResponse(response: UIResponse): void
 
   // Properties
   readonly sessionCount: number

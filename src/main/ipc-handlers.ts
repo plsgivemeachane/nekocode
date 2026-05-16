@@ -20,6 +20,7 @@ import type {
   ProjectSessionsPayload,
   ProjectInfo,
   WorkspaceSetActivePayload,
+  CommandInfo,
   ModelInfo,
   UpdateAvailableInfo,
   NotificationSettings,
@@ -171,6 +172,18 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.SESSION_SET_MODEL, async (_event, payload: { sessionId: string; provider: string; modelId: string }): Promise<ModelInfo> => {
     logger.debug(`SESSION_SET_MODEL sessionId=${payload.sessionId} provider=${payload.provider} modelId=${payload.modelId}`)
     return sessionManager.setModel(payload.sessionId, payload.provider, payload.modelId)
+  })
+
+  // --- Command discovery handlers ---
+
+  ipcMain.handle(IPC_CHANNELS.SESSION_GET_COMMANDS, async (_event, payload: { sessionId: string }): Promise<CommandInfo[]> => {
+    logger.debug(`SESSION_GET_COMMANDS sessionId=${payload.sessionId}`)
+    return sessionManager.getCommands(payload.sessionId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SESSION_UI_RESPOND, async (_event, payload: import('../shared/ipc-types').UIResponse): Promise<void> => {
+    logger.debug(`SESSION_UI_RESPOND requestId=${payload.requestId} sessionId=${payload.sessionId}`)
+    sessionManager.handleUIResponse(payload)
   })
 
   ipcMain.handle(IPC_CHANNELS.PROJECT_LIST, async (): Promise<ProjectInfo[]> => {

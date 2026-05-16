@@ -3,9 +3,10 @@ import type { AgentSession, AgentSessionEvent } from '@earendil-works/pi-coding-
 import type { TextContent } from '@earendil-works/pi-ai'
 import { unlinkSync } from 'fs'
 import { StreamBatcher } from './stream-batcher'
-import type { SessionStreamEvent, ChatMessageIPC, ModelInfo, ExtensionLoadError, UsageData } from '../shared/ipc-types'
+import type { SessionStreamEvent, ChatMessageIPC, CommandInfo, ModelInfo, ExtensionLoadError, UsageData, UIResponse } from '../shared/ipc-types'
 import { createLogger } from './logger'
 import { loadWithFallback } from './extension-loader'
+import { ElectronUIContext, MainThreadUITransport } from './electron-ui-context'
 import { extractHistoryFromSdkMessages, loadHistoryFromDisk as loadHistoryFromDiskImpl } from './message-store'
 
 const logger = createLogger('session-manager')
@@ -31,6 +32,8 @@ interface ManagedSession {
   usageTotals: { input: number; output: number; totalCost: number }
   /** Tracks the current tool call being executed */
   currentToolCallId: string | null
+  /** Electron-specific UI context for forwarding extension UI requests to renderer */
+  uiContext: ElectronUIContext
 }
 
 /** Callback type for emitting events to the renderer */
@@ -186,6 +189,87 @@ export class PiSessionManager {
     return managed.extensionsDisabled
   }
 
+  /**
+   * Get all available slash commands for a session.
+   * Combines builtin commands, extension commands, skills, and prompts.
+   */
+  getCommands(sessionId: string): CommandInfo[] {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) return []
+
+    const commands: CommandInfo[] = []
+    const seen = new Set<string>()
+
+    // 1. Collect extension commands from the ExtensionRunner
+    try {
+      const runner = managed.session.extensionRunner
+      if (runner) {
+        const resolved = runner.getRegisteredCommands()
+        for (const cmd of resolved) {
+          if (!seen.has(cmd.invocationName)) {
+            seen.add(cmd.invocationName)
+            commands.push({
+              name: cmd.invocationName,
+              description: cmd.description,
+              source: 'extension',
+            })
+          }
+        }
+      }
+    } catch {
+      // ExtensionRunner may not be available if extensions are disabled
+    }
+
+    // 2. Collect skills from the ResourceLoader
+    try {
+      const loader = managed.session.resourceLoader
+      if (loader) {
+        const { skills } = loader.getSkills()
+        for (const skill of skills) {
+          const name = `skill:${skill.name}`
+          if (!seen.has(name)) {
+            seen.add(name)
+            commands.push({
+              name,
+              description: skill.description,
+              source: 'skill',
+            })
+          }
+        }
+
+        // 3. Collect prompt templates
+        const { prompts } = loader.getPrompts()
+        for (const prompt of prompts) {
+          if (!seen.has(prompt.name)) {
+            seen.add(prompt.name)
+            commands.push({
+              name: prompt.name,
+              description: prompt.description,
+              source: 'prompt',
+            })
+          }
+        }
+      }
+    } catch {
+      // ResourceLoader may not be available
+    }
+
+    return commands
+  }
+
+  /**
+   * Handle a UI response from the renderer (user interacted with a dialog).
+   * Forwards the response to the ElectronUIContext which resolves the pending promise.
+   */
+  handleUIResponse(response: UIResponse): void {
+    const managed = this.sessions.get(response.sessionId)
+    if (!managed) {
+      logger.warn(`handleUIResponse: session not found ${response.sessionId}`)
+      return
+    }
+    managed.uiContext.handleResponse(response)
+  }
+
   /** Send a user prompt to an active session. */
   async prompt(sessionId: string, text: string): Promise<void> {
     logger.info(`Prompt ${sessionId} text=${text.slice(0, 120)}${text.length > 120 ? '...' : ''}`)
@@ -261,6 +345,7 @@ export class PiSessionManager {
       logger.warn(`Dispose ${sessionId} - failed to clean up session file:`, err)
     }
     managed.session.dispose()
+    managed.uiContext.dispose()
     this.sessions.delete(sessionId)
     logger.info(`Dispose ${sessionId}`)
   }
@@ -337,6 +422,9 @@ export class PiSessionManager {
       this.onEvent(sessionId, event)
     })
 
+    // Create the ElectronUIContext for forwarding extension UI requests to the renderer
+    const uiContext = new ElectronUIContext(sessionId, new MainThreadUITransport())
+
     const managed: ManagedSession = {
       session,
       unsubscribe: () => {},
@@ -351,6 +439,17 @@ export class PiSessionManager {
       currentToolCallId: null,
       hasPrompted: false,
       usageTotals: { input: 0, output: 0, totalCost: 0 },
+      uiContext,
+    }
+
+    // Bind the ElectronUIContext to the session's extension runner
+    // so extension ui.select(), ui.confirm(), ui.input() calls are forwarded to the renderer
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      session.bindExtensions({ uiContext: uiContext as any })
+      logger.info(`wrapSession ${sessionId} - bound ElectronUIContext`)
+    } catch (err) {
+      logger.warn(`wrapSession ${sessionId} - failed to bind ElectronUIContext:`, err)
     }
 
     managed.unsubscribe = session.subscribe((agentEvent: AgentSessionEvent) => {

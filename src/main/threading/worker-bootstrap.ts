@@ -2,7 +2,7 @@ import { parentPort } from 'worker_threads'
 import type { WorkerMessage, WorkerResponse, OperationType, WorkerEventMessage } from './types'
 import type { AgentSessionEvent, AgentSession, SessionMessageEntry } from '@earendil-works/pi-coding-agent'
 import { createLogger } from '../logger'
-import type { SessionStreamEvent, ChatMessageIPC, ExtensionLoadError, UsageData } from '../../shared/ipc-types'
+import type { SessionStreamEvent, ChatMessageIPC, CommandInfo, ExtensionLoadError, UsageData } from '../../shared/ipc-types'
 
 // Create logger for worker thread
 const logger = createLogger('worker')
@@ -87,6 +87,8 @@ interface ManagedSession {
   currentThinkingContent: string
   currentToolCallId: string | null
   usageTotals: { input: number; output: number; totalCost: number }
+  /** Electron-specific UI context for forwarding extension UI requests to renderer */
+  uiContext: import('../electron-ui-context').ElectronUIContext
 }
 
 // Active sessions in this worker
@@ -369,6 +371,10 @@ async function dispatchOperation(type: OperationType, input: unknown): Promise<u
       return handleSessionSetModel(input as { sessionId: string; provider: string; modelId: string })
     case 'session:get-model':
       return handleSessionGetModel(input as { sessionId: string })
+    case 'session:get-commands':
+      return handleSessionGetCommands(input as { sessionId: string })
+    case 'session:ui-respond':
+      return handleSessionUIRespond(input as import('./types').SessionUIRespondInput)
 
     // Project operations
     case 'project:discover-sessions':
@@ -689,6 +695,91 @@ function handleSessionGetModel(input: { sessionId: string }): { id: string; name
   }
 }
 
+/**
+ * Get all available slash commands for a session.
+ * Combines extension commands, skills, and prompts.
+ */
+function handleSessionGetCommands(input: { sessionId: string }): { commands: CommandInfo[] } {
+  const managed = sessions.get(input.sessionId)
+  if (!managed) {
+    throw new Error(`Session not found: ${input.sessionId}`)
+  }
+
+  const commands: CommandInfo[] = []
+  const seen = new Set<string>()
+
+  // 1. Collect extension commands from the ExtensionRunner
+  try {
+    const runner = managed.session.extensionRunner
+    if (runner) {
+      const resolved = runner.getRegisteredCommands()
+      for (const cmd of resolved) {
+        if (!seen.has(cmd.invocationName)) {
+          seen.add(cmd.invocationName)
+          commands.push({
+            name: cmd.invocationName,
+            description: cmd.description,
+            source: 'extension',
+          })
+        }
+      }
+    }
+  } catch {
+    // ExtensionRunner may not be available if extensions are disabled
+  }
+
+  // 2. Collect skills from the ResourceLoader
+  try {
+    const loader = managed.session.resourceLoader
+    if (loader) {
+      const { skills } = loader.getSkills()
+      for (const skill of skills) {
+        const name = `skill:${skill.name}`
+        if (!seen.has(name)) {
+          seen.add(name)
+          commands.push({
+            name,
+            description: skill.description,
+            source: 'skill',
+          })
+        }
+      }
+
+      // 3. Collect prompt templates
+      const { prompts } = loader.getPrompts()
+      for (const prompt of prompts) {
+        if (!seen.has(prompt.name)) {
+          seen.add(prompt.name)
+          commands.push({
+            name: prompt.name,
+            description: prompt.description,
+            source: 'prompt',
+          })
+        }
+      }
+    }
+  } catch {
+    // ResourceLoader may not be available
+  }
+
+  return { commands }
+}
+
+/**
+ * Handle a UI response from the renderer (user interacted with a dialog).
+ * Forwards the response to the session's ElectronUIContext.
+ */
+function handleSessionUIRespond(input: import('./types').SessionUIRespondInput): import('./types').SessionUIRespondOutput {
+  const managed = sessions.get(input.sessionId)
+  if (!managed) {
+    logger.warn(`handleSessionUIRespond: session not found ${input.sessionId}`)
+    return { success: false }
+  }
+
+  managed.uiContext.handleResponse(input.response)
+  return { success: true }
+}
+
 // ============================================================================
 // Project Operations
 // ============================================================================
@@ -768,6 +859,11 @@ function wrapSession(
   extensionErrors: ExtensionLoadError[],
   extensionsDisabled: boolean,
 ): ManagedSession {
+  // Import ElectronUIContext dynamically to avoid issues in worker thread
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { ElectronUIContext, WorkerThreadUITransport } = require('../electron-ui-context')
+  const uiContext = new ElectronUIContext(sessionId, new WorkerThreadUITransport())
+
   const managed: ManagedSession = {
     session,
     unsubscribe: () => {},
@@ -780,6 +876,16 @@ function wrapSession(
     currentThinkingContent: '',
     currentToolCallId: null,
     usageTotals: { input: 0, output: 0, totalCost: 0 },
+    uiContext,
+  }
+
+  // Bind the ElectronUIContext to the session's extension runner
+  // so extension ui.select(), ui.confirm(), ui.input() calls are forwarded to the renderer
+  try {
+    session.bindExtensions({ uiContext })
+    logger.info(`wrapSession ${sessionId} - bound ElectronUIContext`)
+  } catch (err) {
+    logger.warn(`wrapSession ${sessionId} - failed to bind ElectronUIContext:`, err)
   }
 
   // Subscribe to session events

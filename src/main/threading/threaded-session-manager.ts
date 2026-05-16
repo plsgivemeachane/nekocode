@@ -1,4 +1,4 @@
-import type { ChatMessageIPC, ModelInfo, ExtensionLoadError, SessionStreamEvent } from '../../shared/ipc-types'
+import type { ChatMessageIPC, CommandInfo, ModelInfo, ExtensionLoadError, SessionStreamEvent } from '../../shared/ipc-types'
 import { ThreadOperationQueue } from './thread-operation-queue'
 import { createLogger } from '../logger'
 import type { ISessionManager } from '../manager-types'
@@ -339,6 +339,52 @@ export class ThreadedSessionManager implements ISessionManager {
     )
 
     return result
+  }
+
+  /**
+   * Get all available slash commands for a session.
+   * Offloaded to worker thread for SDK access.
+   */
+  async getCommands(sessionId: string): Promise<CommandInfo[]> {
+    logger.debug(`getCommands: ${sessionId} - offloading to worker thread`)
+
+    try {
+      const result = await this.operationQueue.execute<
+        { sessionId: string },
+        { commands: CommandInfo[] }
+      >(
+        'session:get-commands',
+        { sessionId },
+        'normal'
+      )
+
+      return result.commands
+    } catch (err) {
+      logger.error(`getCommands failed for ${sessionId}:`, err)
+      return []
+    }
+  }
+
+  /**
+   * Handle a UI response from the renderer.
+   * Offloaded to worker thread.
+   */
+  handleUIResponse(response: import('../../shared/ipc-types').UIResponse): void {
+    logger.debug(`handleUIResponse: requestId=${response.requestId} sessionId=${response.sessionId} - offloading to worker thread`)
+
+    this.operationQueue.execute<
+      import('./types').SessionUIRespondInput,
+      import('./types').SessionUIRespondOutput
+    >(
+      'session:ui-respond',
+      {
+        sessionId: response.sessionId,
+        response,
+      },
+      'normal'
+    ).catch((err) => {
+      logger.error(`handleUIResponse failed for ${response.requestId}:`, err)
+    })
   }
 
   // =========================================================================

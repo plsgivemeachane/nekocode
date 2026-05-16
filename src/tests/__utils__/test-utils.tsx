@@ -1,5 +1,5 @@
 import type { NekoCodeIPC } from '@/shared/ipc-types'
-import type { SessionStreamEvent, ChatMessageIPC, ProjectInfo, SessionCreateResult, SessionReconnectResult, WorkspaceActiveResult, ModelInfo, UpdateAvailableInfo } from '@/shared/ipc-types'
+import type { SessionStreamEvent, ChatMessageIPC, CommandInfo, ProjectInfo, SessionCreateResult, SessionReconnectResult, WorkspaceActiveResult, ModelInfo, UpdateAvailableInfo } from '@/shared/ipc-types'
 import type { PiSessionManager } from '../../main/session-manager'
 import type { ProjectManager } from '../../main/project-manager'
 
@@ -26,6 +26,9 @@ function createMockSessionAPI(): NekoCodeIPC['session'] {
     getModel: vi.fn<(sessionId: string) => Promise<ModelInfo | null>>().mockResolvedValue(null),
     listModels: vi.fn<() => Promise<ModelInfo[]>>().mockResolvedValue([]),
     setModel: vi.fn<(sessionId: string, provider: string, modelId: string) => Promise<ModelInfo>>().mockResolvedValue({ id: 'mock-model', name: 'Mock Model', provider: 'mock-provider' }),
+    getCommands: vi.fn<(sessionId: string) => Promise<CommandInfo[]>>().mockResolvedValue([]),
+    uiRespond: vi.fn<(response: import('@/shared/ipc-types').UIResponse) => Promise<void>>().mockResolvedValue(undefined),
+    onUIRequest: vi.fn<(callback: (request: import('@/shared/ipc-types').UIRequest) => void) => () => void>().mockReturnValue(() => {}),
   }
 }
 

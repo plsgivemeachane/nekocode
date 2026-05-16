@@ -3,7 +3,7 @@
  * These types define the communication protocol between main thread and worker threads.
  */
 
-import type { ProjectInfo, SessionInfoDisplay, ChatMessageIPC, ModelInfo, ExtensionLoadError, SessionStreamEvent } from '../../shared/ipc-types'
+import type { ProjectInfo, SessionInfoDisplay, ChatMessageIPC, CommandInfo, ModelInfo, ExtensionLoadError, SessionStreamEvent, UIResponse } from '../../shared/ipc-types'
 
 // ============================================================================
 // Thread Pool Configuration
@@ -93,6 +93,8 @@ export type OperationType =
   | 'session:get-model'
   | 'session:get-extension-errors'
   | 'session:get-extensions-disabled'
+  | 'session:get-commands'
+  | 'session:ui-respond'
 
 // ============================================================================
 // Input/Output Types for Operations
@@ -277,6 +279,23 @@ export interface SessionGetExtensionsDisabledInput {
 
 export interface SessionGetExtensionsDisabledOutput {
   disabled: boolean
+}
+
+export interface SessionGetCommandsInput {
+  sessionId: string
+}
+
+export interface SessionGetCommandsOutput {
+  commands: CommandInfo[]
+}
+
+export interface SessionUIRespondInput {
+  sessionId: string
+  response: UIResponse
+}
+
+export interface SessionUIRespondOutput {
+  success: boolean
 }
 
 // ============================================================================

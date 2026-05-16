@@ -10,6 +10,7 @@ import type {
   WorkspaceSetActivePayload,
   WorkspaceActiveResult,
   ModelInfo,
+  CommandInfo,
   UpdateAvailableInfo,
   UpdateProgress,
   UpdateErrorInfo,
@@ -60,6 +61,24 @@ const sessionApi: NekoCodeIPC['session'] = {
 
   setModel: (sessionId: string, provider: string, modelId: string): Promise<ModelInfo> =>
     ipcRenderer.invoke(IPC_CHANNELS.SESSION_SET_MODEL, { sessionId, provider, modelId }),
+
+  getCommands: (sessionId: string): Promise<CommandInfo[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SESSION_GET_COMMANDS, { sessionId }),
+
+  /** Respond to a UI request (select/confirm/input) from an extension or workflow */
+  uiRespond: (response: import('../shared/ipc-types').UIResponse): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SESSION_UI_RESPOND, response),
+
+  /** Listen for UI requests from extensions/workflows */
+  onUIRequest: (callback: (request: import('../shared/ipc-types').UIRequest) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { sessionId: string; event: import('../shared/ipc-types').SessionStreamEvent }) => {
+      if (data.event.type === 'ui_request') {
+        callback(data.event.request)
+      }
+    }
+    ipcRenderer.on(IPC_CHANNELS.SESSION_EVENTS, handler)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.SESSION_EVENTS, handler)
+  },
 }
 
 const projectApi: NekoCodeIPC['project'] = {

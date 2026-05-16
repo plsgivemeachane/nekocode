@@ -1,9 +1,15 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react'
 import { useSession } from '../../hooks/useSession'
+import { useUIRequests } from '../../hooks/useUIRequests'
+import { useWorkflowSteps } from '../../hooks/useWorkflowSteps'
 import { UserMessage } from './UserMessage'
 import { AssistantMessage } from './AssistantMessage'
 import { ToolCallGroup } from './ToolCallSection'
 import { ThinkingBlock } from './ThinkingBlock'
+import { UIDialog } from './UIDialog'
+import { WorkflowStepProgress } from './WorkflowStepProgress'
+import { GlobalCommandPalette } from './GlobalCommandPalette'
+import { useCommands } from '../../hooks/useCommands'
 import { MessagesTimeline, type MessagesTimelineHandle } from './MessagesTimeline'
 import { StatusIndicator } from '../layout/StatusIndicator'
 import { WelcomeScreen } from '../ui/WelcomeScreen'
@@ -32,6 +38,46 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
   const timelineRef = useRef<MessagesTimelineHandle>(null)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
   const [gitBranch, setGitBranch] = React.useState<string | null>(null)
+
+  // --- UI protocol: dialog requests from extensions/workflows ---
+  const { activeRequest: activeUIRequest, updateLocalState, confirm: confirmUI, cancel: cancelUI } = useUIRequests(sessionId)
+
+  // --- Workflow step progress tracking ---
+  const { workflows: trackedWorkflows } = useWorkflowSteps(sessionId)
+
+  // --- Global command palette (Ctrl+Shift+P) ---
+  const {
+    commands: allCommands,
+    isLoading: isCommandsLoading,
+    recordCommandUsage,
+    getRecentCommandNames,
+  } = useCommands({ sessionId })
+  const [showGlobalPalette, setShowGlobalPalette] = useState(false)
+
+  // Global keyboard shortcut: Ctrl+Shift+P to open command palette
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'P') {
+        e.preventDefault()
+        setShowGlobalPalette(prev => !prev)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
+  // Handle command selection from global palette
+  const handleGlobalCommandSelect = useCallback((command: import('../../../../shared/ipc-types').CommandInfo) => {
+    setShowGlobalPalette(false)
+    // Record this command usage for history tracking
+    recordCommandUsage(command.name, command.source)
+    // Insert the command name into the chat input and send it
+    setInput(command.name)
+    // Send after a microtask to ensure input state is updated
+    requestAnimationFrame(() => {
+      sendPrompt(command.name)
+    })
+  }, [setInput, sendPrompt, recordCommandUsage])
 
   // --- Scroll-to-bottom button state (driven by react-virtuoso's atBottomStateChange) ---
   const handleAtBottomChange = useCallback((atBottom: boolean) => {
@@ -102,6 +148,8 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
     | { key: string; type: 'single'; msg: ChatMessage }
     | { key: string; type: 'tool-group'; msgs: ToolCallMsg[] }
     | { key: string; type: 'thinking-group'; msgs: ThinkingMsg[] }
+    | { key: string; type: 'ui-dialog' }
+    | { key: string; type: 'workflow-step'; workflowId: string }
   const isToolCall = (msg: ChatMessage): msg is ToolCallMsg => msg.role === 'assistant' && msg.type === 'tool_call'
   const isThinking = (msg: ChatMessage): msg is ThinkingMsg => msg.role === 'assistant' && msg.type === 'thinking'
   const messageGroups: MessageGroup[] = []
@@ -132,6 +180,18 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
     }
   }
   logger.debug(`messageGroups: ${messageGroups.length} groups (${messageGroups.filter(g => g.type === 'tool-group').length} tool-groups, ${messageGroups.filter(g => g.type === 'thinking-group').length} thinking-groups), total messages: ${messages.length}`)
+
+  // Append active workflow steps to the timeline (show all active workflows)
+  for (const [workflowId, wf] of trackedWorkflows) {
+    if (wf.isActive || wf.steps.size > 0) {
+      messageGroups.push({ key: `wf-${workflowId}`, type: 'workflow-step', workflowId })
+    }
+  }
+
+  // Append active UI dialog to the timeline (if any)
+  if (activeUIRequest) {
+    messageGroups.push({ key: 'ui-dialog-active', type: 'ui-dialog' })
+  }
 
   const renderMessage = (msg: ChatMessage) => {
     const isLast = msg.id === lastMessageId
@@ -271,7 +331,27 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
                           />
                         )
                       }
-                      return <div>{renderMessage(group.msg)}</div>
+                      if (group.type === 'ui-dialog' && activeUIRequest) {
+                        return (
+                          <UIDialog
+                            pending={activeUIRequest}
+                            updateLocalState={updateLocalState}
+                            onConfirm={confirmUI}
+                            onCancel={cancelUI}
+                          />
+                        )
+                      }
+                      if (group.type === 'workflow-step') {
+                        const wf = trackedWorkflows.get(group.workflowId)
+                        if (wf) {
+                          return <WorkflowStepProgress workflow={wf} />
+                        }
+                        return null
+                      }
+                      if (group.type === 'single') {
+                        return <div>{renderMessage(group.msg)}</div>
+                      }
+                      return null
                     }}
                   />
                 </div>
@@ -348,6 +428,16 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
         setModel={setModel}
         projectPath={projectState.activeProjectPath}
         gitBranch={gitBranch}
+      />
+
+      {/* Global command palette (Ctrl+Shift+P) */}
+      <GlobalCommandPalette
+        visible={showGlobalPalette}
+        commands={allCommands}
+        isLoading={isCommandsLoading}
+        onSelect={handleGlobalCommandSelect}
+        onClose={() => setShowGlobalPalette(false)}
+        recentCommandNames={getRecentCommandNames()}
       />
     </div>
   )

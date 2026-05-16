@@ -6,7 +6,7 @@ describe('IPC_CHANNELS', () => {
   const allValues = Object.values(channels)
 
   it('has expected number of channels', () => {
-    expect(allValues).toHaveLength(34)
+    expect(allValues).toHaveLength(37)
   })
 
   it('has no duplicate values', () => {
@@ -36,6 +36,7 @@ describe('IPC_CHANNELS', () => {
     expect(channels).toHaveProperty('SESSION_RECONNECT')
     expect(channels).toHaveProperty('SESSION_LOAD_HISTORY')
     expect(channels).toHaveProperty('SESSION_LOAD_HISTORY_DISK')
+    expect(channels).toHaveProperty('SESSION_GET_COMMANDS')
   })
 
   it('has all dialog channels', () => {
@@ -72,7 +73,7 @@ describe('IPC_CHANNELS', () => {
 
   it('session channels all start with "session:"', () => {
     const sessionChannels = allValues.filter(v => v.startsWith('session:'))
-    expect(sessionChannels).toHaveLength(12)
+    expect(sessionChannels).toHaveLength(15)
   })
 
   it('notification channels all start with "notification:"', () => {
@@ -103,6 +104,9 @@ describe('IPC_CHANNELS', () => {
       'SESSION_GET_MODEL',
       'SESSION_LIST_MODELS',
       'SESSION_SET_MODEL',
+      'SESSION_GET_COMMANDS',
+      'SESSION_UI_RESPOND',
+      'SESSION_UI_REQUEST',
       'UPDATE_CHECK',
       'UPDATE_DOWNLOAD',
       'UPDATE_INSTALL',

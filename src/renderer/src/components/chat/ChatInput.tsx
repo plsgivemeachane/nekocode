@@ -1,5 +1,8 @@
-import React, { useRef, useState, useCallback, useImperativeHandle, forwardRef } from 'react'
+import React, { useRef, useState, useCallback, useImperativeHandle, forwardRef, useMemo } from 'react'
 import { useClickOutside } from '../../hooks/useClickOutside'
+import { useCommands } from '../../hooks/useCommands'
+import { CommandPalette } from './CommandPalette'
+import type { CommandInfo } from '../../../../shared/ipc-types'
 import { createLogger } from '../../utils/logger'
 
 type Model = { id: string; name: string; provider: string }
@@ -58,7 +61,15 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
 }, ref) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const modelDropdownRef = useRef<HTMLDivElement>(null)
+  const inputContainerRef = useRef<HTMLDivElement>(null)
   const [showModelDropdown, setShowModelDropdown] = useState(false)
+  const [showCommandPalette, setShowCommandPalette] = useState(false)
+
+  // Fetch available commands for the current session
+  const { commands, isLoading: commandsLoading, recordCommandUsage, getRecentCommandNames } = useCommands({ sessionId })
+
+  // Compute recent command names set for section splitting in the inline palette
+  const recentCommandNames = useMemo(() => getRecentCommandNames(), [getRecentCommandNames, commands])
 
   useImperativeHandle(ref, () => ({
     focus: () => {
@@ -78,6 +89,35 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
     }
   }, [])
 
+  /** Extract the current / command query from the input text */
+  const getCommandQuery = useCallback((text: string): string => {
+    const lastWordStart = text.lastIndexOf(' ')
+    const lastWord = text.slice(lastWordStart + 1)
+    if (lastWord.startsWith('/')) {
+      return lastWord.slice(1) // Remove the '/' prefix
+    }
+    return ''
+  }, [])
+
+  /** Handle a command being selected from the palette */
+  const handleCommandSelect = useCallback(
+    (command: CommandInfo) => {
+      // Record command usage for recent-commands tracking
+      recordCommandUsage(command.name, command.source)
+      // Replace the current / command fragment with the full command name
+      const lastSpaceIdx = input.lastIndexOf(' ')
+      const prefix = lastSpaceIdx >= 0 ? input.slice(0, lastSpaceIdx + 1) : ''
+      const newInput = `${prefix}/${command.name} `
+      setInput(newInput)
+      setShowCommandPalette(false)
+      // Focus back on textarea after selection
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus()
+      })
+    },
+    [input, setInput, recordCommandUsage],
+  )
+
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault()
@@ -88,22 +128,42 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      // If command palette is open, let CommandPalette handle navigation keys
+      if (showCommandPalette && ['ArrowUp', 'ArrowDown', 'Tab'].includes(e.key)) {
+        // CommandPalette handles these via document-level listener
+        return
+      }
+
       if (e.key === 'Enter' && !e.shiftKey) {
+        if (showCommandPalette) {
+          // Let CommandPalette handle Enter for selection
+          return
+        }
         e.preventDefault()
         trySend(input, isStreaming, setInput, resetHeight, sendPrompt)
       }
     },
-    [input, isStreaming, setInput, resetHeight, sendPrompt],
+    [input, isStreaming, setInput, resetHeight, sendPrompt, showCommandPalette],
   )
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value)
+    const value = e.target.value
+    setInput(value)
     const ta = textareaRef.current
     if (ta) {
       ta.style.height = 'auto'
       ta.style.height = `${Math.min(ta.scrollHeight, TEXTAREA_MAX_HEIGHT_PX)}px`
     }
-  }, [setInput])
+
+    // Show command palette when typing '/' at the start of input or after a space
+    const lastWordStart = value.lastIndexOf(' ')
+    const lastWord = value.slice(lastWordStart + 1)
+    if (lastWord.startsWith('/')) {
+      setShowCommandPalette(true)
+    } else if (showCommandPalette) {
+      setShowCommandPalette(false)
+    }
+  }, [setInput, showCommandPalette])
 
   const handleInputContainerMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement
@@ -117,6 +177,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
       <div className="max-w-3xl mx-auto">
         <form onSubmit={handleSubmit}>
           <div
+            ref={inputContainerRef}
             onMouseDown={handleInputContainerMouseDown}
             className="relative rounded-[1.25rem] border border-surface-700 bg-surface-900 px-4 py-3 pr-12 shadow-[0_0_20px_rgba(0,0,0,0.2)] cursor-text"
           >
@@ -125,7 +186,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
               value={input}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder="Ask anything, @tag files/folders, or use / to show available commands"
+              placeholder="Ask anything, @tag files/folders, or type / for commands"
               disabled={!sessionId || isStreaming}
               rows={1}
               className="w-full bg-transparent text-sm text-text-primary placeholder:text-text-tertiary/50 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed resize-none overflow-hidden leading-relaxed"
@@ -194,6 +255,18 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
             )}
           </div>
         </form>
+
+        {/* Command palette popup */}
+        <CommandPalette
+          commands={commands}
+          query={getCommandQuery(input)}
+          visible={showCommandPalette}
+          isLoading={commandsLoading}
+          anchorRect={inputContainerRef.current?.getBoundingClientRect() ?? null}
+          onSelect={handleCommandSelect}
+          onClose={() => setShowCommandPalette(false)}
+          recentCommandNames={recentCommandNames}
+        />
         <div className="flex items-center justify-between mt-2 px-1">
           <span className="flex items-center gap-1.5 text-[11px] text-text-tertiary truncate max-w-[260px]">
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
