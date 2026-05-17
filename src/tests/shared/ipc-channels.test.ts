@@ -6,7 +6,7 @@ describe('IPC_CHANNELS', () => {
   const allValues = Object.values(channels)
 
   it('has expected number of channels', () => {
-    expect(allValues).toHaveLength(37)
+    expect(allValues).toHaveLength(42)
   })
 
   it('has no duplicate values', () => {
@@ -81,6 +81,11 @@ describe('IPC_CHANNELS', () => {
     expect(notificationChannels).toHaveLength(3)
   })
 
+  it('window channels all start with "window:"', () => {
+    const windowChannels = allValues.filter(v => v.startsWith('window:'))
+    expect(windowChannels).toHaveLength(5)
+  })
+
   it('IpcChannel type is a union of all values', () => {
     // This is a compile-time check, but we verify runtime shape
     const keys = Object.keys(channels)
@@ -119,6 +124,11 @@ describe('IPC_CHANNELS', () => {
       'ZOOM_GET',
       'ZOOM_SET',
       'ZOOM_RESET',
+      'WINDOW_MINIMIZE',
+      'WINDOW_MAXIMIZE',
+      'WINDOW_CLOSE',
+      'WINDOW_IS_MAXIMIZED',
+      'WINDOW_MAXIMIZED_STATE',
       'NOTIFICATION_PLAY_SOUND',
       'NOTIFICATION_SETTINGS_GET',
       'NOTIFICATION_SETTINGS_SET',

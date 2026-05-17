@@ -9,6 +9,7 @@ import { ThreadedProjectManager } from './threading/threaded-project-manager'
 import { ThreadedSessionManager } from './threading/threaded-session-manager'
 import { NotificationService } from './notification-service'
 import type { SessionStreamEvent } from '../shared/ipc-types'
+import { IPC_CHANNELS } from '../shared/ipc-channels'
 
 const logger = createLogger('main')
 
@@ -56,11 +57,25 @@ function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    frame: false,
     icon: join(__dirname, '../../resources/icon.ico'),
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
+    }
+  })
+
+  // Forward maximize/unmaximize state changes to renderer for custom titlebar
+  mainWindow.on('maximize', () => {
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IPC_CHANNELS.WINDOW_MAXIMIZED_STATE, true)
+    }
+  })
+
+  mainWindow.on('unmaximize', () => {
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IPC_CHANNELS.WINDOW_MAXIMIZED_STATE, false)
     }
   })
 

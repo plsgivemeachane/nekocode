@@ -264,6 +264,41 @@ export function registerIpcHandlers(
     }
   })
 
+  // --- Window control handlers ---
+
+  ipcMain.handle(IPC_CHANNELS.WINDOW_MINIMIZE, async (): Promise<void> => {
+    const win = BrowserWindow.getFocusedWindow()
+    if (win && !win.isDestroyed()) {
+      win.minimize()
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.WINDOW_MAXIMIZE, async (): Promise<void> => {
+    const win = BrowserWindow.getFocusedWindow()
+    if (win && !win.isDestroyed()) {
+      if (win.isMaximized()) {
+        win.unmaximize()
+      } else {
+        win.maximize()
+      }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.WINDOW_CLOSE, async (): Promise<void> => {
+    const win = BrowserWindow.getFocusedWindow()
+    if (win && !win.isDestroyed()) {
+      win.close()
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.WINDOW_IS_MAXIMIZED, async (): Promise<boolean> => {
+    const win = BrowserWindow.getFocusedWindow()
+    if (win && !win.isDestroyed()) {
+      return win.isMaximized()
+    }
+    return false
+  })
+
   // --- Notification handlers ---
 
   if (notificationService) {

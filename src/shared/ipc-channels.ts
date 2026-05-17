@@ -37,6 +37,14 @@ export const IPC_CHANNELS = {
   ZOOM_GET: 'zoom:get',
   ZOOM_SET: 'zoom:set',
   ZOOM_RESET: 'zoom:reset',
+
+  // --- Window control ---
+  WINDOW_MINIMIZE: 'window:minimize',
+  WINDOW_MAXIMIZE: 'window:maximize',
+  WINDOW_CLOSE: 'window:close',
+  WINDOW_IS_MAXIMIZED: 'window:is-maximized',
+  WINDOW_MAXIMIZED_STATE: 'window:maximized-state',
+
   NOTIFICATION_PLAY_SOUND: 'notification:play-sound',
   NOTIFICATION_SETTINGS_GET: 'notification:settings-get',
   NOTIFICATION_SETTINGS_SET: 'notification:settings-set',

@@ -179,4 +179,23 @@ contextBridge.exposeInMainWorld('nekocode', {
       return () => ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATION_PLAY_SOUND, handler)
     },
   },
+  window: {
+    minimize: (): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.WINDOW_MINIMIZE),
+
+    maximize: (): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.WINDOW_MAXIMIZE),
+
+    close: (): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.WINDOW_CLOSE),
+
+    isMaximized: (): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.WINDOW_IS_MAXIMIZED),
+
+    onMaximizedStateChange: (callback: (isMaximized: boolean) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, isMaximized: boolean) => callback(isMaximized)
+      ipcRenderer.on(IPC_CHANNELS.WINDOW_MAXIMIZED_STATE, handler)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.WINDOW_MAXIMIZED_STATE, handler)
+    },
+  },
 })

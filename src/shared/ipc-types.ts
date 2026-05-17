@@ -274,6 +274,15 @@ export interface ZoomInfo {
   factor: number
 }
 
+/** Window control API for custom titlebar in frameless mode */
+export interface WindowApi {
+  minimize: () => Promise<void>
+  maximize: () => Promise<void>
+  close: () => Promise<void>
+  isMaximized: () => Promise<boolean>
+  onMaximizedStateChange: (callback: (isMaximized: boolean) => void) => () => void
+}
+
 /** Sound key identifier for notification sounds */
 export type NotificationSoundKey = 'task-complete' | 'success' | 'error' | 'warning'
 
@@ -358,4 +367,5 @@ export interface NekoCodeIPC {
     updateSettings: (partial: Partial<NotificationSettings>) => Promise<NotificationSettings>
     onPlaySound: (callback: (payload: NotificationPayload) => void) => () => void
   }
+    window: WindowApi
 }

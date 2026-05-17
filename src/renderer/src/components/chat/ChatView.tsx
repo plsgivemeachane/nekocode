@@ -13,7 +13,6 @@ import { useCommands } from '../../hooks/useCommands'
 import { MessagesTimeline, type MessagesTimelineHandle } from './MessagesTimeline'
 import { StatusIndicator } from '../layout/StatusIndicator'
 import { WelcomeScreen } from '../ui/WelcomeScreen'
-import { NavBar } from '../layout/NavBar'
 import { ChatInput, type ChatInputHandle } from './ChatInput'
 import { useProjectStore } from '../../stores/project-store'
 import { createLogger } from '../../utils/logger'
@@ -218,7 +217,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
 
   return (
     <div className={`bg-surface-950 text-text-primary flex flex-col h-full ${className ?? ""}`}>
-      <NavBar />
+      {/* NavBar removed — custom TitleBar now handles window controls at the App level */}
 
       <main
         className="flex-1 overflow-hidden relative"
