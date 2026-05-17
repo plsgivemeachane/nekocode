@@ -40,6 +40,8 @@ interface ProjectState {
   preloadedHistory: Record<string, ChatMessageIPC[]>
   /** Whether the agent for the active session is fully connected and ready */
   agentReady: boolean
+  /** Refresh counter per session — incremented when user requests a message refresh from context menu */
+  sessionRefreshKeys: Record<string, number>
 }
 
 export type ProjectAction =
@@ -59,6 +61,7 @@ export type ProjectAction =
   | { type: 'SET_AGENT_READY'; sessionId: string }
   | { type: 'REPLACE_PENDING_SESSION'; projectPath: string; pendingId: string; realSession: SessionInfoDisplay }
   | { type: 'SET_ACTIVE_VIEW'; view: ActiveView }
+  | { type: 'REFRESH_SESSION_MESSAGES'; sessionId: string }
 
 // ---------------------------------------------------------------------------
 // Reducer (pure)
@@ -73,6 +76,7 @@ const INITIAL_STATE: ProjectState = {
   sessionErrorMessages: {},
   preloadedHistory: {},
   agentReady: true,
+  sessionRefreshKeys: {},
 }
 
 function reducer(state: ProjectState, action: ProjectAction): ProjectState {
@@ -224,6 +228,21 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
         activeView: action.view,
       }
 
+    case 'REFRESH_SESSION_MESSAGES': {
+      // Clear preloaded history for this session and bump the refresh counter
+      const restPreloaded = { ...state.preloadedHistory }
+      delete restPreloaded[action.sessionId]
+      const currentKey = state.sessionRefreshKeys[action.sessionId] ?? 0
+      return {
+        ...state,
+        preloadedHistory: restPreloaded,
+        sessionRefreshKeys: {
+          ...state.sessionRefreshKeys,
+          [action.sessionId]: currentKey + 1,
+        },
+      }
+    }
+
     case 'REPLACE_PENDING_SESSION': {
       // Replace a pending session with the real one, and update active session ID
       const { projectPath, pendingId, realSession } = action
@@ -257,6 +276,7 @@ interface ProjectStoreAPI {
   reconnectSession: (sessionId: string, projectPath: string) => Promise<void>
   createSession: (projectPath: string) => Promise<void>
   refreshSessions: (projectId: string) => Promise<void>
+  refreshSessionMessages: (sessionId: string) => void
   preloadSession: (sessionId: string, projectPath: string) => void
 }
 
@@ -421,6 +441,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     [state.preloadedHistory],
   )
 
+  const refreshSessionMessages = useCallback(
+    (sessionId: string) => {
+      dispatch({ type: 'REFRESH_SESSION_MESSAGES', sessionId })
+    },
+    [],
+  )
+
   const setActiveView = useCallback(
     (view: ActiveView) => {
       dispatch({ type: 'SET_ACTIVE_VIEW', view })
@@ -437,6 +464,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     reconnectSession,
     createSession,
     refreshSessions,
+    refreshSessionMessages,
     preloadSession,
   }
 

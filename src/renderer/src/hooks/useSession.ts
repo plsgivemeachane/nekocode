@@ -48,6 +48,9 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
   // Derive isStreaming from the global store — single source of truth for ALL sessions
   const isStreaming = sessionId != null && projectState.sessionStatuses[sessionId] === 'streaming'
 
+  // Watch the refresh key for the current session to force-reload messages
+  const refreshKey = sessionId != null ? projectState.sessionRefreshKeys[sessionId] : undefined
+
   // Delegate model management
   const { activeModel, modelList, setModel } = useModelSelection(sessionId)
 
@@ -65,6 +68,10 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
   const drafts = useRef<Map<string, string>>(new Map())
   const messagesBySession = useRef<Map<string, ChatMessage[]>>(new Map())
 
+  // Track which refreshKey was active when each session's cache was last updated.
+  // If the current refreshKey doesn't match, the cache is stale and should be invalidated.
+  const cacheRefreshKeys = useRef<Map<string, number>>(new Map())
+
   // Tracks which sessionId the current `messages` state was last loaded for.
   // When sessionId changes but this ref still points to the old session, messages are stale.
   // This catches the ~1 frame window between sessionId update and messages update.
@@ -79,6 +86,11 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
     if (!sessionId) return
     if (messagesLoadedForRef.current !== sessionId) return
     messagesBySession.current.set(sessionId, messages)
+    // Record the refresh key that was active when this cache entry was written
+    const currentRefreshKey = projectState.sessionRefreshKeys[sessionId]
+    if (currentRefreshKey !== undefined) {
+      cacheRefreshKeys.current.set(sessionId, currentRefreshKey)
+    }
   }, [sessionId, messages])
 
   // Track whether current session used preloaded (truncated) data
@@ -128,7 +140,17 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
     // This must be checked BEFORE preloadedHistory because preloadedHistory is a snapshot from startup/hover
     // that becomes stale as the user interacts with the session. Using stale preloaded data would overwrite
     // the good cache and cause "lost messages" when switching back to a session.
-    const cachedMessages = messagesBySession.current.get(sessionId)
+    // However, if the user has triggered a refresh for this session (refreshKey mismatch), invalidate the cache.
+    const currentRefreshKey = projectState.sessionRefreshKeys[sessionId]
+    const cachedRefreshKey = cacheRefreshKeys.current.get(sessionId)
+    const cacheIsStaleDueToRefresh = currentRefreshKey !== undefined && cachedRefreshKey !== currentRefreshKey
+    const cachedMessages = !cacheIsStaleDueToRefresh ? messagesBySession.current.get(sessionId) : undefined
+    if (cacheIsStaleDueToRefresh) {
+      // Clear stale cache — the user explicitly requested a refresh for this session
+      messagesBySession.current.delete(sessionId)
+      cacheRefreshKeys.current.delete(sessionId)
+      logger.debug(`cache invalidated due to refresh for ${sessionId.slice(0, 8)}... (key ${cachedRefreshKey} -> ${currentRefreshKey})`)
+    }
     if (cachedMessages) {
       setMessages(cachedMessages)
       setIsHistoryLoading(false)
@@ -242,6 +264,49 @@ export function useSession({ sessionId }: UseSessionInput): UseSessionOutput {
     })
     return () => { cancelled = true }
   }, [sessionId, projectState.agentReady])
+
+  // Force-reload messages when the user requests a refresh via context menu.
+  // Clears the renderer cache and preloaded data, then reloads from the backend.
+  useEffect(() => {
+    if (!sessionId || refreshKey === undefined) return
+    let cancelled = false
+    logger.info(`refresh triggered for ${sessionId.slice(0, 8)}... (key=${refreshKey})`)
+    // Clear the renderer-side message cache so the reload is truly fresh
+    messagesBySession.current.delete(sessionId)
+    usedPreloadedRef.current = false
+    setIsHistoryLoading(true)
+    setMessages(INITIAL_MESSAGES)
+    messagesLoadedForRef.current = sessionId
+
+    // Reload from the backend (try in-memory first, fall back to disk)
+    window.nekocode.session.loadHistory(sessionId)
+      .catch((err) => {
+        if (isSessionNotReadyError(err) && projectState.activeProjectPath) {
+          logger.debug(`refresh fallback to disk for ${sessionId.slice(0, 8)}...`)
+          return window.nekocode.session.loadHistoryFromDisk(sessionId, projectState.activeProjectPath, 0)
+        }
+        throw err
+      })
+      .then((ipcMessages) => {
+        if (cancelled) return
+        logger.info(`refresh loaded: ${ipcMessages.length} messages for ${sessionId.slice(0, 8)}...`)
+        const chatMessages = ipcToChatMessages(ipcMessages)
+        setMessages(chatMessages)
+        messagesBySession.current.set(sessionId, chatMessages)
+        // Mark the cache as up-to-date with the current refresh key
+        if (refreshKey !== undefined) {
+          cacheRefreshKeys.current.set(sessionId, refreshKey)
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) logger.warn('Failed to refresh session messages', err)
+      })
+      .finally(() => {
+        if (!cancelled) setIsHistoryLoading(false)
+      })
+
+    return () => { cancelled = true }
+  }, [sessionId, refreshKey])
 
   const sendPrompt = useCallback(
     async (text: string): Promise<void> => {

@@ -120,7 +120,7 @@ function SessionList({
 }
 
 export function TreeSidebar() {
-  const { state, removeProject, reconnectSession, createSession, refreshSessions, preloadSession, setActiveSession, setActiveView } =
+  const { state, removeProject, reconnectSession, createSession, refreshSessions, refreshSessionMessages, preloadSession, setActiveSession, setActiveView } =
     useProjectStore()
   const activeSessionId = state.activeSessionId
 
@@ -197,10 +197,20 @@ export function TreeSidebar() {
   const openSessionMenu = useCallback((e: React.MouseEvent, sessionId: string, projectPath: string, projectId: string) => {
     e.preventDefault()
     e.stopPropagation()
+    // Check if this session is currently streaming (blue dot)
+    const isSessionStreaming = state.sessionStatuses[sessionId] === 'streaming'
     setCtxMenu({
       x: e.clientX,
       y: e.clientY,
       items: [
+        {
+          label: 'Refresh Messages',
+          icon: <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M13.5 8A5.5 5.5 0 1 1 8 2.5M13.5 2.5v3h-3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" /></svg>,
+          onClick: () => refreshSessionMessages(sessionId),
+          disabled: isSessionStreaming,
+          shortcut: isSessionStreaming ? 'Running...' : undefined,
+        },
+        { type: 'separator' },
         {
           label: 'Copy Session ID',
           onClick: () => navigator.clipboard.writeText(sessionId),
@@ -224,7 +234,7 @@ export function TreeSidebar() {
         },
       ],
     })
-  }, [activeSessionId, refreshSessions, setActiveSession])
+  }, [activeSessionId, refreshSessions, setActiveSession, refreshSessionMessages, state.sessionStatuses])
 
   return (
     <aside className="w-60 bg-surface-900 h-full flex flex-col shrink-0 text-text-primary shadow-[inset_-1px_0_0_rgba(255,255,255,0.06)]">
