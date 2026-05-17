@@ -89,12 +89,13 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
     }
   }, [])
 
-  /** Extract the current / command query from the input text */
+  /** Extract the current / command query from the input text.
+   *  Slash commands are only valid at the START of the input — "hello /abc"
+   *  should NOT trigger a command, only "/abc" should. */
   const getCommandQuery = useCallback((text: string): string => {
-    const lastWordStart = text.lastIndexOf(' ')
-    const lastWord = text.slice(lastWordStart + 1)
-    if (lastWord.startsWith('/')) {
-      return lastWord.slice(1) // Remove the '/' prefix
+    const trimmed = text.trimStart()
+    if (trimmed.startsWith('/')) {
+      return trimmed.slice(1) // Remove the '/' prefix
     }
     return ''
   }, [])
@@ -104,10 +105,9 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
     (command: CommandInfo) => {
       // Record command usage for recent-commands tracking
       recordCommandUsage(command.name, command.source)
-      // Replace the current / command fragment with the full command name
-      const lastSpaceIdx = input.lastIndexOf(' ')
-      const prefix = lastSpaceIdx >= 0 ? input.slice(0, lastSpaceIdx + 1) : ''
-      const newInput = `${prefix}/${command.name} `
+      // Replace the entire input with the selected command name.
+      // Slash commands are start-of-input only, so we replace from the beginning.
+      const newInput = `/${command.name} `
       setInput(newInput)
       setShowCommandPalette(false)
       // Focus back on textarea after selection
@@ -115,7 +115,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
         textareaRef.current?.focus()
       })
     },
-    [input, setInput, recordCommandUsage],
+    [setInput, recordCommandUsage],
   )
 
   const handleSubmit = useCallback(
@@ -155,10 +155,11 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
       ta.style.height = `${Math.min(ta.scrollHeight, TEXTAREA_MAX_HEIGHT_PX)}px`
     }
 
-    // Show command palette when typing '/' at the start of input or after a space
-    const lastWordStart = value.lastIndexOf(' ')
-    const lastWord = value.slice(lastWordStart + 1)
-    if (lastWord.startsWith('/')) {
+    // Show command palette only when typing '/' at the START of input.
+    // Slash commands like "/help" should only trigger at the beginning,
+    // NOT in the middle of text like "hello /help".
+    const trimmed = value.trimStart()
+    if (trimmed.startsWith('/')) {
       setShowCommandPalette(true)
     } else if (showCommandPalette) {
       setShowCommandPalette(false)
