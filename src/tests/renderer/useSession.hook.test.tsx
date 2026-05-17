@@ -51,8 +51,10 @@ const mockProjectState = {
   activeSessionId: null,
   activeProjectPath: "/test/project",
   sessionStatuses: {},
+  sessionErrorMessages: {},
   preloadedHistory: {},
   agentReady: true,
+  sessionRefreshKeys: {},
 }
 vi.mock("@/renderer/src/stores/project-store", () => ({
   useProjectStore: () => ({ state: mockProjectState }),
@@ -80,8 +82,10 @@ beforeEach(() => {
   mockProjectState.activeSessionId = null
   mockProjectState.activeProjectPath = "/test/project"
   mockProjectState.sessionStatuses = {}
+  mockProjectState.sessionErrorMessages = {}
   mockProjectState.preloadedHistory = {}
   mockProjectState.agentReady = true
+  mockProjectState.sessionRefreshKeys = {}
 })
 
 // Import after mocks
