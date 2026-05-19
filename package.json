@@ -1,6 +1,6 @@
 {
   "name": "nekocode",
-  "version": "0.2.54",
+  "version": "0.2.55",
   "description": "AI-powered coding assistant desktop app",
   "author": {
     "name": "Nekocode",
@@ -31,7 +31,7 @@
     "prepackage": "bun run test && bun run lint && bun run type-check"
   },
   "dependencies": {
-    "@earendil-works/pi-coding-agent": "0.74.0",
+    "@earendil-works/pi-coding-agent": "0.75.3",
     "@tanstack/react-virtual": "^3.13.23",
     "react": "^19.0.0",
     "react-virtuoso": "^4.12.3",

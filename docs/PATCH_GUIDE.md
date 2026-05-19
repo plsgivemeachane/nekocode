@@ -1,7 +1,7 @@
-# SDK Patch Guide: `@mariozechner/pi-coding-agent`
+# SDK Patch Guide: `@earendil-works/pi-coding-agent`
 
-> **Target version:** `0.74.0`  
-> **Patch file:** `patches/@earendil-works+pi-coding-agent+0.74.0.patch`  
+> **Target version:** `0.75.3`  
+> **Patch file:** `patches/@earendil-works+pi-coding-agent+0.75.3.patch`  
 > **Purpose:** Recreate the patch-package diff from this document alone.  
 > **Bug references:** `docs/bugs/extension-typebox-resolve-failure.md`, `docs/bugs/pi-extension-load-failure-bug.md`, `docs/bugs/extension-load-pi-agent-core-resolution-bug.md`
 
@@ -9,7 +9,7 @@
 
 ## Overview
 
-NekoCode bundles the Pi SDK (`@mariozechner/pi-coding-agent`) into a worker ESM file via esbuild.
+NekoCode bundles the Pi SDK (`@earendil-works/pi-coding-agent`) into a worker ESM file via esbuild.
 This creates several runtime failures that do not occur when the SDK runs normally from `node_modules/`.
 The patches below fix those failures by modifying the SDK's **dist** files in `node_modules/` before
 `patch-package` captures the diff.
@@ -32,7 +32,7 @@ extensions fail to load.
 
 ### File
 
-`node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/loader.js`
+`node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js`
 
 ### Locate
 
@@ -91,8 +91,8 @@ function getAliases() {
 ### Problem
 
 `getAliases()` calls `resolveWorkspaceOrImport()` for each workspace package
-(`@mariozechner/pi-agent-core`, `@mariozechner/pi-tui`, `@mariozechner/pi-ai`,
-`@mariozechner/pi-ai/oauth`). When the workspace path doesn't exist on disk (production worker),
+(`@earendil-works/pi-agent-core`, `@earendil-works/pi-tui`, `@earendil-works/pi-ai`,
+`@earendil-works/pi-ai/oauth`). When the workspace path doesn't exist on disk (production worker),
 the function falls through to `import.meta.resolve(specifier)`, which throws `ERR_MODULE_NOT_FOUND`
 because `node_modules/` doesn't exist adjacent to the bundled worker.
 
@@ -101,7 +101,7 @@ mappings) is never reached. All 19 extensions fail identically.
 
 ### File
 
-Same file: `node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/loader.js`
+Same file: `node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js`
 
 ### Locate
 
@@ -153,7 +153,7 @@ When jiti loads an ESM extension that was transpiled to CJS by esbuild, `module.
 
 ### File
 
-Same file: `node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/loader.js`
+Same file: `node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js`
 
 ### Locate
 
@@ -211,7 +211,7 @@ exist on disk.
 
 ### File
 
-Same file: `node_modules/@mariozechner/pi-coding-agent/dist/core/extensions/loader.js`
+Same file: `node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js`
 
 ### Locate
 
@@ -328,13 +328,13 @@ After editing, regenerate with:
 
 ## Regenerating the patch file
 
-After applying all edits to `node_modules/@mariozechner/pi-coding-agent/`:
+After applying all edits to `node_modules/@earendil-works/pi-coding-agent/`:
 
 ```bash
-bunx patch-package @mariozechner/pi-coding-agent
+bunx patch-package @earendil-works/pi-coding-agent
 ```
 
-This creates/updates `patches/@mariozechner+pi-coding-agent+0.73.1.patch`.
+This creates/updates `patches/@earendil-works+pi-coding-agent+0.75.3.patch`.
 
 > **Important:** Delete `.map` files from the patch if they bloat the diff. Source maps are not
 > needed at runtime and can be regenerated. The patch file should ideally contain only `.js` and
@@ -352,4 +352,4 @@ After patching:
 4. `bun run type-check` — type check passes
 5. `bun run package:local` — electron-builder packages successfully (validates `@aws-crypto` patches)
 6. Launch app -> extensions load successfully (check console for `Extensions loaded: N` with no errors)
-7. Session reconnect works without `Cannot find module 'typebox'` or `Cannot find package '@mariozechner/pi-agent-core'`
+7. Session reconnect works without `Cannot find module 'typebox'` or `Cannot find package '@earendil-works/pi-agent-core'`
