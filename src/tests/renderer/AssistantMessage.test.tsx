@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { render, screen, act } from "@testing-library/react"
 import React from "react"
 import { AssistantMessage } from "@/renderer/src/components/chat/AssistantMessage"
 
@@ -87,5 +87,35 @@ describe("AssistantMessage", () => {
       expect.objectContaining({ content: markdown }),
       undefined,
     )
+  })
+
+  // ======================================================================
+  // Copy button (non-streaming mode only)
+  // ======================================================================
+
+  it("shows a Copy button when not streaming", () => {
+    render(<AssistantMessage content="Hello" isStreaming={false} />)
+    const copyButton = screen.getByRole("button", { name: /copy message/i })
+    expect(copyButton).toBeInTheDocument()
+    expect(copyButton.textContent).toContain("Copy")
+  })
+
+  it("does not show a Copy button while streaming", () => {
+    render(<AssistantMessage content="Hello" isStreaming={true} />)
+    expect(screen.queryByRole("button", { name: /copy message/i })).not.toBeInTheDocument()
+  })
+
+  it("copies content to clipboard when Copy button is clicked", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.assign(navigator, { clipboard: { writeText } })
+
+    render(<AssistantMessage content="Copy me!" isStreaming={false} />)
+    const copyButton = screen.getByRole("button", { name: /copy message/i })
+
+    await act(async () => {
+      copyButton.click()
+    })
+
+    expect(writeText).toHaveBeenCalledWith("Copy me!")
   })
 })
