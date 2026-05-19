@@ -201,7 +201,6 @@ export class ThreadedSessionManager implements ISessionManager {
    * Delete a session file from disk.
    * This is I/O but we keep it simple.
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async deleteSession(sessionId: string, _cwd: string): Promise<void> {
     logger.debug(`deleteSession: ${sessionId}`)
     // Keep on main thread for now - this is a simple file deletion

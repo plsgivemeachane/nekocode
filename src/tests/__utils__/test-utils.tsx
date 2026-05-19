@@ -5,7 +5,7 @@ import type { ProjectManager } from '../../main/project-manager'
 
 // ── Mock IPC factory ──────────────────────────────────────────────
 
-function createMockSessionAPI(): NekoCodeIPC['session'] {
+function createMockSessionAPI() {
   return {
     create: vi.fn<() => Promise<SessionCreateResult>>().mockResolvedValue({
       sessionId: 'mock-sdk-session-id',
@@ -32,13 +32,13 @@ function createMockSessionAPI(): NekoCodeIPC['session'] {
   }
 }
 
-function createMockDialogAPI(): NekoCodeIPC['dialog'] {
+function createMockDialogAPI() {
   return {
     openFolder: vi.fn<() => Promise<string | null>>().mockResolvedValue(null),
   }
 }
 
-function createMockProjectAPI(): NekoCodeIPC['project'] {
+function createMockProjectAPI() {
   return {
     add: vi.fn<() => Promise<ProjectInfo>>().mockResolvedValue({
       id: 'mock-project-id',
@@ -57,7 +57,7 @@ function createMockProjectAPI(): NekoCodeIPC['project'] {
   }
 }
 
-function createMockWorkspaceAPI(): NekoCodeIPC['workspace'] {
+function createMockWorkspaceAPI() {
   return {
     setActive: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     getActive: vi.fn<() => Promise<WorkspaceActiveResult>>().mockResolvedValue({
@@ -67,7 +67,7 @@ function createMockWorkspaceAPI(): NekoCodeIPC['workspace'] {
   }
 }
 
-function createMockUpdateAPI(): NekoCodeIPC['update'] {
+function createMockUpdateAPI() {
   return {
     check: vi.fn<() => Promise<UpdateAvailableInfo | null>>().mockResolvedValue(null),
     download: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
@@ -175,9 +175,9 @@ export function createProjectManagerMock(
 
 // ── Convenience: set window.nekocode ───────────────────────────────
 
-export function setupMockIPC(mock?: Partial<NekoCodeIPC>): NekoCodeIPC {
+export function setupMockIPC(mock?: Partial<ReturnType<typeof createMockIPC>>): ReturnType<typeof createMockIPC> & Partial<NekoCodeIPC> {
   const full = { ...createMockIPC(), ...mock }
-  ;(globalThis as unknown as Record<string, NekoCodeIPC>).nekocode = full
+  ;(globalThis as unknown as Record<string, NekoCodeIPC>).nekocode = full as unknown as NekoCodeIPC
   return full
 }
 

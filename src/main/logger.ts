@@ -238,10 +238,19 @@ if (winston && DailyRotateFile) {
     json(),
   )
 
+  // Silence individual transports in test env (not the logger itself).
+  // Setting silent on the logger blocks child loggers from ever emitting
+  // because Winston's child().write() delegates to the parent's _transform,
+  // which checks the parent's silent flag. Transport-level silent is checked
+  // inside each transport's own log() method, so it does not block custom
+  // transports added by child loggers in tests.
+  const isTest = process.env.NODE_ENV === 'test'
+
   const transports: Winston.transport[] = [
     new winston.transports.Console({
       level: getIsDev() ? 'debug' : 'warn',
       format: consoleFormat,
+      silent: isTest,
     }),
     new winston.transports.File({
       dirname: getLogDir(),
@@ -250,6 +259,7 @@ if (winston && DailyRotateFile) {
       format: fileFormat,
       maxsize: 5 * 1024 * 1024,
       maxFiles: 5,
+      silent: isTest,
     }),
     new winston.transports.File({
       dirname: getLogDir(),
@@ -258,6 +268,7 @@ if (winston && DailyRotateFile) {
       format: fileFormat,
       maxsize: 5 * 1024 * 1024,
       maxFiles: 5,
+      silent: isTest,
     }),
     new DailyRotateFile({
       dirname: getLogDir(),
@@ -266,13 +277,12 @@ if (winston && DailyRotateFile) {
       level: 'info',
       format: fileFormat,
       maxFiles: '14d',
+      silent: isTest,
     }),
   ]
 
   rootLogger = winston.createLogger({
     level: 'debug',
-    // Silences Winston when running in test environment (keeps vitest output clean)
-    silent: process.env.NODE_ENV === 'test',
     transports,
     exitOnError: false,
   })
