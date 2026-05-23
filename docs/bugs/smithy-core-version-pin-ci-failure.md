@@ -98,9 +98,42 @@ The local `node_modules` was installed at an earlier date when older versions we
 + run: bun install --frozen-lockfile
 ```
 
+## Recurrence: Pi SDK 0.75.3 upgrade (2026-05-19)
+
+After upgrading `@earendil-works/pi-coding-agent` from `0.74.0` to `0.75.3`, the same class of
+electron-builder failure reappeared. The Pi SDK upgrade pulled in newer transitive `@aws-sdk/*`
+packages that bumped their declared dependency ranges past the existing resolution pins.
+
+### Cascade errors
+
+1. `@aws-sdk/client-bedrock-runtime@3.1049.0` requires `@aws-sdk/core@^3.974.12` — resolution was `3.974.11`
+2. `@aws-sdk/credential-provider-login@3.972.42` (and 4 other credential/token packages) require `@aws-sdk/nested-clients@^3.997.10` — resolution was `3.997.9`
+
+### Fix
+
+```diff
+  "resolutions": {
+-   "@aws-sdk/core": "3.974.11",
+-   "@aws-sdk/nested-clients": "3.997.9"
++   "@aws-sdk/core": "3.974.12",
++   "@aws-sdk/nested-clients": "3.997.10"
+  }
+```
+
+### Root cause
+
+The `@aws-sdk` and `@smithy` ecosystems release coordinated patches. When a top-level dependency
+(e.g., Pi SDK) updates its transitive `@aws-sdk/*` versions, downstream packages may declare
+higher `^` ranges than the pinned resolutions. This is an ongoing maintenance obligation —
+**every Pi SDK upgrade should be followed by `bun run package:local`** to catch resolution
+mismatches before CI.
+
+---
+
 ## Prevention
 
 - Always commit lockfiles (`bun.lock`) for reproducible builds
 - Use `--frozen-lockfile` in CI to detect drift
 - When updating `resolutions`, update ALL related `@smithy/*` pins together — they release as a coordinated batch
+- **After every Pi SDK upgrade, run `bun run package:local`** to validate electron-builder resolution
 - Consider running `bun run package:local` as a CI pre-check to catch electron-builder issues before release

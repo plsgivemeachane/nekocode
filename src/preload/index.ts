@@ -17,6 +17,7 @@ import type {
   ZoomInfo,
   NotificationPayload,
   NotificationSettings,
+  ShellApi,
 } from '../shared/ipc-types'
 
 const sessionApi: NekoCodeIPC['session'] = {
@@ -198,4 +199,14 @@ contextBridge.exposeInMainWorld('nekocode', {
       return () => ipcRenderer.removeListener(IPC_CHANNELS.WINDOW_MAXIMIZED_STATE, handler)
     },
   },
+  shell: {
+    openInVscode: (path: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SHELL_OPEN_IN_VSCODE, { path }),
+
+    openInExplorer: (path: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SHELL_OPEN_IN_EXPLORER, { path }),
+
+    checkVscodeAvailable: (): Promise<{ available: boolean; command: string | null; method: 'cli' | 'uri' | null }> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SHELL_CHECK_VSCODE_AVAILABLE),
+  } satisfies ShellApi,
 })

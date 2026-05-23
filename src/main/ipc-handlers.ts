@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, dialog } from 'electron'
+import { ipcMain, BrowserWindow, dialog, shell } from 'electron'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { IPC_CHANNELS } from '../shared/ipc-channels'
@@ -297,6 +297,87 @@ export function registerIpcHandlers(
       return win.isMaximized()
     }
     return false
+  })
+
+  // --- Shell handlers ---
+
+  /** Open a path in VS Code. Uses URI scheme first (instant), then CLI fallback. */
+  ipcMain.handle(IPC_CHANNELS.SHELL_OPEN_IN_VSCODE, async (_event, { path: targetPath }: { path: string }): Promise<boolean> => {
+    logger.debug(`SHELL_OPEN_IN_VSCODE path=${targetPath}`)
+
+    // Normalize Windows backslashes to forward slashes for URI compatibility.
+    // encodeURIComponent encodes : and \ which breaks vscode:// URIs on Windows,
+    // producing broken URIs like vscode://file/C%3A%5CUsers... instead of
+    // vscode://file/C:/Users/...
+    const normalizedPath = targetPath.replace(/\\/g, '/')
+    const vscodeUri = `vscode://file/${encodeURI(normalizedPath)}/`
+
+    // Strategy: URI-first. The vscode:// URI scheme is registered by VS Code
+    // on all platforms and opens instantly. CLI `code` command can have a
+    // 10+ second timeout on Windows when code is not in PATH, so we only
+    // use it as a fallback.
+    try {
+      await shell.openExternal(vscodeUri)
+      logger.info(`Opened via vscode:// URI handler: ${vscodeUri}`)
+      return true
+    } catch {
+      logger.debug('vscode:// URI handler failed, trying CLI fallback')
+    }
+
+    // CLI fallback: try `code` then `code-insiders`
+    const commands = ['code', 'code-insiders']
+    for (const cmd of commands) {
+      try {
+        await execFileAsync(cmd, [targetPath], { timeout: 5000 })
+        logger.info(`Opened in VS Code via '${cmd}': ${targetPath}`)
+        return true
+      } catch {
+        // Command not found or failed — try next
+        continue
+      }
+    }
+
+    logger.warn(`Failed to open in VS Code: ${targetPath}`)
+    return false
+  })
+
+  /** Open a folder in the system file explorer (Explorer on Windows, Finder on macOS). */
+  ipcMain.handle(IPC_CHANNELS.SHELL_OPEN_IN_EXPLORER, async (_event, { path: targetPath }: { path: string }): Promise<boolean> => {
+    logger.debug(`SHELL_OPEN_IN_EXPLORER path=${targetPath}`)
+    try {
+      // shell.openPath() returns an empty string on success, or an error message on failure.
+      // Ignoring the return value means failures are reported as success to the renderer.
+      const errorMsg = await shell.openPath(targetPath)
+      if (errorMsg) {
+        logger.warn(`Failed to open in Explorer: ${targetPath} — ${errorMsg}`)
+        return false
+      }
+      return true
+    } catch (err) {
+      logger.warn(`Failed to open in Explorer: ${targetPath}`, err)
+      return false
+    }
+  })
+
+  /** Check if VS Code is available on the system (via CLI or URI scheme). */
+  ipcMain.handle(IPC_CHANNELS.SHELL_CHECK_VSCODE_AVAILABLE, async (): Promise<{ available: boolean; command: string | null; method: 'cli' | 'uri' | null }> => {
+    logger.debug('SHELL_CHECK_VSCODE_AVAILABLE')
+    const commands = ['code', 'code-insiders']
+    for (const cmd of commands) {
+      try {
+        await execFileAsync(cmd, ['--version'], { timeout: 5000 })
+        logger.info(`VS Code available via '${cmd}'`)
+        return { available: true, command: cmd, method: 'cli' }
+      } catch {
+        continue
+      }
+    }
+    // Even without the CLI, VS Code may be installed and registered as a
+    // vscode:// URI handler. This is the common case on Windows where `code`
+    // is not in PATH. We report URI availability so the button is not
+    // incorrectly grayed out.
+    logger.info('VS Code CLI not found, but URI scheme may still be available')
+    return { available: true, command: null, method: 'uri' }
   })
 
   // --- Notification handlers ---

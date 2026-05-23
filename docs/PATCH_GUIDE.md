@@ -326,6 +326,89 @@ After editing, regenerate with:
 
 ---
 
+## Patch 7 — `@aws-sdk/*` resolution pin updates (electron-builder)
+
+**Bug:** `docs/bugs/smithy-core-version-pin-ci-failure.md` (recurrence section)
+
+### Problem
+
+After upgrading the Pi SDK, electron-builder's `traversalNodeModulesCollector` fails with
+`Production dependency not found` because `@aws-sdk/*` packages in `resolutions` are pinned to
+versions older than what the newly-pulled transitive dependencies declare in their `package.json`.
+
+This is an **ongoing maintenance obligation** — every Pi SDK upgrade may pull newer `@aws-sdk/*`
+transitive versions that bump their `^` ranges past existing pins.
+
+### Diagnosis
+
+Run this to find all stale pins:
+
+```bash
+# Scan node_modules for packages whose declared dependency ranges
+# are not satisfied by the pinned resolution version.
+node -e "
+const fs = require('fs');
+const path = require('path');
+const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+const resolutions = pkg.resolutions || {};
+
+function checkPkg(pkgDir) {
+  try {
+    const p = JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf8'));
+    for (const [dep, range] of Object.entries(p.dependencies || {})) {
+      if (!resolutions[dep]) continue;
+      const resVersion = resolutions[dep];
+      const match = range.match(/^[\^~>=<]*(\d+)\.(\d+)\.(\d+)/);
+      if (!match) continue;
+      const [, rMaj, rMin, rPat] = match.map(Number);
+      const [, vMaj, vMin, vPat] = resVersion.match(/^(\d+)\.(\d+)\.(\d+)/).map(Number);
+      let satisfied = false;
+      if (range.startsWith('^'))
+        satisfied = vMaj === rMaj && (vMin > rMin || (vMin === rMin && vPat >= rPat));
+      else if (range.startsWith('~'))
+        satisfied = vMaj === rMaj && vMin === rMin && vPat >= rPat;
+      else if (range.startsWith('>='))
+        satisfied = vMaj > rMaj || (vMaj === rMaj && (vMin > rMin || (vMin === rMin && vPat >= rPat)));
+      if (!satisfied)
+        console.log(p.name + '@' + p.version + ' -> ' + dep + ': ' + range + ' (pinned: ' + resVersion + ')');
+    }
+  } catch {}
+}
+
+for (const d of fs.readdirSync('node_modules')) {
+  if (d.startsWith('.')) continue;
+  if (d.startsWith('@')) {
+    for (const s of fs.readdirSync(path.join('node_modules', d)))
+      checkPkg(path.join('node_modules', d, s));
+  } else {
+    checkPkg(path.join('node_modules', d));
+  }
+}
+"
+```
+
+### Fix
+
+Update the stale pins in `package.json` `resolutions` to the latest versions. Check latest with:
+
+```bash
+npm view @aws-sdk/core version
+npm view @aws-sdk/nested-clients version
+npm view @aws-sdk/types version
+```
+
+### Recurrence history
+
+| Date | Stale Pin | Required By | Old → New |
+|------|-----------|-------------|-----------|
+| 2026-05-17 | `@smithy/core` | `@smithy/util-buffer-from` + 8 others | `3.23.17` → `3.24.3` |
+| 2026-05-17 | `@aws-sdk/core` | `@aws-sdk/client-bedrock-runtime` | `3.974.8` → `3.974.11` |
+| 2026-05-17 | `@aws-sdk/nested-clients` | `@aws-sdk/credential-provider-*` | `3.997.6` → `3.997.9` |
+| 2026-05-19 | `@aws-sdk/core` | `@aws-sdk/client-bedrock-runtime@3.1049.0` | `3.974.11` → `3.974.12` |
+| 2026-05-19 | `@aws-sdk/nested-clients` | `@aws-sdk/credential-provider-login@3.972.42` + 4 others | `3.997.9` → `3.997.10` |
+
+---
+
 ## Regenerating the patch file
 
 After applying all edits to `node_modules/@earendil-works/pi-coding-agent/`:
@@ -350,6 +433,7 @@ After patching:
 2. `bun run test` — all tests pass
 3. `bun run lint` — no lint errors
 4. `bun run type-check` — type check passes
-5. `bun run package:local` — electron-builder packages successfully (validates `@aws-crypto` patches)
-6. Launch app -> extensions load successfully (check console for `Extensions loaded: N` with no errors)
-7. Session reconnect works without `Cannot find module 'typebox'` or `Cannot find package '@earendil-works/pi-agent-core'`
+5. Run the diagnosis script from Patch 7 above — no stale `@aws-sdk/*` resolution pins
+6. `bun run package:local` — electron-builder packages successfully (validates `@aws-crypto` patches AND resolution pins)
+7. Launch app -> extensions load successfully (check console for `Extensions loaded: N` with no errors)
+8. Session reconnect works without `Cannot find module 'typebox'` or `Cannot find package '@earendil-works/pi-agent-core'`

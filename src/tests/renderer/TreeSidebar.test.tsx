@@ -121,6 +121,20 @@ describe("TreeSidebar", () => {
     mockCreateSession.mockClear()
     mockReconnectSession.mockClear()
     mockPreloadSession.mockClear()
+
+    // Mock window.nekocode.shell for the useEffect that checks VS Code availability
+    // and for context menu shell operations (openInVscode, openInExplorer)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (!(window as any).nekocode) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).nekocode = {}
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).nekocode.shell = {
+      openInVscode: vi.fn().mockResolvedValue(true),
+      openInExplorer: vi.fn().mockResolvedValue(true),
+      checkVscodeAvailable: vi.fn().mockResolvedValue({ available: true, command: "code", method: "cli" }),
+    }
   })
 
   describe("pending session handling", () => {

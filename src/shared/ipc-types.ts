@@ -311,6 +311,16 @@ export interface NotificationSettings {
   }
 }
 
+/** Shell API for opening paths in external applications */
+export interface ShellApi {
+  /** Open a folder/file in VS Code. Returns true if successful, false if VS Code not found. */
+  openInVscode: (path: string) => Promise<boolean>
+  /** Open a folder in the system file explorer. Returns true if successful. */
+  openInExplorer: (path: string) => Promise<boolean>
+  /** Check if VS Code (or code-insiders) is available on the system via CLI or URI scheme. */
+  checkVscodeAvailable: () => Promise<{ available: boolean; command: string | null; method: 'cli' | 'uri' | null }>
+}
+
 export interface NekoCodeIPC {
   session: {
     create: (cwd: string) => Promise<SessionCreateResult>
@@ -368,4 +378,5 @@ export interface NekoCodeIPC {
     onPlaySound: (callback: (payload: NotificationPayload) => void) => () => void
   }
     window: WindowApi
+  shell: ShellApi
 }

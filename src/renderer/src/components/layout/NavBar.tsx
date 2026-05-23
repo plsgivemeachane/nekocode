@@ -4,13 +4,13 @@ import { useProjectStore } from '../../stores/project-store'
 
 /**
  * Top bar spanning the full window width in frameless mode.
- * Left: NekoCode logo + version + add-project button (same Y level as before)
- * Center/Right: zoom controls + window control buttons (minimize, maximize, close)
+ * Left: NekoCode logo + version
+ * Center/Right: project actions (add project, open in vscode) + zoom controls + window control buttons (minimize, maximize, close)
  * The entire bar is a native drag region for the frameless window.
  */
 export function NavBar() {
   const { zoom, zoomIn, zoomOut, resetZoom, minZoom, maxZoom } = useZoom()
-  const { addProject } = useProjectStore()
+  const { addProject, state: projectState } = useProjectStore()
   const [isMaximized, setIsMaximized] = useState(false)
   const percentage = Math.round(zoom * 100)
 
@@ -56,32 +56,58 @@ export function NavBar() {
         WebkitAppRegion: "drag",
       } as React.CSSProperties}
     >
-      {/* ─── Left: Sidebar header area (NekoCode logo + add button) ─── */}
+      {/* ─── Left: Sidebar header area (NekoCode logo) ─── */}
       {/* Matches the old TreeSidebar header width (w-60 = 15rem) */}
-      <div
-        className="w-60 shrink-0 px-5 pt-0 pb-0 flex items-center justify-between"
-        style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-      >
+      <div className="w-60 shrink-0 px-5 pt-0 pb-0 flex items-center">
         <span className="text-2xl font-display font-semibold tracking-tight">
           <span className="text-pink-400">Neko</span>
           <span className="text-white">code</span>
           <sub className="text-[9px] text-[#9CA3AF] font-normal ml-0.5">v{__APP_VERSION__}</sub>
         </span>
-        <div className="flex items-center">
+      </div>
+
+      {/* ─── Center/Right: project actions + zoom controls + window controls ─── */}
+      <div className="flex-1 flex items-center justify-end px-2">
+        {/* Project action buttons (add project + open in vscode) */}
+        <div
+          className="flex items-center mr-2"
+          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+        >
+          {/* Add Project button */}
           <button
             onClick={handleAddProject}
-            className="px-2.5 py-2 text-text-secondary hover:text-text-primary hover:bg-surface-800/80 transition-colors"
+            className="px-2.5 py-2 text-text-secondary hover:text-text-primary hover:bg-surface-800/80 transition-colors rounded-lg"
             title="Add Project"
           >
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
               <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
             </svg>
           </button>
-        </div>
-      </div>
 
-      {/* ─── Center/Right: zoom controls + window controls ─── */}
-      <div className="flex-1 flex items-center justify-end px-2">
+          {/* Open in VS Code button - highlighted with background and text label */}
+          <button
+            onClick={async () => {
+              if (projectState.activeProjectPath) {
+                const success = await window.nekocode.shell.openInVscode(projectState.activeProjectPath)
+                if (!success) {
+                  // Could show a toast/notification here in the future
+                  console.warn('VS Code not found on system')
+                }
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-300 bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/20 hover:border-blue-500/30 rounded-lg transition-colors"
+            title="Open Project in VS Code"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path d="M16.5 2.5l-9 4.5-5.5-2.5v12l5.5 2.5 9-4.5 5.5 2.5V5l-5.5-2.5zm-9 5.5l9-4.5v12l-9 4.5V8zm-4.5-2l3 1.4v9.2l-3-1.4V6zm18 12l-3-1.4V7.4l3 1.4V18z" fill="currentColor" />
+            </svg>
+            <span>Open in VS Code</span>
+          </button>
+        </div>
+
+        {/* Separator between project actions and zoom controls */}
+        <div className="w-px h-5 bg-surface-700/50 mr-1" />
+
         {/* Zoom controls */}
         <div
           className="flex items-center"

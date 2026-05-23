@@ -126,6 +126,11 @@ export function createMockIPC(): NekoCodeIPC {
       isMaximized: vi.fn().mockResolvedValue(false),
       onMaximizedStateChange: vi.fn().mockReturnValue(() => {}),
     },
+    shell: {
+      openInVscode: vi.fn().mockResolvedValue(true),
+      openInExplorer: vi.fn().mockResolvedValue(true),
+      checkVscodeAvailable: vi.fn().mockResolvedValue({ available: true, command: 'code' }),
+    },
   }
 }
 

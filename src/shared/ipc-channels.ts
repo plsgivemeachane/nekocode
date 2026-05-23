@@ -48,6 +48,11 @@ export const IPC_CHANNELS = {
   NOTIFICATION_PLAY_SOUND: 'notification:play-sound',
   NOTIFICATION_SETTINGS_GET: 'notification:settings-get',
   NOTIFICATION_SETTINGS_SET: 'notification:settings-set',
+
+  // --- Shell handlers ---
+  SHELL_OPEN_IN_VSCODE: 'shell:openInVscode',
+  SHELL_OPEN_IN_EXPLORER: 'shell:openInExplorer',
+  SHELL_CHECK_VSCODE_AVAILABLE: 'shell:checkVscodeAvailable',
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]

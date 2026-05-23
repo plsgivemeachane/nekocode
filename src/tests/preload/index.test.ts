@@ -155,6 +155,25 @@ describe("Preload Security Boundary", () => {
   })
 
   // ═══════════════════════════════════════════════════════════════════
+  // Shell channels
+  // ═══════════════════════════════════════════════════════════════════
+
+  it("has SHELL_OPEN_IN_VSCODE channel", () => {
+    expect(IPC_CHANNELS.SHELL_OPEN_IN_VSCODE).toBeDefined()
+    expect(typeof IPC_CHANNELS.SHELL_OPEN_IN_VSCODE).toBe("string")
+  })
+
+  it("has SHELL_OPEN_IN_EXPLORER channel", () => {
+    expect(IPC_CHANNELS.SHELL_OPEN_IN_EXPLORER).toBeDefined()
+    expect(typeof IPC_CHANNELS.SHELL_OPEN_IN_EXPLORER).toBe("string")
+  })
+
+  it("has SHELL_CHECK_VSCODE_AVAILABLE channel", () => {
+    expect(IPC_CHANNELS.SHELL_CHECK_VSCODE_AVAILABLE).toBeDefined()
+    expect(typeof IPC_CHANNELS.SHELL_CHECK_VSCODE_AVAILABLE).toBe("string")
+  })
+
+  // ═══════════════════════════════════════════════════════════════════
   // Security: Channel names follow strict format
   // ═══════════════════════════════════════════════════════════════════
 
@@ -168,7 +187,7 @@ describe("Preload Security Boundary", () => {
     // All channels should follow "namespace:action" format
     const expectedNamespaces = [
       "session", "project", "workspace", "git", "dialog",
-      "window", "zoom", "update", "notification",
+      "window", "zoom", "update", "notification", "shell",
     ]
     const values = Object.values(IPC_CHANNELS)
     for (const channel of values) {
@@ -189,5 +208,6 @@ describe("Preload Security Boundary", () => {
     expect(namespaces).toContain("zoom")
     expect(namespaces).toContain("update")
     expect(namespaces).toContain("notification")
+    expect(namespaces).toContain("shell")
   })
 })

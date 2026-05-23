@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useProjectStore, type SessionStatus } from '../../stores/project-store'
 import { ContextMenu, type ContextMenuEntry } from '../ui/ContextMenu'
 // NotificationSettingsPanel is now in SettingsView
@@ -124,6 +124,59 @@ export function TreeSidebar() {
     useProjectStore()
   const activeSessionId = state.activeSessionId
 
+  // Shell operation UX state: loading indicator, toast for failure feedback, debounce
+  const [shellOpening, setShellOpening] = useState<string | null>(null) // 'vscode' | 'explorer' | null
+  const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' } | null>(null)
+  const lastShellCallRef = useRef<number>(0)
+  // Track VS Code availability so the button can be properly disabled/hidden
+  const [vscodeAvailable, setVscodeAvailable] = useState<boolean>(true) // Assume available (URI scheme)
+
+  // Check VS Code availability on mount
+  useEffect(() => {
+    window.nekocode.shell.checkVscodeAvailable().then((result) => {
+      setVscodeAvailable(result.available)
+    }).catch(() => {
+      // If check fails, assume available (URI scheme may still work)
+      setVscodeAvailable(true)
+    })
+  }, [])
+
+  // Auto-dismiss toast after 3 seconds
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [toast])
+
+  // Debounced shell operation handler — prevents rapid clicks from spawning multiple commands
+  const handleShellOpen = useCallback(async (type: 'vscode' | 'explorer', projectPath: string) => {
+    const now = Date.now()
+    if (now - lastShellCallRef.current < 1000) {
+      logger.debug(`Debounced shell ${type} call`)
+      return
+    }
+    lastShellCallRef.current = now
+
+    setShellOpening(type)
+    try {
+      let success: boolean
+      if (type === 'vscode') {
+        success = await window.nekocode.shell.openInVscode(projectPath)
+      } else {
+        success = await window.nekocode.shell.openInExplorer(projectPath)
+      }
+      if (!success) {
+        setToast({ message: type === 'vscode' ? 'Failed to open VS Code. Is it installed?' : 'Failed to open file explorer.', type: 'error' })
+      }
+    } catch (err) {
+      logger.error(`Failed to open ${type}:`, err)
+      setToast({ message: `Error opening ${type === 'vscode' ? 'VS Code' : 'explorer'}.`, type: 'error' })
+    } finally {
+      setShellOpening(null)
+    }
+  }, [])
+
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const prevIds = useState(new Set<string>())[0]
@@ -177,11 +230,14 @@ export function TreeSidebar() {
         {
           label: 'Open in Explorer',
           icon: <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M1.5 3.5v9h13v-7l-2-2h-6l-1.5-2h-2.5z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" /></svg>,
-          onClick: () => {
-            // Use Electron shell to open folder
-            window.nekocode.dialog.openFolder?.()
-          },
-          disabled: true,
+          disabled: shellOpening === 'explorer',
+          onClick: () => handleShellOpen('explorer', project.path),
+        },
+        {
+          label: shellOpening === 'vscode' ? 'Opening VS Code...' : 'Open in VS Code',
+          icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M16.5 2.5l-9 4.5-5.5-2.5v12l5.5 2.5 9-4.5 5.5 2.5V5l-5.5-2.5zm-9 5.5l9-4.5v12l-9 4.5V8zm-4.5-2l3 1.4v9.2l-3-1.4V6zm18 12l-3-1.4V7.4l3 1.4V18z" fill="currentColor" /></svg>,
+          disabled: !vscodeAvailable || shellOpening === 'vscode',
+          onClick: () => handleShellOpen('vscode', project.path),
         },
         { type: 'separator' },
         {
@@ -216,6 +272,12 @@ export function TreeSidebar() {
           onClick: () => navigator.clipboard.writeText(sessionId),
         },
         { type: 'separator' },
+        {
+          label: 'Open Project in VS Code',
+          icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M16.5 2.5l-9 4.5-5.5-2.5v12l5.5 2.5 9-4.5 5.5 2.5V5l-5.5-2.5zm-9 5.5l9-4.5v12l-9 4.5V8zm-4.5-2l3 1.4v9.2l-3-1.4V6zm18 12l-3-1.4V7.4l3 1.4V18z" fill="currentColor" /></svg>,
+          disabled: !vscodeAvailable || shellOpening === 'vscode',
+          onClick: () => handleShellOpen('vscode', projectPath),
+        },
         {
           label: 'Delete Session',
           icon: <svg width="13" height="13" viewBox="0 0 12 12" fill="none"><path d="M2 3.5h8M4.5 3.5V2.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v1M9 3.5v6a.5.5 0 0 1-.5.5h-5a.5.5 0 0 1-.5-.5v-6" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" /></svg>,
@@ -326,6 +388,17 @@ export function TreeSidebar() {
           items={ctxMenu.items}
           onClose={closeCtxMenu}
         />
+      )}
+
+      {/* Toast notification for shell operation failures */}
+      {toast && (
+        <div className={`absolute bottom-4 left-3 right-3 px-3 py-2 rounded-lg text-[12px] font-medium transition-all duration-300 ${
+          toast.type === 'error'
+            ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+            : 'bg-green-500/20 text-green-400 border border-green-500/30'
+        }`}>
+          {toast.message}
+        </div>
       )}
 
       {/* NotificationSettingsPanel moved to central Settings page */}

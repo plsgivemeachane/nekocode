@@ -1,6 +1,6 @@
 {
   "name": "nekocode",
-  "version": "0.2.55",
+  "version": "0.2.57",
   "description": "AI-powered coding assistant desktop app",
   "author": {
     "name": "Nekocode",
@@ -187,7 +187,7 @@
     "@smithy/util-middleware": "4.3.3",
     "@smithy/util-utf8": "4.3.3",
     "@aws-sdk/types": "3.973.8",
-    "@aws-sdk/core": "3.974.11",
-    "@aws-sdk/nested-clients": "3.997.9"
+    "@aws-sdk/core": "3.974.12",
+    "@aws-sdk/nested-clients": "3.997.10"
   }
 }

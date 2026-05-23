@@ -6,7 +6,7 @@ describe('IPC_CHANNELS', () => {
   const allValues = Object.values(channels)
 
   it('has expected number of channels', () => {
-    expect(allValues).toHaveLength(42)
+    expect(allValues).toHaveLength(45)
   })
 
   it('has no duplicate values', () => {
@@ -76,6 +76,17 @@ describe('IPC_CHANNELS', () => {
     expect(sessionChannels).toHaveLength(15)
   })
 
+  it('has all shell channels', () => {
+    expect(channels).toHaveProperty('SHELL_OPEN_IN_VSCODE')
+    expect(channels).toHaveProperty('SHELL_OPEN_IN_EXPLORER')
+    expect(channels).toHaveProperty('SHELL_CHECK_VSCODE_AVAILABLE')
+  })
+
+  it('shell channels all start with "shell:"', () => {
+    const shellChannels = allValues.filter(v => v.startsWith('shell:'))
+    expect(shellChannels).toHaveLength(3)
+  })
+
   it('notification channels all start with "notification:"', () => {
     const notificationChannels = allValues.filter(v => v.startsWith('notification:'))
     expect(notificationChannels).toHaveLength(3)
@@ -132,6 +143,9 @@ describe('IPC_CHANNELS', () => {
       'NOTIFICATION_PLAY_SOUND',
       'NOTIFICATION_SETTINGS_GET',
       'NOTIFICATION_SETTINGS_SET',
+      'SHELL_OPEN_IN_VSCODE',
+      'SHELL_OPEN_IN_EXPLORER',
+      'SHELL_CHECK_VSCODE_AVAILABLE',
     ])
   })
 })
