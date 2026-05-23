@@ -174,6 +174,35 @@ describe("Preload Security Boundary", () => {
   })
 
   // ═══════════════════════════════════════════════════════════════════
+  // Coms (inter-agent messaging) channels
+  // ═══════════════════════════════════════════════════════════════════
+
+  it("has COMS_LIST channel", () => {
+    expect(IPC_CHANNELS.COMS_LIST).toBeDefined()
+    expect(typeof IPC_CHANNELS.COMS_LIST).toBe("string")
+  })
+
+  it("has COMS_SEND channel", () => {
+    expect(IPC_CHANNELS.COMS_SEND).toBeDefined()
+    expect(typeof IPC_CHANNELS.COMS_SEND).toBe("string")
+  })
+
+  it("has COMS_GET channel", () => {
+    expect(IPC_CHANNELS.COMS_GET).toBeDefined()
+    expect(typeof IPC_CHANNELS.COMS_GET).toBe("string")
+  })
+
+  it("has COMS_AWAIT channel", () => {
+    expect(IPC_CHANNELS.COMS_AWAIT).toBeDefined()
+    expect(typeof IPC_CHANNELS.COMS_AWAIT).toBe("string")
+  })
+
+  it("has COMS_INBOUND channel", () => {
+    expect(IPC_CHANNELS.COMS_INBOUND).toBeDefined()
+    expect(typeof IPC_CHANNELS.COMS_INBOUND).toBe("string")
+  })
+
+  // ═══════════════════════════════════════════════════════════════════
   // Security: Channel names follow strict format
   // ═══════════════════════════════════════════════════════════════════
 
@@ -187,7 +216,7 @@ describe("Preload Security Boundary", () => {
     // All channels should follow "namespace:action" format
     const expectedNamespaces = [
       "session", "project", "workspace", "git", "dialog",
-      "window", "zoom", "update", "notification", "shell",
+      "window", "zoom", "update", "notification", "shell", "coms",
     ]
     const values = Object.values(IPC_CHANNELS)
     for (const channel of values) {
@@ -209,5 +238,6 @@ describe("Preload Security Boundary", () => {
     expect(namespaces).toContain("update")
     expect(namespaces).toContain("notification")
     expect(namespaces).toContain("shell")
+    expect(namespaces).toContain("coms")
   })
 })

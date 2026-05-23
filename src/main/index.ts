@@ -8,6 +8,7 @@ import { ThreadOperationQueue } from './threading'
 import { ThreadedProjectManager } from './threading/threaded-project-manager'
 import { ThreadedSessionManager } from './threading/threaded-session-manager'
 import { NotificationService } from './notification-service'
+import { ComsManager } from './coms-manager'
 import type { SessionStreamEvent } from '../shared/ipc-types'
 import { IPC_CHANNELS } from '../shared/ipc-channels'
 
@@ -20,6 +21,9 @@ if (process.platform === 'win32') {
 
 // Notification service for OS notifications and sound triggers
 const notificationService = new NotificationService()
+
+// Coms manager for inter-agent messaging
+const comsManager = new ComsManager()
 
 // Event callback for session events from worker threads
 const onSessionEvent = (sessionId: string, event: SessionStreamEvent): void => {
@@ -140,6 +144,15 @@ async function performShutdown(): Promise<void> {
     logger.error('Error disposing sessions on quit', err)
   }
 
+  // Shutdown coms manager
+  logger.info('Shutting down coms manager')
+  try {
+    comsManager.stop()
+    logger.info('Coms manager shutdown complete')
+  } catch (err) {
+    logger.error('Error shutting down coms manager', err)
+  }
+
   // Shutdown thread pool
   logger.info('Shutting down thread pool')
   try {
@@ -156,7 +169,8 @@ app.whenReady().then(async () => {
   await notificationService.loadSettings()
   await projectManager.loadWorkspace()
   logger.info(`Workspace loaded, ${projectManager.listProjects().length} project(s)`)
-  registerIpcHandlers(sessionManager, projectManager, notificationService)
+  registerIpcHandlers(sessionManager, projectManager, notificationService, comsManager)
+  comsManager.start()
   createWindow()
   initAutoUpdater(() => mainWindowRef)
 

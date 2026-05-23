@@ -27,6 +27,7 @@ import type {
 } from '../shared/ipc-types'
 import type { ISessionManager, IProjectManager } from './manager-types'
 import type { NotificationService } from './notification-service'
+import type { ComsManager } from './coms-manager'
 import { createLogger } from './logger'
 import { checkForUpdate, downloadUpdate, quitAndInstall } from './updater'
 
@@ -41,6 +42,7 @@ export function registerIpcHandlers(
   sessionManager: ISessionManager,
   projectManager: IProjectManager,
   notificationService?: NotificationService,
+  comsManager?: ComsManager,
 ): void {
   // --- Session handlers ---
 
@@ -391,6 +393,40 @@ export function registerIpcHandlers(
     ipcMain.handle(IPC_CHANNELS.NOTIFICATION_SETTINGS_SET, async (_event, partial: Partial<NotificationSettings>): Promise<NotificationSettings> => {
       logger.debug('NOTIFICATION_SETTINGS_SET')
       return notificationService.updateSettings(partial)
+    })
+  }
+
+  // --- Coms (inter-agent messaging) handlers ---
+
+  if (comsManager) {
+    ipcMain.handle(IPC_CHANNELS.COMS_LIST, async (_event, payload?: import('../shared/ipc-types').ComsListPayload): Promise<import('../shared/ipc-types').ComsListResult> => {
+      logger.debug('COMS_LIST')
+      return comsManager.list(payload)
+    })
+
+    ipcMain.handle(IPC_CHANNELS.COMS_SEND, async (_event, payload: import('../shared/ipc-types').ComsSendPayload): Promise<import('../shared/ipc-types').ComsSendResult> => {
+      logger.info(`COMS_SEND target=${payload.target}`)
+      return comsManager.send(payload)
+    })
+
+    ipcMain.handle(IPC_CHANNELS.COMS_GET, async (_event, payload: import('../shared/ipc-types').ComsGetPayload): Promise<import('../shared/ipc-types').ComsGetResult> => {
+      logger.debug(`COMS_GET msgId=${payload.msgId}`)
+      return comsManager.get(payload)
+    })
+
+    ipcMain.handle(IPC_CHANNELS.COMS_AWAIT, async (_event, payload: import('../shared/ipc-types').ComsAwaitPayload): Promise<import('../shared/ipc-types').ComsAwaitResult> => {
+      logger.info(`COMS_AWAIT msgId=${payload.msgId} timeout=${payload.timeoutMs}`)
+      return comsManager.awaitReply(payload)
+    })
+
+    // Set up inbound message forwarding to renderer
+    comsManager.setInboundHandler((event: import('../shared/ipc-types').ComsInboundEvent) => {
+      logger.info(`COMS_INBOUND sender=${event.senderName} msgId=${event.msgId}`)
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send(IPC_CHANNELS.COMS_INBOUND, event)
+        }
+      }
     })
   }
 }
