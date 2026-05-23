@@ -290,4 +290,93 @@ describe("ElectronUIContext", () => {
     expect(typeof unsubscribe).toBe("function")
     expect(() => unsubscribe()).not.toThrow()
   })
+
+  // ═══════════════════════════════════════════════════════════════════
+  // setTheme() / setTitle() — Bug Fix: Coms peer not registering in SDK mode
+  // ═══════════════════════════════════════════════════════════════════
+
+  it("setTheme() returns success without throwing", () => {
+    // This was the root cause of the coms peer registration bug:
+    // ElectronUIContext was missing setTheme(), so extensions calling
+    // ctx.ui.setTheme() would throw TypeError and bail out of their
+    // session_start handler before registering as coms peers.
+    const result = context.setTheme("synthwave")
+    expect(result).toEqual({ success: true })
+    expect(() => context.setTheme("dark")).not.toThrow()
+  })
+
+  it("setTitle() does not throw", () => {
+    // setTitle was also missing, called by applyExtensionDefaults
+    // via applyExtensionTitle in the session_start handler chain.
+    expect(() => context.setTitle("pi - coms")).not.toThrow()
+  })
+
+  it("setWorkingMessage() does not throw", () => {
+    expect(() => context.setWorkingMessage("loading...")).not.toThrow()
+    expect(() => context.setWorkingMessage()).not.toThrow()
+  })
+
+  it("setWorkingVisible() does not throw", () => {
+    expect(() => context.setWorkingVisible(true)).not.toThrow()
+    expect(() => context.setWorkingVisible(false)).not.toThrow()
+  })
+
+  it("setWorkingIndicator() does not throw", () => {
+    expect(() => context.setWorkingIndicator()).not.toThrow()
+    expect(() => context.setWorkingIndicator({ frames: ["●"] })).not.toThrow()
+  })
+
+  it("setHiddenThinkingLabel() does not throw", () => {
+    expect(() => context.setHiddenThinkingLabel("thinking...")).not.toThrow()
+    expect(() => context.setHiddenThinkingLabel()).not.toThrow()
+  })
+
+  it("setWidget() does not throw", () => {
+    expect(() => context.setWidget("key", ["line1", "line2"])).not.toThrow()
+    expect(() => context.setWidget("key", undefined)).not.toThrow()
+  })
+
+  it("setFooter() does not throw", () => {
+    expect(() => context.setFooter(undefined)).not.toThrow()
+  })
+
+  it("setHeader() does not throw", () => {
+    expect(() => context.setHeader(undefined)).not.toThrow()
+  })
+
+  it("editor() falls back to input()", async () => {
+    const promise = context.editor("Edit", "prefill")
+    // Should have sent an input-type UI request (falls back to input dialog)
+    const req = extractUIRequest(transport.sentRequests[0].event)
+    expect(req.type).toBe("input")
+    expect(req.title).toBe("Edit")
+    expect(req.placeholder).toBe("prefill")
+  })
+
+  it("setEditorText() / getEditorText() do not throw", () => {
+    expect(() => context.setEditorText("hello")).not.toThrow()
+    expect(context.getEditorText()).toBe("")
+  })
+
+  it("pasteToEditor() does not throw", () => {
+    expect(() => context.pasteToEditor("text")).not.toThrow()
+  })
+
+  it("getToolsExpanded() / setToolsExpanded() work", () => {
+    expect(context.getToolsExpanded()).toBe(false)
+    expect(() => context.setToolsExpanded(true)).not.toThrow()
+  })
+
+  it("getAllThemes() returns empty array", () => {
+    expect(context.getAllThemes()).toEqual([])
+  })
+
+  it("getTheme() returns undefined", () => {
+    expect(context.getTheme("dark")).toBeUndefined()
+  })
+
+  it("setEditorComponent() / getEditorComponent() work", () => {
+    expect(context.getEditorComponent()).toBeUndefined()
+    expect(() => context.setEditorComponent(undefined)).not.toThrow()
+  })
 })

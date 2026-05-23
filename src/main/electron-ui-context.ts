@@ -13,7 +13,7 @@
  * 2. Worker thread mode: sends UI requests to the main thread via parentPort
  */
 
-import type { ExtensionUIDialogOptions } from '@earendil-works/pi-coding-agent'
+import type { ExtensionUIDialogOptions, ExtensionWidgetOptions, WorkingIndicatorOptions, AutocompleteProviderFactory } from '@earendil-works/pi-coding-agent'
 import type { UIRequest, UIResponse, SessionStreamEvent } from '../shared/ipc-types'
 import { IPC_CHANNELS } from '../shared/ipc-channels'
 import { createLogger } from './logger'
@@ -145,6 +145,182 @@ export class ElectronUIContext {
   setStatus(key: string, text: string | undefined): void {
     logger.debug(`[UI setStatus] ${key}: ${text ?? '(cleared)'}`)
     // Could forward to renderer status bar in the future
+  }
+
+  /**
+   * Set the terminal window/tab title.
+   * Not applicable for Electron mode — the BrowserWindow title is managed separately.
+   *
+   * BUG FIX: Previously missing, causing coms extension's session_start handler to
+   * throw TypeError and bail out before registering as a peer. Extensions call
+   * ctx.ui.setTitle() via applyExtensionDefaults() in their session_start hooks.
+   */
+  setTitle(title: string): void {
+    logger.debug(`[UI setTitle] ${title} — not applicable in Electron mode, ignoring`)
+    // Electron BrowserWindow title is managed by the app, not by extensions
+  }
+
+  /**
+   * Set the current theme by name or Theme object.
+   * Not fully applicable for Electron mode — theme is managed by the renderer.
+   *
+   * BUG FIX: Previously missing, causing coms extension's session_start handler to
+   * throw TypeError ("setTheme is not a function") and bail out before registering
+   * as a peer. Extensions call ctx.ui.setTheme() via applyExtensionTheme() in
+   * their session_start hooks. Without this method, the entire coms peer
+   * registration flow was skipped silently.
+   */
+  setTheme(theme: string): { success: boolean; error?: string } {
+    logger.debug(`[UI setTheme] ${theme} — not applicable in Electron mode, returning success`)
+    // Return success so extensions don't fall back to alternate themes
+    return { success: true }
+  }
+
+  /**
+   * Get the current theme for styling.
+   * Returns undefined in Electron mode — theme is managed by the renderer.
+   */
+  get theme(): unknown {
+    return undefined
+  }
+
+  /**
+   * Get all available themes. Returns empty in Electron mode.
+   */
+  getAllThemes(): { name: string; path: string | undefined }[] {
+    return []
+  }
+
+  /**
+   * Load a theme by name without switching to it. Returns undefined in Electron mode.
+   */
+  getTheme(_name: string): unknown {
+    return undefined
+  }
+
+  /**
+   * Set the working/loading message shown during streaming.
+   * Logs in Electron mode — could forward to renderer in the future.
+   */
+  setWorkingMessage(message?: string): void {
+    logger.debug(`[UI setWorkingMessage] ${message ?? '(cleared)'}`)
+  }
+
+  /**
+   * Show or hide the built-in working loader row during streaming.
+   * Not applicable for Electron mode.
+   */
+  setWorkingVisible(_visible: boolean): void {
+    // No-op — Electron manages its own loading indicators
+  }
+
+  /**
+   * Configure the interactive working indicator shown during streaming.
+   * Not applicable for Electron mode.
+   */
+  setWorkingIndicator(_options?: WorkingIndicatorOptions): void {
+    // No-op — Electron manages its own loading indicators
+  }
+
+  /**
+   * Set the label shown for hidden thinking blocks.
+   * Not applicable for Electron mode.
+   */
+  setHiddenThinkingLabel(_label?: string): void {
+    // No-op — Electron manages its own thinking block display
+  }
+
+  /**
+   * Set a widget to display above or below the editor.
+   * Not applicable for Electron mode — no TUI widget system.
+   */
+  setWidget(_key: string, _content: string[] | undefined, _options?: ExtensionWidgetOptions): void {
+    // No-op — Electron doesn't have TUI widgets
+  }
+
+  /**
+   * Set a custom footer component. Not applicable for Electron mode.
+   */
+  setFooter(_factory: unknown): void {
+    // No-op — Electron has its own footer
+  }
+
+  /**
+   * Set a custom header component. Not applicable for Electron mode.
+   */
+  setHeader(_factory: unknown): void {
+    // No-op — Electron has its own header
+  }
+
+  /**
+   * Show a custom component with keyboard focus. Not applicable for Electron mode.
+   */
+  async custom<T>(_factory: unknown): Promise<T> {
+    return undefined as unknown as T
+  }
+
+  /**
+   * Paste text into the editor. Not applicable for Electron mode.
+   */
+  pasteToEditor(_text: string): void {
+    // No-op — Electron manages its own input
+  }
+
+  /**
+   * Set the text in the core input editor. Not applicable for Electron mode.
+   */
+  setEditorText(_text: string): void {
+    // No-op — Electron manages its own input
+  }
+
+  /**
+   * Get the current text from the core input editor. Not applicable for Electron mode.
+   */
+  getEditorText(): string {
+    return ''
+  }
+
+  /**
+   * Show a multi-line editor for text editing.
+   * Falls back to the input dialog in Electron mode.
+   */
+  async editor(title: string, prefill?: string): Promise<string | undefined> {
+    return this.input(title, prefill)
+  }
+
+  /**
+   * Stack additional autocomplete behavior. Not applicable for Electron mode.
+   */
+  addAutocompleteProvider(_factory: AutocompleteProviderFactory): void {
+    // No-op — Electron manages its own autocomplete
+  }
+
+  /**
+   * Set a custom editor component. Not applicable for Electron mode.
+   */
+  setEditorComponent(_factory: unknown): void {
+    // No-op — Electron manages its own editor component
+  }
+
+  /**
+   * Get the currently configured custom editor factory.
+   */
+  getEditorComponent(): unknown {
+    return undefined
+  }
+
+  /**
+   * Get current tool output expansion state.
+   */
+  getToolsExpanded(): boolean {
+    return false
+  }
+
+  /**
+   * Set tool output expansion state.
+   */
+  setToolsExpanded(_expanded: boolean): void {
+    // No-op — could forward to renderer in the future
   }
 
   /**
