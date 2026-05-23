@@ -190,7 +190,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
               placeholder="Ask anything, @tag files/folders, or type / for commands"
               disabled={!sessionId || isStreaming}
               rows={1}
-              className="w-full bg-transparent text-sm text-text-primary placeholder:text-text-tertiary/50 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed resize-none overflow-hidden leading-relaxed"
+              className="w-full bg-transparent text-sm text-text-primary placeholder:text-text-tertiary/50 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed resize-none overflow-y-auto leading-relaxed"
             />
             <div className="flex items-center pt-5">
               <div className="flex items-center gap-0 text-xs text-text-secondary">

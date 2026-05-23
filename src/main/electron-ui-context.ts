@@ -14,6 +14,7 @@
  */
 
 import type { ExtensionUIDialogOptions, ExtensionWidgetOptions, WorkingIndicatorOptions, AutocompleteProviderFactory } from '@earendil-works/pi-coding-agent'
+
 import type { UIRequest, UIResponse, SessionStreamEvent } from '../shared/ipc-types'
 import { IPC_CHANNELS } from '../shared/ipc-channels'
 import { createLogger } from './logger'

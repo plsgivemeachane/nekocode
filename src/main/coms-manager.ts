@@ -235,7 +235,7 @@ export class ComsManager {
    * Reads live from disk to ensure fresh data.
    */
   async list(payload?: ComsListPayload): Promise<ComsListResult> {
-    const project = payload?.project || 'default'
+    const project = payload?.project || this.selfProject || 'default'
     const includeExplicit = payload?.includeExplicit ?? false
     const agents: ComsPeer[] = []
 
