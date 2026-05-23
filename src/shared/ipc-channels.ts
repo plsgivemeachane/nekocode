@@ -60,6 +60,7 @@ export const IPC_CHANNELS = {
   COMS_GET: 'coms:get',
   COMS_AWAIT: 'coms:await',
   COMS_INBOUND: 'coms:inbound',
+  COMS_REFRESH: 'coms:refresh', // Main→Renderer: peers changed, refresh the list
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]

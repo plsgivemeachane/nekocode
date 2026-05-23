@@ -99,6 +99,25 @@ export function useComs(enabled?: boolean): UseComsOutput {
     return unsubscribe
   }, [isActive])
 
+  // ━━ Peer refresh on identity change ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // When the local peer's identity changes (e.g., project name update after
+  // opening a session), the main process sends a COMS_REFRESH event.
+  // We listen for it and immediately refresh the peer list so the UI
+  // reflects the new project name without waiting for the 15s poll.
+
+  useEffect(() => {
+    if (!isActive) return
+    // Guard: coms API may not be available in all environments
+    if (!window.nekocode?.coms?.onRefresh) return
+
+    const unsubscribe = window.nekocode.coms.onRefresh(() => {
+      logger.info('Received COMS_REFRESH event, refreshing peer list')
+      refresh()
+    })
+
+    return unsubscribe
+  }, [isActive, refresh])
+
   // ━━ Outbound operations ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   const send = useCallback(async (payload: ComsSendPayload): Promise<ComsSendResult> => {

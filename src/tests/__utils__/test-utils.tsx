@@ -137,6 +137,7 @@ export function createMockIPC(): NekoCodeIPC {
       get: vi.fn().mockResolvedValue({ status: 'pending' }),
       await: vi.fn().mockResolvedValue({ response: null }),
       onInbound: vi.fn().mockReturnValue(() => {}),
+      onRefresh: vi.fn().mockReturnValue(() => {}),
     },
   }
 }

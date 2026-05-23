@@ -2,7 +2,11 @@
  * ComsPeerList — Displays discoverable peer agents in the coms pool.
  *
  * Shows a compact list of agents with their name, model, status,
- * and context window usage. Allows sending a quick prompt to any peer.
+ * and context window usage. Inbound messages are displayed for awareness.
+ *
+ * Note: The coms "send" feature is Pi-to-Pi M2M communication only.
+ * The "Send message" button and QuickSendModal have been removed as
+ * they are not intended for direct user interaction.
  *
  * Designed to be embedded in the sidebar or as a collapsible panel.
  */
@@ -10,6 +14,11 @@
 import { useState, useCallback } from 'react'
 import type { ComsPeer, ComsInboundEvent } from '../../../../shared/ipc-types'
 import { useComs } from '../../hooks/useComs'
+
+/** Maximum number of peer rows visible before scrolling */
+const MAX_VISIBLE_PEERS = 3
+/** Approximate height of a single peer row in px (used for scroll container max-height) */
+const PEER_ROW_HEIGHT_PX = 44
 
 /** Color mapping fallback for agents without a brand color */
 const FALLBACK_COLORS = [
@@ -41,13 +50,21 @@ function contextColor(pct: number | null): string {
 function PeerRow({
   peer,
   color,
-  onSend,
 }: {
   peer: ComsPeer
   color: string
-  onSend: (peer: ComsPeer) => void
 }) {
   const [expanded, setExpanded] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  /** Copy the peer session ID to clipboard with brief feedback */
+  const handleCopyId = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    navigator.clipboard.writeText(peer.sessionId).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }, [peer.sessionId])
 
   return (
     <div
@@ -88,6 +105,30 @@ function PeerRow({
         <span className="text-[10px] text-gray-500 truncate max-w-[80px]" title={peer.model}>
           {peer.model.split('/').pop()}
         </span>
+
+        {/* Copy peer ID button — useful for multi-agent workflows */}
+        <button
+          className="
+            shrink-0 ml-1 p-0.5 rounded
+            text-gray-600 hover:text-gray-300
+            hover:bg-white/10
+            transition-colors
+            opacity-0 group-hover:opacity-100
+          "
+          onClick={handleCopyId}
+          title={copied ? 'Copied!' : `Copy peer ID: ${peer.sessionId}`}
+        >
+          {copied ? (
+            <svg className="w-3 h-3 text-green-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 8l3 3 7-7" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          ) : (
+            <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <rect x="5" y="5" width="9" height="9" rx="1.5" />
+              <path d="M3 11V3.5A1.5 1.5 0 014.5 2H11" strokeLinecap="round" />
+            </svg>
+          )}
+        </button>
       </div>
 
       {/* Context usage bar (if available) */}
@@ -117,21 +158,33 @@ function PeerRow({
             <span className="text-gray-500">Project:</span>
             <span>{peer.project}</span>
           </div>
-          <button
-            className="
-              mt-1 px-2 py-0.5 rounded text-[10px]
-              bg-white/5 hover:bg-white/10
-              text-gray-300 hover:text-white
-              border border-white/10 hover:border-white/20
-              transition-colors
-            "
-            onClick={(e) => {
-              e.stopPropagation()
-              onSend(peer)
-            }}
-          >
-            Send message
-          </button>
+          {/* Session ID with copy button — useful for multi-agent workflow targeting */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-gray-500">ID:</span>
+            <span className="text-gray-500 font-mono truncate" title={peer.sessionId}>
+              {peer.sessionId.length > 16 ? peer.sessionId.slice(0, 8) + '...' + peer.sessionId.slice(-6) : peer.sessionId}
+            </span>
+            <button
+              className="
+                p-0.5 rounded text-gray-500 hover:text-gray-300
+                hover:bg-white/10 transition-colors
+              "
+              onClick={handleCopyId}
+              title="Copy full peer ID"
+            >
+              {copied ? (
+                <svg className="w-3 h-3 text-green-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 8l3 3 7-7" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              ) : (
+                <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <rect x="5" y="5" width="9" height="9" rx="1.5" />
+                  <path d="M3 11V3.5A1.5 1.5 0 014.5 2H11" strokeLinecap="round" />
+                </svg>
+              )}
+            </button>
+          </div>
+
         </div>
       )}
     </div>
@@ -142,11 +195,9 @@ function PeerRow({
 function InboundCard({
   message,
   onDismiss,
-  onReply,
 }: {
   message: ComsInboundEvent
   onDismiss: (msgId: string) => void
-  onReply: (senderName: string, conversationId?: string | null) => void
 }) {
   return (
     <div className="
@@ -165,125 +216,23 @@ function InboundCard({
         </button>
       </div>
       <p className="text-[11px] text-gray-300 leading-snug">{message.prompt}</p>
-      <button
-        className="
-          mt-0.5 self-start
-          px-2 py-0.5 rounded text-[10px]
-          bg-accent-500/20 hover:bg-accent-500/30
-          text-accent-300 hover:text-accent-200
-          border border-accent-500/20 hover:border-accent-500/30
-          transition-colors
-        "
-        onClick={() => onReply(message.senderName, message.conversationId)}
-      >
-        Reply
-      </button>
+      {/* Reply removed — coms send is Pi-to-Pi M2M only, not user-facing */}
     </div>
   )
 }
 
-/** Quick-send modal */
-function QuickSendModal({
-  peer,
-  onSend,
-  onClose,
-}: {
-  peer: ComsPeer
-  onSend: (target: string, prompt: string) => Promise<void>
-  onClose: () => void
-}) {
-  const [text, setText] = useState('')
-  const [sending, setSending] = useState(false)
 
-  const handleSend = useCallback(async () => {
-    if (!text.trim() || sending) return
-    setSending(true)
-    try {
-      await onSend(peer.name, text.trim())
-      onClose()
-    } catch {
-      // Error is handled by the hook
-    } finally {
-      setSending(false)
-    }
-  }, [text, sending, peer.name, onSend, onClose])
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div
-        className="
-          bg-gray-900 border border-white/10 rounded-lg
-          p-4 w-80 shadow-xl
-        "
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-gray-200">
-            Message → {peer.name}
-          </h3>
-          <button
-            className="text-gray-500 hover:text-gray-300 text-sm"
-            onClick={onClose}
-          >
-            ✕
-          </button>
-        </div>
-        <textarea
-          className="
-            w-full h-24 rounded-md
-            bg-gray-800 border border-white/10
-            text-gray-200 text-xs p-2
-            resize-none
-            focus:outline-none focus:border-accent-500/50
-          "
-          placeholder="Type your prompt..."
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSend()
-          }}
-          autoFocus
-        />
-        <div className="flex items-center justify-end gap-2 mt-2">
-          <span className="text-[10px] text-gray-500">Ctrl+Enter to send</span>
-          <button
-            className="
-              px-3 py-1 rounded text-xs
-              bg-accent-500/20 hover:bg-accent-500/30
-              text-accent-300 hover:text-accent-200
-              border border-accent-500/20
-              disabled:opacity-50 disabled:cursor-not-allowed
-              transition-colors
-            "
-            onClick={handleSend}
-            disabled={sending || !text.trim()}
-          >
-            {sending ? 'Sending...' : 'Send'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // ━━ Main component ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 export function ComsPeerList({ enabled }: { enabled?: boolean }) {
-  const { peers, loading, error, inboundMessages, refresh, send, dismissInbound } = useComs(enabled)
-  const [showSendModal, setShowSendModal] = useState<ComsPeer | null>(null)
+  const { peers, loading, error, inboundMessages, refresh, dismissInbound } = useComs(enabled)
   const [collapsed, setCollapsed] = useState(false)
 
-  const handleQuickSend = useCallback(async (target: string, prompt: string) => {
-    await send({ target, prompt })
-  }, [send])
-
-  const handleReply = useCallback((senderName: string, _conversationId?: string | null) => {
-    // Find the peer by name and open the send modal
-    const peer = peers.find(p => p.name === senderName)
-    if (peer) {
-      setShowSendModal(peer)
-    }
-  }, [peers])
+  // Note: The coms 'send' feature is Pi-to-Pi M2M communication, not user-facing.
+  // The 'Send message' button and QuickSendModal have been removed intentionally.
+  // Inbound messages are still displayed for awareness, but replies go through
+  // the agent's own session, not through a user-facing send modal.
 
   const aliveCount = peers.filter(p => p.alive).length
 
@@ -328,26 +277,29 @@ export function ComsPeerList({ enabled }: { enabled?: boolean }) {
                   key={msg.msgId}
                   message={msg}
                   onDismiss={dismissInbound}
-                  onReply={handleReply}
                 />
               ))}
             </div>
           )}
 
-          {/* Peer list */}
+          {/* Peer list — scrollable when more than MAX_VISIBLE_PEERS */}
           {peers.length === 0 && !loading ? (
             <div className="px-2 py-3 text-[11px] text-gray-500 text-center">
               No peer agents discovered
             </div>
           ) : (
-            peers.map((peer, i) => (
-              <PeerRow
-                key={peer.sessionId}
-                peer={peer}
-                color={peerColor(peer, i)}
-                onSend={setShowSendModal}
-              />
-            ))
+            <div
+              className="overflow-y-auto"
+              style={{ maxHeight: `${MAX_VISIBLE_PEERS * PEER_ROW_HEIGHT_PX}px` }}
+            >
+              {peers.map((peer, i) => (
+                <PeerRow
+                  key={peer.sessionId}
+                  peer={peer}
+                  color={peerColor(peer, i)}
+                />
+              ))}
+            </div>
           )}
 
           {/* Refresh button */}
@@ -365,14 +317,7 @@ export function ComsPeerList({ enabled }: { enabled?: boolean }) {
         </div>
       )}
 
-      {/* Quick-send modal */}
-      {showSendModal && (
-        <QuickSendModal
-          peer={showSendModal}
-          onSend={handleQuickSend}
-          onClose={() => setShowSendModal(null)}
-        />
-      )}
+
     </div>
   )
 }

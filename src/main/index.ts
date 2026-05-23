@@ -170,7 +170,11 @@ app.whenReady().then(async () => {
   await projectManager.loadWorkspace()
   logger.info(`Workspace loaded, ${projectManager.listProjects().length} project(s)`)
   registerIpcHandlers(sessionManager, projectManager, notificationService, comsManager)
-  comsManager.start()
+  // Pass the first project's path so coms registers with the actual project name
+  // instead of falling back to 'default'
+  const initialProjects = projectManager.listProjects()
+  const initialProjectPath = initialProjects.length > 0 ? initialProjects[0].path : undefined
+  comsManager.start(undefined, initialProjectPath ? { projectPath: initialProjectPath } : undefined)
   createWindow()
   initAutoUpdater(() => mainWindowRef)
 

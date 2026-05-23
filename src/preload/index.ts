@@ -237,5 +237,13 @@ contextBridge.exposeInMainWorld('nekocode', {
       ipcRenderer.on(IPC_CHANNELS.COMS_INBOUND, handler)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.COMS_INBOUND, handler)
     },
+
+    // Called when the local peer's identity changes (e.g., project name update)
+    // so the renderer can refresh the peer list immediately.
+    onRefresh: (callback: () => void): (() => void) => {
+      const handler = () => callback()
+      ipcRenderer.on(IPC_CHANNELS.COMS_REFRESH, handler)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.COMS_REFRESH, handler)
+    },
   },
 })

@@ -52,6 +52,8 @@ export function registerIpcHandlers(
       const sessionId = await sessionManager.create(payload.cwd)
       const extensionErrors = sessionManager.getExtensionLoadErrors(sessionId)
       const extensionsDisabled = sessionManager.getExtensionsDisabled(sessionId)
+      // Update coms project name so peer agents see the actual project name instead of 'default'
+      comsManager?.updateProject(payload.cwd)
       logger.info(`SESSION_CREATE OK sessionId=${sessionId}`)
       return { sessionId, stableId: sessionId, extensionErrors, extensionsDisabled }
     } catch (err) {
@@ -91,6 +93,8 @@ export function registerIpcHandlers(
       const history = await sessionManager.reconnect(payload.sessionId, payload.cwd)
       const extensionErrors = sessionManager.getExtensionLoadErrors(payload.sessionId)
       const extensionsDisabled = sessionManager.getExtensionsDisabled(payload.sessionId)
+      // Update coms project name so peer agents see the actual project name instead of 'default'
+      comsManager?.updateProject(payload.cwd)
       logger.info(`SESSION_RECONNECT OK sessionId=${payload.sessionId} history=${history.length} messages`)
       return { sessionId: payload.sessionId, stableId: payload.sessionId, history, extensionErrors, extensionsDisabled }
     } catch (err) {
@@ -425,6 +429,17 @@ export function registerIpcHandlers(
       for (const win of BrowserWindow.getAllWindows()) {
         if (!win.isDestroyed()) {
           win.webContents.send(IPC_CHANNELS.COMS_INBOUND, event)
+        }
+      }
+    })
+
+    // Set up peer identity change notification — tells renderer to refresh peer list
+    // when the local peer's project name changes (e.g., after opening a session)
+    comsManager.setPeersChangedHandler(() => {
+      logger.info('COMS_REFRESH: peer identity changed, notifying renderer')
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send(IPC_CHANNELS.COMS_REFRESH)
         }
       }
     })

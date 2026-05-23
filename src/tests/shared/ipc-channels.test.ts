@@ -6,7 +6,7 @@ describe('IPC_CHANNELS', () => {
   const allValues = Object.values(channels)
 
   it('has expected number of channels', () => {
-    expect(allValues).toHaveLength(50)
+    expect(allValues).toHaveLength(51)
   })
 
   it('has no duplicate values', () => {
@@ -99,12 +99,13 @@ describe('IPC_CHANNELS', () => {
 
   it('coms channels all start with "coms:"', () => {
     const comsChannels = allValues.filter(v => v.startsWith('coms:'))
-    expect(comsChannels).toHaveLength(5)
+    expect(comsChannels).toHaveLength(6)
     expect(comsChannels).toContain('coms:list')
     expect(comsChannels).toContain('coms:send')
     expect(comsChannels).toContain('coms:get')
     expect(comsChannels).toContain('coms:await')
     expect(comsChannels).toContain('coms:inbound')
+    expect(comsChannels).toContain('coms:refresh')
   })
 
   it('IpcChannel type is a union of all values', () => {
@@ -161,6 +162,7 @@ describe('IPC_CHANNELS', () => {
       'COMS_GET',
       'COMS_AWAIT',
       'COMS_INBOUND',
+      'COMS_REFRESH',
     ])
   })
 })

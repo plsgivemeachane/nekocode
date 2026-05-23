@@ -503,5 +503,7 @@ export interface NekoCodeIPC {
     await: (payload: ComsAwaitPayload) => Promise<ComsAwaitResult>
     /** Listen for inbound coms messages from other agents */
     onInbound: (callback: (event: ComsInboundEvent) => void) => () => void
+    /** Listen for peer identity changes (e.g., project name update) to trigger a refresh */
+    onRefresh: (callback: () => void) => () => void
   }
 }

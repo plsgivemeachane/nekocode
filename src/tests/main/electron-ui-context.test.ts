@@ -345,7 +345,7 @@ describe("ElectronUIContext", () => {
   })
 
   it("editor() falls back to input()", async () => {
-    const promise = context.editor("Edit", "prefill")
+    const _promise = context.editor("Edit", "prefill")
     // Should have sent an input-type UI request (falls back to input dialog)
     const req = extractUIRequest(transport.sentRequests[0].event)
     expect(req.type).toBe("input")

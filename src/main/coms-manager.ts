@@ -110,12 +110,29 @@ export class ComsManager {
   }
 
   /**
+   * Set the handler for when the local peer's identity changes
+   * (e.g., project name update). Called by IPC handler setup to
+   * notify the renderer that the peer list should be refreshed.
+   */
+  private peersChangedHandler: (() => void) | null = null
+  setPeersChangedHandler(handler: () => void): void {
+    this.peersChangedHandler = handler
+  }
+
+  /**
    * Start the coms manager. Reads registry, starts ping cycle.
    * If no identity is provided (SDK mode), auto-generates one and registers
    * NekoCode as a peer in the coms registry so other agents can discover it.
    * If identity IS provided, uses it directly.
+   *
+   * @param identity - Optional explicit identity to use
+   * @param options.projectPath - Optional initial project path to derive project name from
+   *   (prevents falling back to 'default' when a project is already loaded at startup)
    */
-  start(identity?: { sessionId: string; name: string; endpoint: string; project?: string }): void {
+  start(
+    identity?: { sessionId: string; name: string; endpoint: string; project?: string },
+    options?: { projectPath?: string },
+  ): void {
     if (this.alive) return
     this.alive = true
 
@@ -124,14 +141,14 @@ export class ComsManager {
       this.selfSessionId = identity.sessionId
       this.selfName = identity.name
       this.selfEndpoint = identity.endpoint
-      this.selfProject = identity.project || 'default'
+      this.selfProject = identity.project || (options?.projectPath ? this.pathToProjectName(options.projectPath) : 'default')
       this.bindListener(identity.endpoint)
       this.registerSelf()
     } else {
       // SDK mode — no identity provided, auto-generate one so NekoCode
       // registers as a discoverable peer in the coms registry.
       // Without this, NekoCode is invisible to other Pi agents.
-      this.autoRegisterAsPeer()
+      this.autoRegisterAsPeer(options?.projectPath)
     }
 
     // Start periodic registry refresh to detect new/departed agents
@@ -173,6 +190,44 @@ export class ComsManager {
     }
 
     logger.info('ComsManager stopped')
+  }
+
+  /**
+   * Update the project name when a session is activated in a specific project.
+   *
+   * BUG FIX: Previously, the coms manager used 'default' as the project name
+   * because autoRegisterAsPeer() was called at startup before any session existed.
+   * This meant the peer list always showed 'default' regardless of which project
+   * the user was actually working in. Now we update the project name whenever
+   * a session is created or reconnected in a specific project directory.
+   */
+  updateProject(projectPath: string): void {
+    if (!this.alive) return
+
+    const newProjectName = this.pathToProjectName(projectPath)
+    if (newProjectName === this.selfProject) return
+
+    const oldProject = this.selfProject
+    this.selfProject = newProjectName
+
+    // Re-register with the updated project name
+    this.registerSelf()
+
+    logger.info(`ComsManager project updated: ${oldProject} → ${newProjectName}`)
+
+    // Notify renderer that our peer identity changed so it can refresh the peer list
+    this.peersChangedHandler?.()
+  }
+
+  /**
+   * Derive a project name from a filesystem path by taking the last directory segment.
+   * e.g. 'E:/project/node/nekocode' → 'nekocode'
+   */
+  private pathToProjectName(projectPath: string): string {
+    // Normalize path separators and take the last segment
+    const normalized = projectPath.replace(/\\/g, '/')
+    const segments = normalized.split('/').filter(Boolean)
+    return segments[segments.length - 1] || 'default'
   }
 
   /**
@@ -645,12 +700,15 @@ export class ComsManager {
    * other Pi agents. Other agents could not discover or send messages to
    * NekoCode via the coms system.
    */
-  private autoRegisterAsPeer(): void {
+  private autoRegisterAsPeer(initialProjectPath?: string): void {
     // Generate a stable identity for this NekoCode instance
     const sessionId = this.generateUlid()
     const name = `nekocode-${sessionId.slice(-6)}`
     const endpoint = this.makeEndpoint(sessionId)
-    const project = 'default'
+    // Derive project name from the initial project path instead of hardcoding 'default'
+    const project = initialProjectPath
+      ? this.pathToProjectName(initialProjectPath)
+      : 'default'
 
     this.selfSessionId = sessionId
     this.selfName = name
