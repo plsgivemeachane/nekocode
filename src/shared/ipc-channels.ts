@@ -53,14 +53,6 @@ export const IPC_CHANNELS = {
   SHELL_OPEN_IN_VSCODE: 'shell:openInVscode',
   SHELL_OPEN_IN_EXPLORER: 'shell:openInExplorer',
   SHELL_CHECK_VSCODE_AVAILABLE: 'shell:checkVscodeAvailable',
-
-  // --- Coms (inter-agent messaging) ---
-  COMS_LIST: 'coms:list',
-  COMS_SEND: 'coms:send',
-  COMS_GET: 'coms:get',
-  COMS_AWAIT: 'coms:await',
-  COMS_INBOUND: 'coms:inbound',
-  COMS_REFRESH: 'coms:refresh', // Main→Renderer: peers changed, refresh the list
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]

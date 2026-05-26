@@ -152,9 +152,8 @@ export class ElectronUIContext {
    * Set the terminal window/tab title.
    * Not applicable for Electron mode — the BrowserWindow title is managed separately.
    *
-   * BUG FIX: Previously missing, causing coms extension's session_start handler to
-   * throw TypeError and bail out before registering as a peer. Extensions call
-   * ctx.ui.setTitle() via applyExtensionDefaults() in their session_start hooks.
+   * BUG FIX: Previously missing, causing extensions that call setTitle() in
+   * session_start hooks to throw TypeError and bail out.
    */
   setTitle(title: string): void {
     logger.debug(`[UI setTitle] ${title} — not applicable in Electron mode, ignoring`)
@@ -165,8 +164,8 @@ export class ElectronUIContext {
    * Set the current theme by name or Theme object.
    * Not fully applicable for Electron mode — theme is managed by the renderer.
    *
-   * BUG FIX: Previously missing, causing coms extension's session_start handler to
-   * throw TypeError ("setTheme is not a function") and bail out before registering
+   * BUG FIX: Previously missing, causing extensions that call setTheme() in
+   * session_start hooks to throw TypeError ("setTheme is not a function") and bail out.
    * as a peer. Extensions call ctx.ui.setTheme() via applyExtensionTheme() in
    * their session_start hooks. Without this method, the entire coms peer
    * registration flow was skipped silently.

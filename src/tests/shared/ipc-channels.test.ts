@@ -97,18 +97,7 @@ describe('IPC_CHANNELS', () => {
     expect(windowChannels).toHaveLength(5)
   })
 
-  it('coms channels all start with "coms:"', () => {
-    const comsChannels = allValues.filter(v => v.startsWith('coms:'))
-    expect(comsChannels).toHaveLength(6)
-    expect(comsChannels).toContain('coms:list')
-    expect(comsChannels).toContain('coms:send')
-    expect(comsChannels).toContain('coms:get')
-    expect(comsChannels).toContain('coms:await')
-    expect(comsChannels).toContain('coms:inbound')
-    expect(comsChannels).toContain('coms:refresh')
-  })
-
-  it('IpcChannel type is a union of all values', () => {
+it('IpcChannel type is a union of all values', () => {
     // This is a compile-time check, but we verify runtime shape
     const keys = Object.keys(channels)
     expect(keys).toEqual([
@@ -157,12 +146,6 @@ describe('IPC_CHANNELS', () => {
       'SHELL_OPEN_IN_VSCODE',
       'SHELL_OPEN_IN_EXPLORER',
       'SHELL_CHECK_VSCODE_AVAILABLE',
-      'COMS_LIST',
-      'COMS_SEND',
-      'COMS_GET',
-      'COMS_AWAIT',
-      'COMS_INBOUND',
-      'COMS_REFRESH',
     ])
   })
 })

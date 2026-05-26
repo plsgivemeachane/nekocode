@@ -18,15 +18,6 @@ import type {
   NotificationPayload,
   NotificationSettings,
   ShellApi,
-  ComsListPayload,
-  ComsListResult,
-  ComsSendPayload,
-  ComsSendResult,
-  ComsGetPayload,
-  ComsGetResult,
-  ComsAwaitPayload,
-  ComsAwaitResult,
-  ComsInboundEvent,
 } from '../shared/ipc-types'
 
 const sessionApi: NekoCodeIPC['session'] = {
@@ -218,33 +209,5 @@ contextBridge.exposeInMainWorld('nekocode', {
 
     checkVscodeAvailable: (): Promise<{ available: boolean; command: string | null; method: 'cli' | 'uri' | null }> =>
       ipcRenderer.invoke(IPC_CHANNELS.SHELL_CHECK_VSCODE_AVAILABLE),
-  } satisfies ShellApi,
-
-  coms: {
-    list: (payload?: ComsListPayload): Promise<ComsListResult> =>
-      ipcRenderer.invoke(IPC_CHANNELS.COMS_LIST, payload),
-
-    send: (payload: ComsSendPayload): Promise<ComsSendResult> =>
-      ipcRenderer.invoke(IPC_CHANNELS.COMS_SEND, payload),
-
-    get: (payload: ComsGetPayload): Promise<ComsGetResult> =>
-      ipcRenderer.invoke(IPC_CHANNELS.COMS_GET, payload),
-
-    await: (payload: ComsAwaitPayload): Promise<ComsAwaitResult> =>
-      ipcRenderer.invoke(IPC_CHANNELS.COMS_AWAIT, payload),
-
-    onInbound: (callback: (event: ComsInboundEvent) => void): (() => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, event: ComsInboundEvent) => callback(event)
-      ipcRenderer.on(IPC_CHANNELS.COMS_INBOUND, handler)
-      return () => ipcRenderer.removeListener(IPC_CHANNELS.COMS_INBOUND, handler)
-    },
-
-    // Called when the local peer's identity changes (e.g., project name update)
-    // so the renderer can refresh the peer list immediately.
-    onRefresh: (callback: () => void): (() => void) => {
-      const handler = () => callback()
-      ipcRenderer.on(IPC_CHANNELS.COMS_REFRESH, handler)
-      return () => ipcRenderer.removeListener(IPC_CHANNELS.COMS_REFRESH, handler)
-    },
-  },
+  } satisfies ShellApi
 })

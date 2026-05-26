@@ -131,14 +131,6 @@ export function createMockIPC(): NekoCodeIPC {
       openInExplorer: vi.fn().mockResolvedValue(true),
       checkVscodeAvailable: vi.fn().mockResolvedValue({ available: true, command: 'code' }),
     },
-    coms: {
-      list: vi.fn().mockResolvedValue({ agents: [], project: 'default' }),
-      send: vi.fn().mockResolvedValue({ msgId: 'test-msg-id', target: 'test-agent', targetSession: 'test-session', hops: 0 }),
-      get: vi.fn().mockResolvedValue({ status: 'pending' }),
-      await: vi.fn().mockResolvedValue({ response: null }),
-      onInbound: vi.fn().mockReturnValue(() => {}),
-      onRefresh: vi.fn().mockReturnValue(() => {}),
-    },
   }
 }
 

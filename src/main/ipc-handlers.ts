@@ -27,7 +27,6 @@ import type {
 } from '../shared/ipc-types'
 import type { ISessionManager, IProjectManager } from './manager-types'
 import type { NotificationService } from './notification-service'
-import type { ComsManager } from './coms-manager'
 import { createLogger } from './logger'
 import { checkForUpdate, downloadUpdate, quitAndInstall } from './updater'
 
@@ -42,7 +41,6 @@ export function registerIpcHandlers(
   sessionManager: ISessionManager,
   projectManager: IProjectManager,
   notificationService?: NotificationService,
-  comsManager?: ComsManager,
 ): void {
   // --- Session handlers ---
 
@@ -52,9 +50,7 @@ export function registerIpcHandlers(
       const sessionId = await sessionManager.create(payload.cwd)
       const extensionErrors = sessionManager.getExtensionLoadErrors(sessionId)
       const extensionsDisabled = sessionManager.getExtensionsDisabled(sessionId)
-      // Update coms project name so peer agents see the actual project name instead of 'default'
-      comsManager?.updateProject(payload.cwd)
-      logger.info(`SESSION_CREATE OK sessionId=${sessionId}`)
+
       return { sessionId, stableId: sessionId, extensionErrors, extensionsDisabled }
     } catch (err) {
       logger.error('SESSION_CREATE failed', err)
@@ -93,8 +89,6 @@ export function registerIpcHandlers(
       const history = await sessionManager.reconnect(payload.sessionId, payload.cwd)
       const extensionErrors = sessionManager.getExtensionLoadErrors(payload.sessionId)
       const extensionsDisabled = sessionManager.getExtensionsDisabled(payload.sessionId)
-      // Update coms project name so peer agents see the actual project name instead of 'default'
-      comsManager?.updateProject(payload.cwd)
       logger.info(`SESSION_RECONNECT OK sessionId=${payload.sessionId} history=${history.length} messages`)
       return { sessionId: payload.sessionId, stableId: payload.sessionId, history, extensionErrors, extensionsDisabled }
     } catch (err) {
@@ -400,50 +394,6 @@ export function registerIpcHandlers(
     })
   }
 
-  // --- Coms (inter-agent messaging) handlers ---
-
-  if (comsManager) {
-    ipcMain.handle(IPC_CHANNELS.COMS_LIST, async (_event, payload?: import('../shared/ipc-types').ComsListPayload): Promise<import('../shared/ipc-types').ComsListResult> => {
-      logger.debug('COMS_LIST')
-      return comsManager.list(payload)
-    })
-
-    ipcMain.handle(IPC_CHANNELS.COMS_SEND, async (_event, payload: import('../shared/ipc-types').ComsSendPayload): Promise<import('../shared/ipc-types').ComsSendResult> => {
-      logger.info(`COMS_SEND target=${payload.target}`)
-      return comsManager.send(payload)
-    })
-
-    ipcMain.handle(IPC_CHANNELS.COMS_GET, async (_event, payload: import('../shared/ipc-types').ComsGetPayload): Promise<import('../shared/ipc-types').ComsGetResult> => {
-      logger.debug(`COMS_GET msgId=${payload.msgId}`)
-      return comsManager.get(payload)
-    })
-
-    ipcMain.handle(IPC_CHANNELS.COMS_AWAIT, async (_event, payload: import('../shared/ipc-types').ComsAwaitPayload): Promise<import('../shared/ipc-types').ComsAwaitResult> => {
-      logger.info(`COMS_AWAIT msgId=${payload.msgId} timeout=${payload.timeoutMs}`)
-      return comsManager.awaitReply(payload)
-    })
-
-    // Set up inbound message forwarding to renderer
-    comsManager.setInboundHandler((event: import('../shared/ipc-types').ComsInboundEvent) => {
-      logger.info(`COMS_INBOUND sender=${event.senderName} msgId=${event.msgId}`)
-      for (const win of BrowserWindow.getAllWindows()) {
-        if (!win.isDestroyed()) {
-          win.webContents.send(IPC_CHANNELS.COMS_INBOUND, event)
-        }
-      }
-    })
-
-    // Set up peer identity change notification — tells renderer to refresh peer list
-    // when the local peer's project name changes (e.g., after opening a session)
-    comsManager.setPeersChangedHandler(() => {
-      logger.info('COMS_REFRESH: peer identity changed, notifying renderer')
-      for (const win of BrowserWindow.getAllWindows()) {
-        if (!win.isDestroyed()) {
-          win.webContents.send(IPC_CHANNELS.COMS_REFRESH)
-        }
-      }
-    })
-  }
 }
 
 /**

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useProjectStore, type SessionStatus } from '../../stores/project-store'
 import { ContextMenu, type ContextMenuEntry } from '../ui/ContextMenu'
 // NotificationSettingsPanel is now in SettingsView
-import { ComsPeerList } from '../coms/ComsPeerList'
 import { createLogger } from '../../utils/logger'
 
 const logger = createLogger('TreeSidebar')
@@ -365,11 +364,6 @@ export function TreeSidebar() {
             </div>
           )
         })}
-      </div>
-
-      {/* Peer agents via coms */}
-      <div className="px-1 py-1 border-t border-surface-800/50">
-        <ComsPeerList enabled />
       </div>
 
       {/* Settings button at sidebar bottom */}
