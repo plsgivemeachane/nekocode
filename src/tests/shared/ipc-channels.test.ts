@@ -6,7 +6,7 @@ describe('IPC_CHANNELS', () => {
   const allValues = Object.values(channels)
 
   it('has expected number of channels', () => {
-    expect(allValues).toHaveLength(51)
+    expect(allValues).toHaveLength(45)
   })
 
   it('has no duplicate values', () => {
