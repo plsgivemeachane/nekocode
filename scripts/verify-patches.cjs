@@ -53,6 +53,21 @@ function main() {
     }
   }
 
+  // Verify @aws-crypto patches are actually applied in node_modules (not just that patch files exist).
+  // Bun's postinstall hook can silently fail, leaving patches unapplied.
+  // See: docs/bugs/bun-postinstall-patch-package-silent-failure.md
+  const awsCryptoUtilPkg = path.join(root, "node_modules", "@aws-crypto", "util", "package.json");
+  if (fs.existsSync(awsCryptoUtilPkg)) {
+    const utilPkg = JSON.parse(fs.readFileSync(awsCryptoUtilPkg, "utf8"));
+    const smithyRange = utilPkg.dependencies && utilPkg.dependencies["@smithy/util-utf8"];
+    if (smithyRange && smithyRange.startsWith("^2")) {
+      fail(
+        `@aws-crypto/util patch not applied — @smithy/util-utf8 is "${smithyRange}" but should be ">=2.0.0". ` +
+          `Run "bunx patch-package" before building. See: docs/bugs/aws-crypto-smithy-version-mismatch.md`
+      );
+    }
+  }
+
   console.log(`[verify:patches] OK - patch-package and patches/${requiredPatch} are present.`);
 }
 

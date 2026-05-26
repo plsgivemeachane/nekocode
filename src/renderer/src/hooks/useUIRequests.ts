@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { UIRequest } from '../../../shared/ipc-types'
 import { createLogger } from '../utils/logger'
 
@@ -35,21 +35,49 @@ export interface UseUIRequestsReturn {
  * Manages UI requests from extensions/workflows.
  * Listens for ui_request events via the preload bridge,
  * stores the active request, and provides methods to respond.
+ *
+ * IMPORTANT: The listener is registered in a useEffect with proper cleanup
+ * to avoid stale closures over sessionId and to clean up on unmount.
+ * Previously, registration was done during render (outside useEffect), which
+ * caused stale sessionId in the callback closure and no cleanup on unmount.
  */
 export function useUIRequests(sessionId: string | null): UseUIRequestsReturn {
   const [activeRequest, setActiveRequest] = useState<PendingUIRequest | null>(null)
   const requestIdRef = useRef<string | null>(null)
 
-  // Subscribe to UI requests from the preload bridge
-  // We use a separate effect that directly uses onUIRequest
-  // so we don't couple this to the message event stream.
-  const unsubRef = useRef<(() => void) | null>(null)
+  // Use a ref to hold the current sessionId so the callback always sees the latest value
+  // (avoids stale closure over sessionId)
+  const sessionIdRef = useRef(sessionId)
+  sessionIdRef.current = sessionId
 
-  // Set up / tear down the listener when sessionId changes
-  if (sessionId && !unsubRef.current) {
-    unsubRef.current = window.nekocode.session.onUIRequest((request: UIRequest) => {
+  // Subscribe to UI requests from the preload bridge via useEffect for proper cleanup.
+  // This fixes a critical bug where the listener was registered during render (outside
+  // useEffect), which caused:
+  // 1. Stale closure over sessionId — if the session changed, the old sessionId was
+  //    captured and new requests for the new session were silently dropped
+  // 2. No cleanup on unmount — the IPC listener persisted after the component unmounted,
+  //    potentially causing duplicate handlers or memory leaks
+  // 3. React strict mode issues — the listener was not properly cleaned up between
+  //    the double-mount lifecycle
+  useEffect(() => {
+    if (!sessionId) {
+      logger.debug('useUIRequests: no sessionId, skipping listener registration')
+      return
+    }
+
+    logger.info(`useUIRequests: registering onUIRequest listener for session ${sessionId}`)
+
+    const unsub = window.nekocode.session.onUIRequest((request: UIRequest) => {
+      // Always read from the ref to get the current sessionId
+      const currentSessionId = sessionIdRef.current
+
       // Only handle requests for the current session
-      if (request.sessionId !== sessionId) return
+      if (request.sessionId !== currentSessionId) {
+        logger.debug(
+          `useUIRequests: ignoring ui_request for session ${request.sessionId} (current: ${currentSessionId})`
+        )
+        return
+      }
 
       // Ignore if we already have an active request (shouldn't happen, but defensive)
       if (requestIdRef.current) {
@@ -57,7 +85,7 @@ export function useUIRequests(sessionId: string | null): UseUIRequestsReturn {
         return
       }
 
-      logger.info(`Received ui_request: type=${request.type}, title="${request.title}"`)
+      logger.info(`Received ui_request: type=${request.type}, title="${request.title}", id=${request.id}`)
       requestIdRef.current = request.id
       setActiveRequest({
         request,
@@ -67,18 +95,20 @@ export function useUIRequests(sessionId: string | null): UseUIRequestsReturn {
         },
       })
     })
-  }
 
-  // Clean up listener when sessionId becomes null
-  if (!sessionId && unsubRef.current) {
-    unsubRef.current()
-    unsubRef.current = null
-    requestIdRef.current = null
-    setActiveRequest(null)
-  }
+    return () => {
+      logger.info(`useUIRequests: cleaning up onUIRequest listener for session ${sessionId}`)
+      unsub()
+    }
+  }, [sessionId])
 
-  // Clean up on unmount
-  // (React strict mode double-mount is handled by the null-check above)
+  // Clear active request when sessionId becomes null
+  useEffect(() => {
+    if (!sessionId) {
+      requestIdRef.current = null
+      setActiveRequest(null)
+    }
+  }, [sessionId])
   const updateLocalState = useCallback((patch: Partial<UIDialogLocalState>) => {
     setActiveRequest(prev => {
       if (!prev) return prev

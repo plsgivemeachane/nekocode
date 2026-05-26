@@ -143,16 +143,23 @@ export class ThreadedSessionManager implements ISessionManager {
    * Offloaded to worker thread.
    */
   abort(sessionId: string): void {
-    logger.debug(`abort: ${sessionId} - sending to worker thread`)
+    logger.debug(`abort: ${sessionId} - sending directly to worker`)
 
-    // Fire and forget - abort needs to be immediate
-    this.operationQueue.execute<{ sessionId: string }, { success: boolean }>(
+    // CRITICAL: Like session:ui-respond, session:abort must bypass the operation queue.
+    // The user typically aborts while the worker is busy processing session:prompt.
+    // If queued, the operation queue sees the affinity worker as "busy" and never
+    // dispatches the abort — the agent keeps running with no way to stop it.
+    // By sending directly, the worker's event loop processes the abort even while
+    // awaiting the prompt result.
+    const sent = this.operationQueue.sendDirectMessage(
+      sessionId,
       'session:abort',
-      { sessionId },
-      'high'
-    ).catch(err => {
-      logger.warn(`Abort failed for ${sessionId}:`, err)
-    })
+      { sessionId }
+    )
+
+    if (!sent) {
+      logger.warn(`abort: failed to send direct message for session ${sessionId} - no affinity worker found`)
+    }
   }
 
   /**
@@ -369,21 +376,30 @@ export class ThreadedSessionManager implements ISessionManager {
    * Offloaded to worker thread.
    */
   handleUIResponse(response: import('../../shared/ipc-types').UIResponse): void {
-    logger.debug(`handleUIResponse: requestId=${response.requestId} sessionId=${response.sessionId} - offloading to worker thread`)
+    logger.debug(`handleUIResponse: requestId=${response.requestId} sessionId=${response.sessionId} - sending directly to worker`)
 
-    this.operationQueue.execute<
-      import('./types').SessionUIRespondInput,
-      import('./types').SessionUIRespondOutput
-    >(
+    // CRITICAL: session:ui-respond must bypass the operation queue and be sent directly
+    // to the worker. When the agent calls ask_user (or any extension UI method like
+    // ui.select/confirm/input), the worker is busy executing that tool and awaiting
+    // the UI response. If we queue this operation, the ThreadOperationQueue sees the
+    // affinity worker as "busy" and never dispatches it — causing a deadlock where
+    // the worker waits for a response that can never be delivered.
+    //
+    // By sending directly via postMessage, the worker's Node.js event loop processes
+    // the message even while awaiting the ask_user promise, resolving the pending
+    // UIContext promise and allowing the tool to complete.
+    const sent = this.operationQueue.sendDirectMessage(
+      response.sessionId,
       'session:ui-respond',
       {
         sessionId: response.sessionId,
         response,
-      },
-      'normal'
-    ).catch((err) => {
-      logger.error(`handleUIResponse failed for ${response.requestId}:`, err)
-    })
+      }
+    )
+
+    if (!sent) {
+      logger.error(`handleUIResponse: failed to send direct message for session ${response.sessionId} - no affinity worker found`)
+    }
   }
 
   // =========================================================================

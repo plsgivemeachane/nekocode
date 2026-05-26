@@ -421,8 +421,8 @@ async function handleSessionCreate(input: { cwd: string }): Promise<{
   const sessionId = session.sessionId
   logger.info(`Created session ${sessionId}`)
 
-  // Wrap session with event handling
-  const managed = wrapSession(session, sessionId, extensionErrors, extensionsDisabled)
+  // Wrap session with event handling (async — must await bindExtensions)
+  const managed = await wrapSession(session, sessionId, extensionErrors, extensionsDisabled)
   sessions.set(sessionId, managed)
 
   return {
@@ -484,8 +484,8 @@ async function handleSessionReconnect(input: {
   // Extract history from SDK messages
   const messages = extractHistoryFromSdkMessages(session.messages)
 
-  // Wrap session with event handling
-  const managed = wrapSession(session, sessionId, extensionErrors, extensionsDisabled)
+  // Wrap session with event handling (async — must await bindExtensions)
+  const managed = await wrapSession(session, sessionId, extensionErrors, extensionsDisabled)
   managed.messages = messages
   sessions.set(sessionId, managed)
 
@@ -776,6 +776,10 @@ function handleSessionUIRespond(input: import('./types').SessionUIRespondInput):
     return { success: false }
   }
 
+  logger.info(
+    `handleSessionUIRespond: delivering UI response for session ${input.sessionId}, ` +
+    `requestId=${input.response.requestId}, confirmed=${input.response.confirmed}`
+  )
   managed.uiContext.handleResponse(input.response)
   return { success: true }
 }
@@ -853,12 +857,12 @@ async function handleProjectSaveWorkspace(input: {
 /**
  * Wrap an AgentSession with event handling
  */
-function wrapSession(
+async function wrapSession(
   session: AgentSession,
   sessionId: string,
   extensionErrors: ExtensionLoadError[],
   extensionsDisabled: boolean,
-): ManagedSession {
+): Promise<ManagedSession> {
   // Import ElectronUIContext dynamically to avoid issues in worker thread
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { ElectronUIContext, WorkerThreadUITransport } = require('../electron-ui-context')
@@ -880,12 +884,21 @@ function wrapSession(
   }
 
   // Bind the ElectronUIContext to the session's extension runner
-  // so extension ui.select(), ui.confirm(), ui.input() calls are forwarded to the renderer
+  // so extension ui.select(), ui.confirm(), ui.input() calls are forwarded to the renderer.
+  // IMPORTANT: bindExtensions is async in the SDK (returns Promise<void>) — we must await it
+  // to ensure the UI context is fully bound before any prompt can trigger ask_user.
+  // If we don't await, there's a race where a prompt could start before the extension
+  // runner's uiContext is set, causing ctx.hasUI to be false and ask_user to fail
+  // silently with a text-based error ("Ask requires interactive mode").
   try {
-    session.bindExtensions({ uiContext })
-    logger.info(`wrapSession ${sessionId} - bound ElectronUIContext`)
+    // bindExtensions may return a Promise — always await to ensure binding completes
+    await session.bindExtensions({ uiContext })
+    logger.info(`wrapSession ${sessionId} - bound ElectronUIContext successfully`)
   } catch (err) {
     logger.warn(`wrapSession ${sessionId} - failed to bind ElectronUIContext:`, err)
+    // If bindExtensions fails, ctx.hasUI will be false and ask_user will return
+    // a text-based error instead of showing a dialog. This is a degraded mode
+    // but the session is still usable for other operations.
   }
 
   // Subscribe to session events

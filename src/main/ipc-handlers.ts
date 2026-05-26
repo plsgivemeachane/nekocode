@@ -451,7 +451,14 @@ export function registerIpcHandlers(
  * Called by PiSessionManager's event callback.
  */
 export function sendEventToRenderer(sessionId: string, event: SessionStreamEvent): void {
-  logger.debug(`sendEventToRenderer sessionId=${sessionId} type=${event.type}`)
+  const eventType = (event as { type: string }).type
+  logger.debug(`sendEventToRenderer sessionId=${sessionId} type=${eventType}`)
+  // Log ui_request events at info level for easier debugging of the ask_user flow
+  if (eventType === 'ui_request') {
+    logger.info(
+      `sendEventToRenderer: forwarding ui_request for session ${sessionId} to renderer`
+    )
+  }
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
       win.webContents.send(IPC_CHANNELS.SESSION_EVENTS, { sessionId, event })

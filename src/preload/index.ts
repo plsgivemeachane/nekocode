@@ -83,6 +83,7 @@ const sessionApi: NekoCodeIPC['session'] = {
   onUIRequest: (callback: (request: import('../shared/ipc-types').UIRequest) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, data: { sessionId: string; event: import('../shared/ipc-types').SessionStreamEvent }) => {
       if (data.event.type === 'ui_request') {
+        console.log(`[preload] onUIRequest: received ui_request for session ${data.event.request?.sessionId}, requestId=${data.event.request?.id}`)
         callback(data.event.request)
       }
     }

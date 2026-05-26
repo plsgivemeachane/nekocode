@@ -331,9 +331,17 @@ export class ElectronUIContext {
   handleResponse(response: UIResponse): void {
     const pending = this.pendingRequests.get(response.requestId)
     if (!pending) {
-      logger.warn(`handleResponse: no pending request for ID ${response.requestId}`)
+      logger.warn(
+        `handleResponse: no pending request for ID ${response.requestId} (session ${this.sessionId}). ` +
+        'This could indicate a stale or duplicate response.'
+      )
       return
     }
+
+    logger.info(
+      `handleResponse: resolving request ${response.requestId} for session ${this.sessionId}, ` +
+      `confirmed=${response.confirmed}`
+    )
 
     // Clear timeout if present
     if (pending.timeoutTimer) {
@@ -458,11 +466,22 @@ export class WorkerThreadUITransport implements UIRequestTransport {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { parentPort } = require('worker_threads')
     if (parentPort) {
+      logger.info(
+        `WorkerThreadUITransport: sending ui_request event for session ${sessionId}, event type=${event.type}`
+      )
       parentPort.postMessage({
         type: 'session_event',
         sessionId,
         event,
       })
+      logger.info(
+        `WorkerThreadUITransport: ui_request event sent for session ${sessionId}`
+      )
+    } else {
+      logger.error(
+        `WorkerThreadUITransport: parentPort is null — cannot send ui_request for session ${sessionId}. ` +
+        'This means the ElectronUIContext is running outside a worker thread, which should never happen.'
+      )
     }
   }
 }

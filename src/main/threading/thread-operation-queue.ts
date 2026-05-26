@@ -170,6 +170,43 @@ export class ThreadOperationQueue {
   }
 
   /**
+   * Send a message directly to the worker that owns a session, bypassing the operation queue.
+   * This is used for operations that must be delivered even when the worker is busy
+   * processing a long-running operation (e.g., session:ui-respond while ask_user is pending).
+   *
+   * The worker's Node.js event loop can still process parentPort messages while awaiting
+   * an async operation, so this avoids the deadlock that would occur if we queued the
+   * operation and waited for the worker to become idle.
+   *
+   * @returns true if the message was sent, false if no affinity worker was found
+   */
+  sendDirectMessage(sessionId: string, type: OperationType, input: unknown): boolean {
+    if (this.isShuttingDown) {
+      logger.warn(`Cannot send direct message during shutdown`)
+      return false
+    }
+
+    const affinityWorker = this.sessionToWorker.get(sessionId)
+    if (!affinityWorker) {
+      logger.warn(`sendDirectMessage: no affinity worker for session ${sessionId}`)
+      return false
+    }
+
+    // Construct a WorkerMessage and send it directly via postMessage.
+    // The worker's parentPort message handler will process it on its event loop,
+    // even if the worker is currently awaiting a long-running async operation.
+    const message: WorkerMessage = {
+      id: `direct-${randomUUID()}`,
+      type,
+      input,
+    }
+
+    affinityWorker.worker.postMessage(message)
+    logger.debug(`Sent direct message ${type} to worker for session ${sessionId}`)
+    return true
+  }
+
+  /**
    * Gracefully shutdown all worker threads
    */
   async shutdown(): Promise<void> {
@@ -295,7 +332,14 @@ export class ThreadOperationQueue {
     const activeOp = this.activeOperations.get(response.id)
 
     if (!activeOp) {
-      logger.warn(`Received response for unknown operation: ${response.id}`)
+      // Direct messages (e.g., session:ui-respond sent via sendDirectMessage) use IDs
+      // prefixed with 'direct-'. These are fire-and-forget messages whose responses
+      // don't need to be tracked in activeOperations. Log at debug level to avoid noise.
+      if (response.id.startsWith('direct-')) {
+        logger.debug(`Received response for direct message: ${response.id}, success=${response.success}`)
+      } else {
+        logger.warn(`Received response for unknown operation: ${response.id}`)
+      }
       return
     }
 
@@ -347,6 +391,9 @@ export class ThreadOperationQueue {
    * Handle event message from worker (streaming event)
    */
   private handleWorkerEvent(message: WorkerEventMessage): void {
+    logger.debug(
+      `handleWorkerEvent: sessionId=${message.sessionId} eventType=${(message.event as { type: string }).type}`
+    )
     if (this.onSessionEvent) {
       this.onSessionEvent(message.sessionId, message.event)
     }

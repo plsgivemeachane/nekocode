@@ -42,6 +42,10 @@ import type { SessionStreamEvent } from '../shared/ipc-types'
 function createMockQueue() {
   return {
     execute: vi.fn(),
+    // sendDirectMessage bypasses the operation queue to send messages directly
+    // to the affinity worker — used for session:ui-respond and session:abort
+    // to avoid deadlocks when the worker is busy awaiting a UI response.
+    sendDirectMessage: vi.fn(() => true),
     getStats: vi.fn(() => ({
       activeThreads: 0,
       idleThreads: 1,
@@ -210,20 +214,59 @@ describe('ThreadedSessionManager', () => {
   // =========================================================================
 
   describe('abort', () => {
-    it('dispatches abort without blocking', () => {
-      queue.execute.mockReturnValue(new Promise(() => {})) // never resolves
-
-      // abort is synchronous (void return)
+    it('sends abort directly to worker via sendDirectMessage', () => {
+      // abort uses sendDirectMessage to avoid deadlock when the worker
+      // is busy processing a prompt (the worker's event loop can still
+      // process parentPort messages while awaiting async operations)
       expect(() => manager.abort('s1')).not.toThrow()
-      expect(queue.execute).toHaveBeenCalledWith('session:abort', { sessionId: 's1' }, 'high')
+      expect(queue.sendDirectMessage).toHaveBeenCalledWith('s1', 'session:abort', { sessionId: 's1' })
     })
 
-    it('silently swallows abort errors', async () => {
-      queue.execute.mockReturnValue(Promise.reject(new Error('abort failed')))
+    it('handles missing affinity worker gracefully', () => {
+      queue.sendDirectMessage.mockReturnValue(false)
 
-      manager.abort('s1')
-      // Should not throw
-      await new Promise(resolve => setTimeout(resolve, 10))
+      // Should not throw even when no worker is found
+      expect(() => manager.abort('s1')).not.toThrow()
+      expect(queue.sendDirectMessage).toHaveBeenCalledWith('s1', 'session:abort', { sessionId: 's1' })
+    })
+  })
+
+  // =========================================================================
+  // HANDLE UI RESPONSE (sendDirectMessage to avoid deadlock)
+  // =========================================================================
+
+  describe('handleUIResponse', () => {
+    it('sends UI response directly to worker via sendDirectMessage', () => {
+      const response = {
+        requestId: 'req-1',
+        sessionId: 's1',
+        confirmed: true,
+        selectedValue: 'option-a',
+      }
+
+      manager.handleUIResponse(response)
+
+      // Must use sendDirectMessage, not execute, to avoid deadlock when
+      // the worker is busy awaiting the ask_user UI response
+      expect(queue.sendDirectMessage).toHaveBeenCalledWith(
+        's1',
+        'session:ui-respond',
+        { sessionId: 's1', response }
+      )
+      expect(queue.execute).not.toHaveBeenCalled()
+    })
+
+    it('handles missing affinity worker gracefully', () => {
+      queue.sendDirectMessage.mockReturnValue(false)
+
+      const response = {
+        requestId: 'req-1',
+        sessionId: 's1',
+        confirmed: false,
+      }
+
+      // Should not throw even when no worker is found
+      expect(() => manager.handleUIResponse(response)).not.toThrow()
     })
   })
 
