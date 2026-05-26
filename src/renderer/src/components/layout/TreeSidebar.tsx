@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useProjectStore, type SessionStatus } from '../../stores/project-store'
 import { ContextMenu, type ContextMenuEntry } from '../ui/ContextMenu'
+import { VSCodeIcon } from '../icons/VSCodeIcon'
 // NotificationSettingsPanel is now in SettingsView
 import { createLogger } from '../../utils/logger'
 
@@ -235,7 +236,7 @@ export function TreeSidebar() {
         },
         {
           label: shellOpening === 'vscode' ? 'Opening VS Code...' : 'Open in VS Code',
-          icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M16.5 2.5l-9 4.5-5.5-2.5v12l5.5 2.5 9-4.5 5.5 2.5V5l-5.5-2.5zm-9 5.5l9-4.5v12l-9 4.5V8zm-4.5-2l3 1.4v9.2l-3-1.4V6zm18 12l-3-1.4V7.4l3 1.4V18z" fill="currentColor" /></svg>,
+          icon: <VSCodeIcon size={13} />,
           disabled: !vscodeAvailable || shellOpening === 'vscode',
           onClick: () => handleShellOpen('vscode', project.path),
         },
@@ -274,7 +275,7 @@ export function TreeSidebar() {
         { type: 'separator' },
         {
           label: 'Open Project in VS Code',
-          icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M16.5 2.5l-9 4.5-5.5-2.5v12l5.5 2.5 9-4.5 5.5 2.5V5l-5.5-2.5zm-9 5.5l9-4.5v12l-9 4.5V8zm-4.5-2l3 1.4v9.2l-3-1.4V6zm18 12l-3-1.4V7.4l3 1.4V18z" fill="currentColor" /></svg>,
+          icon: <VSCodeIcon size={13} />,
           disabled: !vscodeAvailable || shellOpening === 'vscode',
           onClick: () => handleShellOpen('vscode', projectPath),
         },

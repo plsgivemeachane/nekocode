@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useZoom } from '../../hooks/useZoom'
 import { useProjectStore } from '../../stores/project-store'
+import { VSCodeIcon } from '../icons/VSCodeIcon'
 
 /**
  * Top bar spanning the full window width in frameless mode.
@@ -95,12 +96,10 @@ export function NavBar() {
                 }
               }
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-300 bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/20 hover:border-blue-500/30 rounded-lg transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-surface-200 bg-surface-800/60 hover:bg-surface-700/60 border border-surface-600/30 hover:border-surface-500/40 shadow-sm shadow-surface-900/50 hover:shadow-md hover:shadow-surface-900/60 rounded-lg transition-all"
             title="Open Project in VS Code"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-              <path d="M16.5 2.5l-9 4.5-5.5-2.5v12l5.5 2.5 9-4.5 5.5 2.5V5l-5.5-2.5zm-9 5.5l9-4.5v12l-9 4.5V8zm-4.5-2l3 1.4v9.2l-3-1.4V6zm18 12l-3-1.4V7.4l3 1.4V18z" fill="currentColor" />
-            </svg>
+            <VSCodeIcon size={14} />
             <span>Open in VS Code</span>
           </button>
         </div>
