@@ -6,7 +6,7 @@ describe('IPC_CHANNELS', () => {
   const allValues = Object.values(channels)
 
   it('has expected number of channels', () => {
-    expect(allValues).toHaveLength(45)
+    expect(allValues).toHaveLength(64)
   })
 
   it('has no duplicate values', () => {
@@ -132,6 +132,25 @@ it('IpcChannel type is a union of all values', () => {
       'UPDATE_DOWNLOADED',
       'UPDATE_ERROR',
       'GIT_GET_BRANCH',
+      'GIT_STATUS',
+      'GIT_LOG',
+      'GIT_DIFF',
+      'GIT_DIFF_SUMMARY',
+      'GIT_STAGE',
+      'GIT_UNSTAGE',
+      'GIT_STAGE_ALL',
+      'GIT_UNSTAGE_ALL',
+      'GIT_COMMIT',
+      'GIT_PUSH',
+      'GIT_PULL',
+      'GIT_FETCH',
+      'GIT_BRANCH_LIST',
+      'GIT_BRANCH_CREATE',
+      'GIT_BRANCH_SWITCH',
+      'GIT_STASH',
+      'GIT_STASH_POP',
+      'GIT_STASH_LIST',
+      'GIT_REMOTE_URL',
       'ZOOM_GET',
       'ZOOM_SET',
       'ZOOM_RESET',

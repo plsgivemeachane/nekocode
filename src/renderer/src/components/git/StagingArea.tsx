@@ -1,0 +1,231 @@
+/**
+ * StagingArea — Shows staged and unstaged file lists
+ * with stage/unstage buttons per file and bulk actions.
+ *
+ * Follows the design from docs/features/github-interaction.md:
+ * - Staged Changes section with unstage per file
+ * - Changes section (unstaged + untracked) with stage per file
+ * - Color-coded status badges (M=yellow, A=green, D=red, ?=gray)
+ */
+
+import React, { useCallback } from 'react'
+import type { GitFileStatus } from '../../../../shared/ipc-types'
+import { PlusIcon, MinusIcon, FileChangedIcon } from './GitIcons'
+
+// ━━ Status color mapping ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/** Map a git status code to a display label and color */
+function getStatusStyle(code: string): { label: string; colorClass: string } {
+  switch (code) {
+    case 'M':
+      return { label: 'M', colorClass: 'text-yellow-500' }
+    case 'A':
+      return { label: 'A', colorClass: 'text-green-500' }
+    case 'D':
+      return { label: 'D', colorClass: 'text-red-500' }
+    case 'R':
+      return { label: 'R', colorClass: 'text-orange-500' }
+    case 'C':
+      return { label: 'C', colorClass: 'text-blue-500' }
+    case '?':
+      return { label: 'U', colorClass: 'text-gray-500' }
+    case '!':
+      return { label: 'I', colorClass: 'text-gray-400' }
+    case 'U':
+      return { label: 'C', colorClass: 'text-red-600' } // conflict
+    default:
+      return { label: code || '·', colorClass: 'text-gray-400' }
+  }
+}
+
+// ━━ Props ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+interface StagingAreaProps {
+  /** Staged files */
+  staged: GitFileStatus[]
+  /** Unstaged (modified + untracked) files */
+  unstaged: GitFileStatus[]
+  /** Conflicting files */
+  conflicting: GitFileStatus[]
+  /** Callback when a file is clicked (for diff viewing) */
+  onFileSelect: (filePath: string, staged: boolean) => void
+  /** Currently selected file path */
+  selectedFilePath: string | null
+  /** Stage a single file */
+  onStage: (filePath: string) => void
+  /** Unstage a single file */
+  onUnstage: (filePath: string) => void
+  /** Stage all changes */
+  onStageAll: () => void
+  /** Unstage all changes */
+  onUnstageAll: () => void
+}
+
+// ━━ File row sub-component ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+interface FileRowProps {
+  file: GitFileStatus
+  /** Which status code to show (index or workingTree) */
+  statusCode: string
+  /** Whether this row is selected */
+  isSelected: boolean
+  /** Click handler */
+  onClick: () => void
+  /** Action button icon: stage (+) or unstage (-) */
+  actionIcon: 'stage' | 'unstage'
+  /** Action button handler */
+  onAction: () => void
+}
+
+function FileRow({ file, statusCode, isSelected, onClick, actionIcon, onAction }: FileRowProps) {
+  const { label, colorClass } = getStatusStyle(statusCode)
+
+  return (
+    <div
+      className={`
+        flex items-center gap-2 px-2 py-1 text-xs cursor-pointer group
+        ${isSelected ? 'bg-accent/10 text-accent' : 'hover:bg-white/5'}
+      `}
+      onClick={onClick}
+    >
+      {/* Status badge */}
+      <span className={`w-4 text-center font-mono font-bold ${colorClass}`} title={statusCode}>
+        {label}
+      </span>
+
+      {/* File path */}
+      <span className="flex-1 truncate" title={file.path}>
+        {file.path}
+      </span>
+
+      {/* Stage/Unstage button */}
+      <button
+        className="
+          opacity-0 group-hover:opacity-100 transition-opacity
+          p-0.5 rounded hover:bg-white/10
+        "
+        onClick={(e) => {
+          e.stopPropagation()
+          onAction()
+        }}
+        title={actionIcon === 'stage' ? 'Stage file' : 'Unstage file'}
+      >
+        {actionIcon === 'stage' ? (
+          <PlusIcon size={14} className="text-green-400" />
+        ) : (
+          <MinusIcon size={14} className="text-red-400" />
+        )}
+      </button>
+    </div>
+  )
+}
+
+// ━━ StagingArea component ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+export function StagingArea({
+  staged,
+  unstaged,
+  conflicting,
+  onFileSelect,
+  selectedFilePath,
+  onStage,
+  onUnstage,
+  onStageAll,
+  onUnstageAll,
+}: StagingAreaProps) {
+  const hasStaged = staged.length > 0
+  const hasUnstaged = unstaged.length > 0
+  const hasConflicts = conflicting.length > 0
+
+  const handleFileClick = useCallback(
+    (filePath: string, isStaged: boolean) => {
+      onFileSelect(filePath, isStaged)
+    },
+    [onFileSelect]
+  )
+
+  return (
+    <div className="flex flex-col text-xs select-none">
+      {/* ── Conflicting files (if any) ── */}
+      {hasConflicts && (
+        <div className="mb-1">
+          <div className="flex items-center gap-1 px-2 py-1.5 font-semibold text-red-400 bg-red-500/5">
+            <FileChangedIcon size={14} />
+            <span>Merge Conflicts ({conflicting.length})</span>
+          </div>
+          {conflicting.map((file) => (
+            <FileRow
+              key={file.path}
+              file={file}
+              statusCode={file.index}
+              isSelected={selectedFilePath === file.path}
+              onClick={() => handleFileClick(file.path, false)}
+              actionIcon="stage"
+              onAction={() => onStage(file.path)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* ── Staged Changes ── */}
+      <div className="mb-1">
+        <div className="flex items-center justify-between px-2 py-1.5 font-semibold text-green-400 bg-green-500/5">
+          <div className="flex items-center gap-1">
+            <FileChangedIcon size={14} />
+            <span>Staged Changes ({staged.length})</span>
+          </div>
+          {hasStaged && (
+            <button
+              className="p-0.5 rounded hover:bg-white/10 text-green-400/60 hover:text-green-400"
+              onClick={onUnstageAll}
+              title="Unstage all"
+            >
+              <MinusIcon size={14} />
+            </button>
+          )}
+        </div>
+        {staged.map((file) => (
+          <FileRow
+            key={file.path}
+            file={file}
+            statusCode={file.index}
+            isSelected={selectedFilePath === file.path}
+            onClick={() => handleFileClick(file.path, true)}
+            actionIcon="unstage"
+            onAction={() => onUnstage(file.path)}
+          />
+        ))}
+      </div>
+
+      {/* ── Changes (unstaged + untracked) ── */}
+      <div>
+        <div className="flex items-center justify-between px-2 py-1.5 font-semibold text-yellow-400 bg-yellow-500/5">
+          <div className="flex items-center gap-1">
+            <FileChangedIcon size={14} />
+            <span>Changes ({unstaged.length})</span>
+          </div>
+          {hasUnstaged && (
+            <button
+              className="p-0.5 rounded hover:bg-white/10 text-yellow-400/60 hover:text-yellow-400"
+              onClick={onStageAll}
+              title="Stage all"
+            >
+              <PlusIcon size={14} />
+            </button>
+          )}
+        </div>
+        {unstaged.map((file) => (
+          <FileRow
+            key={file.path}
+            file={file}
+            statusCode={file.workingTree}
+            isSelected={selectedFilePath === file.path}
+            onClick={() => handleFileClick(file.path, false)}
+            actionIcon="stage"
+            onAction={() => onStage(file.path)}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}

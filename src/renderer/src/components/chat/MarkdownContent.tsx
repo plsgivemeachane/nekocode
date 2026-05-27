@@ -1,7 +1,8 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react'
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { getSingletonHighlighter, type Highlighter } from 'shiki'
+import DOMPurify from 'dompurify'
 
 // ─── LRU Cache for highlighted HTML ───
 
@@ -183,12 +184,17 @@ function CodeBlockWithShiki({ code, language }: CodeBlockWithShikiProps) {
     )
   }
 
+  // Security: Sanitize Shiki output with DOMPurify before rendering.
+  // While Shiki is generally safe (only produces <span> elements), a compromised
+  // Shiki version, a malicious language grammar, or cache poisoning could inject XSS.
+  const sanitizedHtml = useMemo(() => DOMPurify.sanitize(html), [html])
+
   return (
     <div className="code-block-container">
       <CopyButton text={code} />
       <div
         className="shiki-wrapper"
-        dangerouslySetInnerHTML={{ __html: html }}
+        dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
       />
     </div>
   )

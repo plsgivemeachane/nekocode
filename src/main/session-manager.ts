@@ -272,7 +272,9 @@ export class PiSessionManager {
 
   /** Send a user prompt to an active session. */
   async prompt(sessionId: string, text: string): Promise<void> {
-    logger.info(`Prompt ${sessionId} text=${text.slice(0, 120)}${text.length > 120 ? '...' : ''}`)
+    // Security: Do not log user prompt text — may contain sensitive data (passwords, API keys, PII)
+    // Log only the session ID and prompt length for debugging
+    logger.info(`Prompt ${sessionId} textLength=${text.length}`)
     const managed = this.getManaged(sessionId)
     logger.debug(`Prompt ${sessionId} - streaming state: currentAssistantId=${managed.currentAssistantId ?? 'none'}, currentToolCallId=${managed.currentToolCallId ?? 'none'}`)
     if (!managed.hasPrompted) {

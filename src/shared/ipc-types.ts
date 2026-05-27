@@ -321,6 +321,160 @@ export interface ShellApi {
   checkVscodeAvailable: () => Promise<{ available: boolean; command: string | null; method: 'cli' | 'uri' | null }>
 }
 
+// ━━ Git Types ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/** Status of a single file in git */
+export interface GitFileStatus {
+  /** Relative file path */
+  path: string
+  /** Index status code (staged): A=added, M=modified, D=deleted, R=renamed, C=copied, ?=untracked, !=ignored */
+  index: string
+  /** Working tree status code (unstaged) */
+  workingTree: string
+}
+
+/** Result of git status */
+export interface GitStatusResult {
+  /** Current branch name */
+  current: string | null
+  /** Whether the working directory is clean */
+  isClean: boolean
+  /** Staged files */
+  staged: GitFileStatus[]
+  /** Modified/unstaged files (not including untracked) */
+  modified: GitFileStatus[]
+  /** Untracked files */
+  untracked: GitFileStatus[]
+  /** Files with merge conflicts */
+  conflicting: GitFileStatus[]
+  /** Ahead of remote by this many commits */
+  ahead: number
+  /** Behind remote by this many commits */
+  behind: number
+}
+
+/** A single commit entry */
+export interface GitLogEntry {
+  /** Full commit hash */
+  hash: string
+  /** Abbreviated commit hash */
+  hashAbbrev: string
+  /** Commit message (first line) */
+  message: string
+  /** Author name */
+  author: string
+  /** Author email */
+  authorEmail: string
+  /** Commit date as ISO string */
+  date: string
+  /** Parent commit hashes */
+  parents: string[]
+  /** Relative time string (e.g., '2 hours ago') */
+  relativeDate: string
+}
+
+/** Result of git log */
+export interface GitLogResult {
+  /** All commits */
+  commits: GitLogEntry[]
+  /** Total commit count (may be more than returned if paginated) */
+  total: number
+}
+
+/** Result of git diff (raw patch text) */
+export interface GitDiffResult {
+  /** Raw diff/patch output */
+  patch: string
+}
+
+/** Summary of changes in a file */
+export interface GitDiffSummaryEntry {
+  /** File path */
+  file: string
+  /** Number of insertions */
+  insertions: number
+  /** Number of deletions */
+  deletions: number
+  /** Whether the file is binary */
+  binary: boolean
+}
+
+/** Result of git diff --stat */
+export interface GitDiffSummaryResult {
+  /** Per-file change summaries */
+  files: GitDiffSummaryEntry[]
+  /** Total insertions across all files */
+  insertions: number
+  /** Total deletions across all files */
+  deletions: number
+}
+
+/** Result of a commit operation */
+export interface GitCommitResult {
+  /** Full commit hash */
+  hash: string
+  /** Abbreviated commit hash */
+  hashAbbrev: string
+  /** Branch name */
+  branch: string
+}
+
+/** A branch reference */
+export interface GitBranchRef {
+  /** Branch name */
+  name: string
+  /** Full ref name (e.g., refs/heads/main) */
+  refName: string
+  /** Whether this is the current branch */
+  current: boolean
+  /** Latest commit hash on this branch */
+  commitHash: string
+  /** Latest commit message on this branch */
+  commitMessage: string
+  /** Whether this is a remote branch */
+  isRemote: boolean
+}
+
+/** Result of listing branches */
+export interface GitBranchListResult {
+  /** All branches */
+  branches: GitBranchRef[]
+  /** Current branch name */
+  current: string | null
+}
+
+/** Result of git pull */
+export interface GitPullResult {
+  /** Whether any changes were pulled */
+  changed: boolean
+  /** Number of files changed */
+  fileChanges: number
+  /** Number of insertions */
+  insertions: number
+  /** Number of deletions */
+  deletions: number
+}
+
+/** A stash entry */
+export interface GitStashEntry {
+  /** Stash index */
+  index: number
+  /** Stash message/description */
+  message: string
+  /** Branch name where stash was created */
+  branchName: string
+  /** Commit hash */
+  hash: string
+  /** Date as ISO string */
+  date: string
+}
+
+/** Result of listing stashes */
+export interface GitStashListResult {
+  /** All stash entries */
+  stashes: GitStashEntry[]
+}
+
 // ━━ Coms (inter-agent messaging) Types ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
@@ -359,6 +513,44 @@ export interface NekoCodeIPC {
   }
   git: {
     getBranch: (cwd: string) => Promise<string | null>
+    /** Get the full git status (staged, unstaged, untracked, conflicting) */
+    getStatus: (cwd: string) => Promise<GitStatusResult>
+    /** Get commit log */
+    getLog: (cwd: string, maxCount?: number) => Promise<GitLogResult>
+    /** Get diff for a specific file or all files */
+    getDiff: (cwd: string, filePath?: string, staged?: boolean) => Promise<GitDiffResult>
+    /** Get a summary of file changes (insertions/deletions per file) */
+    getDiffSummary: (cwd: string, staged?: boolean) => Promise<GitDiffSummaryResult>
+    /** Stage a file */
+    stage: (cwd: string, filePath: string) => Promise<void>
+    /** Unstage a file */
+    unstage: (cwd: string, filePath: string) => Promise<void>
+    /** Stage all changes */
+    stageAll: (cwd: string) => Promise<void>
+    /** Unstage all changes */
+    unstageAll: (cwd: string) => Promise<void>
+    /** Commit staged changes with a message */
+    commit: (cwd: string, message: string) => Promise<GitCommitResult>
+    /** Push to remote */
+    push: (cwd: string, remote?: string, branch?: string) => Promise<void>
+    /** Pull from remote */
+    pull: (cwd: string, remote?: string, branch?: string) => Promise<GitPullResult>
+    /** Fetch from remote */
+    fetch: (cwd: string, remote?: string) => Promise<void>
+    /** List branches */
+    branchList: (cwd: string) => Promise<GitBranchListResult>
+    /** Create a new branch */
+    branchCreate: (cwd: string, name: string, checkout?: boolean) => Promise<void>
+    /** Switch to a branch */
+    branchSwitch: (cwd: string, name: string) => Promise<void>
+    /** Stash current changes */
+    stash: (cwd: string, message?: string) => Promise<void>
+    /** Pop the latest stash */
+    stashPop: (cwd: string) => Promise<void>
+    /** List stashes */
+    stashList: (cwd: string) => Promise<GitStashListResult>
+    /** Get remote URL */
+    getRemoteUrl: (cwd: string, remote?: string) => Promise<string | null>
   }
   update: {
     check: () => Promise<UpdateAvailableInfo | null>

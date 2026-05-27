@@ -3,6 +3,7 @@ import { ProjectProvider, useProjectStore } from './stores/project-store'
 import { TreeSidebar } from './components/layout/TreeSidebar'
 import { ChatView } from './components/chat/ChatView'
 import { SettingsView } from './components/settings/SettingsView'
+import { GitView } from './components/git'
 import { NavBar } from './components/layout/NavBar'
 import { createLogger } from './utils/logger'
 import { soundManager } from './utils/sound-manager'
@@ -27,6 +28,8 @@ function AppLayout() {
         <TreeSidebar />
         {state.activeView === 'settings' ? (
           <SettingsView />
+        ) : state.activeView === 'git' ? (
+          <GitView />
         ) : (
           <ChatView sessionId={state.activeSessionId} className="flex-1 min-w-0" />
         )}

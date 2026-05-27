@@ -113,6 +113,44 @@ contextBridge.exposeInMainWorld('nekocode', {
   git: {
     getBranch: (cwd: string): Promise<string | null> =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_GET_BRANCH, { cwd }),
+    getStatus: (cwd: string): Promise<import('../shared/ipc-types').GitStatusResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_STATUS, { cwd }),
+    getLog: (cwd: string, maxCount?: number): Promise<import('../shared/ipc-types').GitLogResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_LOG, { cwd, maxCount }),
+    getDiff: (cwd: string, filePath?: string, staged?: boolean): Promise<import('../shared/ipc-types').GitDiffResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_DIFF, { cwd, filePath, staged }),
+    getDiffSummary: (cwd: string, staged?: boolean): Promise<import('../shared/ipc-types').GitDiffSummaryResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_DIFF_SUMMARY, { cwd, staged }),
+    stage: (cwd: string, filePath: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_STAGE, { cwd, filePath }),
+    unstage: (cwd: string, filePath: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_UNSTAGE, { cwd, filePath }),
+    stageAll: (cwd: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_STAGE_ALL, { cwd }),
+    unstageAll: (cwd: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_UNSTAGE_ALL, { cwd }),
+    commit: (cwd: string, message: string): Promise<import('../shared/ipc-types').GitCommitResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_COMMIT, { cwd, message }),
+    push: (cwd: string, remote?: string, branch?: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_PUSH, { cwd, remote, branch }),
+    pull: (cwd: string, remote?: string, branch?: string): Promise<import('../shared/ipc-types').GitPullResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_PULL, { cwd, remote, branch }),
+    fetch: (cwd: string, remote?: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_FETCH, { cwd, remote }),
+    branchList: (cwd: string): Promise<import('../shared/ipc-types').GitBranchListResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_BRANCH_LIST, { cwd }),
+    branchCreate: (cwd: string, name: string, checkout?: boolean): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_BRANCH_CREATE, { cwd, name, checkout }),
+    branchSwitch: (cwd: string, name: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_BRANCH_SWITCH, { cwd, name }),
+    stash: (cwd: string, message?: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_STASH, { cwd, message }),
+    stashPop: (cwd: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_STASH_POP, { cwd }),
+    stashList: (cwd: string): Promise<import('../shared/ipc-types').GitStashListResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_STASH_LIST, { cwd }),
+    getRemoteUrl: (cwd: string, remote?: string): Promise<string | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_REMOTE_URL, { cwd, remote }),
   },
   dialog: {
     openFolder: (): Promise<string | null> =>

@@ -1,7 +1,9 @@
 import { ipcMain, BrowserWindow, dialog, shell } from 'electron'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import { gitOperationsManager } from './git-operations-manager'
 import { IPC_CHANNELS } from '../shared/ipc-channels'
+import { validateIpcSender, validatePathWithinProject, stripShellMetacharacters } from './security-utils'
 import type {
   SessionCreatePayload,
   SessionCreateResult,
@@ -45,6 +47,7 @@ export function registerIpcHandlers(
   // --- Session handlers ---
 
   ipcMain.handle(IPC_CHANNELS.SESSION_CREATE, async (_event, payload: SessionCreatePayload): Promise<SessionCreateResult> => {
+    validateIpcSender(_event)
     logger.info(`SESSION_CREATE cwd=${payload.cwd}`)
     try {
       const sessionId = await sessionManager.create(payload.cwd)
@@ -59,7 +62,10 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle(IPC_CHANNELS.SESSION_PROMPT, async (_event, payload: SessionPromptPayload): Promise<void> => {
-    logger.info(`SESSION_PROMPT sessionId=${payload.sessionId} text=${payload.text.slice(0, 80)}`)
+    validateIpcSender(_event)
+    // Security: Do not log user prompt text — may contain sensitive data (passwords, API keys, PII)
+    // Log only the session ID and prompt length for debugging
+    logger.info(`SESSION_PROMPT sessionId=${payload.sessionId} textLength=${payload.text.length}`)
     try {
       await sessionManager.prompt(payload.sessionId, payload.text)
     } catch (err) {
@@ -69,21 +75,25 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle(IPC_CHANNELS.SESSION_ABORT, async (_event, payload: SessionAbortPayload): Promise<void> => {
+    validateIpcSender(_event)
     logger.info(`SESSION_ABORT sessionId=${payload.sessionId}`)
     sessionManager.abort(payload.sessionId)
   })
 
   ipcMain.handle(IPC_CHANNELS.SESSION_DISPOSE, async (_event, payload: SessionDisposePayload): Promise<void> => {
+    validateIpcSender(_event)
     logger.info(`SESSION_DISPOSE sessionId=${payload.sessionId}`)
     sessionManager.dispose(payload.sessionId)
   })
 
   ipcMain.handle(IPC_CHANNELS.SESSION_DELETE, async (_event, payload: SessionDeletePayload): Promise<void> => {
+    validateIpcSender(_event)
     logger.info(`SESSION_DELETE sessionId=${payload.sessionId} cwd=${payload.cwd}`)
     await sessionManager.deleteSession(payload.sessionId, payload.cwd)
   })
 
   ipcMain.handle(IPC_CHANNELS.SESSION_RECONNECT, async (_event, payload: SessionReconnectPayload): Promise<SessionReconnectResult> => {
+    validateIpcSender(_event)
     logger.info(`SESSION_RECONNECT sessionId=${payload.sessionId} cwd=${payload.cwd}`)
     try {
       const history = await sessionManager.reconnect(payload.sessionId, payload.cwd)
@@ -229,14 +239,113 @@ export function registerIpcHandlers(
   })
 
   // --- Git handlers ---
+  // Note: All Git operations are delegated to GitOperationsManager (simple-git based)
+  // The old execFile-based GIT_GET_BRANCH is replaced by gitOperationsManager.getBranch
 
   ipcMain.handle(IPC_CHANNELS.GIT_GET_BRANCH, async (_event, payload: { cwd: string }): Promise<string | null> => {
-    try {
-      const { stdout } = await execFileAsync('git', ['branch', '--show-current'], { cwd: payload.cwd })
-      return stdout.trim() || null
-    } catch {
-      return null
-    }
+    logger.debug(`GIT_GET_BRANCH cwd=${payload.cwd}`)
+    return gitOperationsManager.getBranch(payload.cwd)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_STATUS, async (_event, payload: { cwd: string }): Promise<import('../shared/ipc-types').GitStatusResult> => {
+    logger.debug(`GIT_STATUS cwd=${payload.cwd}`)
+    return gitOperationsManager.getStatus(payload.cwd)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_LOG, async (_event, payload: { cwd: string; maxCount?: number }): Promise<import('../shared/ipc-types').GitLogResult> => {
+    logger.debug(`GIT_LOG cwd=${payload.cwd} maxCount=${payload.maxCount}`)
+    return gitOperationsManager.getLog(payload.cwd, payload.maxCount)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_DIFF, async (_event, payload: { cwd: string; filePath?: string; staged?: boolean }): Promise<import('../shared/ipc-types').GitDiffResult> => {
+    logger.debug(`GIT_DIFF cwd=${payload.cwd} file=${payload.filePath} staged=${payload.staged}`)
+    return gitOperationsManager.getDiff(payload.cwd, payload.filePath, payload.staged)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_DIFF_SUMMARY, async (_event, payload: { cwd: string; staged?: boolean }): Promise<import('../shared/ipc-types').GitDiffSummaryResult> => {
+    logger.debug(`GIT_DIFF_SUMMARY cwd=${payload.cwd} staged=${payload.staged}`)
+    return gitOperationsManager.getDiffSummary(payload.cwd, payload.staged)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_STAGE, async (_event, payload: { cwd: string; filePath: string }): Promise<void> => {
+    validateIpcSender(_event)
+    // Security: Validate that filePath stays within the project directory
+    validatePathWithinProject(payload.filePath, payload.cwd)
+    logger.debug(`GIT_STAGE cwd=${payload.cwd} file=${payload.filePath}`)
+    return gitOperationsManager.stage(payload.cwd, payload.filePath)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_UNSTAGE, async (_event, payload: { cwd: string; filePath: string }): Promise<void> => {
+    validateIpcSender(_event)
+    // Security: Validate that filePath stays within the project directory
+    validatePathWithinProject(payload.filePath, payload.cwd)
+    logger.debug(`GIT_UNSTAGE cwd=${payload.cwd} file=${payload.filePath}`)
+    return gitOperationsManager.unstage(payload.cwd, payload.filePath)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_STAGE_ALL, async (_event, payload: { cwd: string }): Promise<void> => {
+    logger.debug(`GIT_STAGE_ALL cwd=${payload.cwd}`)
+    return gitOperationsManager.stageAll(payload.cwd)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_UNSTAGE_ALL, async (_event, payload: { cwd: string }): Promise<void> => {
+    logger.debug(`GIT_UNSTAGE_ALL cwd=${payload.cwd}`)
+    return gitOperationsManager.unstageAll(payload.cwd)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_COMMIT, async (_event, payload: { cwd: string; message: string }): Promise<import('../shared/ipc-types').GitCommitResult> => {
+    logger.debug(`GIT_COMMIT cwd=${payload.cwd}`)
+    return gitOperationsManager.commit(payload.cwd, payload.message)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_PUSH, async (_event, payload: { cwd: string; remote?: string; branch?: string }): Promise<void> => {
+    logger.debug(`GIT_PUSH cwd=${payload.cwd}`)
+    return gitOperationsManager.push(payload.cwd, payload.remote, payload.branch)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_PULL, async (_event, payload: { cwd: string; remote?: string; branch?: string }): Promise<import('../shared/ipc-types').GitPullResult> => {
+    logger.debug(`GIT_PULL cwd=${payload.cwd}`)
+    return gitOperationsManager.pull(payload.cwd, payload.remote, payload.branch)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_FETCH, async (_event, payload: { cwd: string; remote?: string }): Promise<void> => {
+    logger.debug(`GIT_FETCH cwd=${payload.cwd}`)
+    return gitOperationsManager.fetch(payload.cwd, payload.remote)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_BRANCH_LIST, async (_event, payload: { cwd: string }): Promise<import('../shared/ipc-types').GitBranchListResult> => {
+    logger.debug(`GIT_BRANCH_LIST cwd=${payload.cwd}`)
+    return gitOperationsManager.branchList(payload.cwd)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_BRANCH_CREATE, async (_event, payload: { cwd: string; name: string; checkout?: boolean }): Promise<void> => {
+    logger.debug(`GIT_BRANCH_CREATE cwd=${payload.cwd} name=${payload.name}`)
+    return gitOperationsManager.branchCreate(payload.cwd, payload.name, payload.checkout)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_BRANCH_SWITCH, async (_event, payload: { cwd: string; name: string }): Promise<void> => {
+    logger.debug(`GIT_BRANCH_SWITCH cwd=${payload.cwd} name=${payload.name}`)
+    return gitOperationsManager.branchSwitch(payload.cwd, payload.name)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_STASH, async (_event, payload: { cwd: string; message?: string }): Promise<void> => {
+    logger.debug(`GIT_STASH cwd=${payload.cwd}`)
+    return gitOperationsManager.stash(payload.cwd, payload.message)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_STASH_POP, async (_event, payload: { cwd: string }): Promise<void> => {
+    logger.debug(`GIT_STASH_POP cwd=${payload.cwd}`)
+    return gitOperationsManager.stashPop(payload.cwd)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_STASH_LIST, async (_event, payload: { cwd: string }): Promise<import('../shared/ipc-types').GitStashListResult> => {
+    logger.debug(`GIT_STASH_LIST cwd=${payload.cwd}`)
+    return gitOperationsManager.stashList(payload.cwd)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GIT_REMOTE_URL, async (_event, payload: { cwd: string; remote?: string }): Promise<string | null> => {
+    logger.debug(`GIT_REMOTE_URL cwd=${payload.cwd}`)
+    return gitOperationsManager.getRemoteUrl(payload.cwd, payload.remote)
   })
 
   // --- Zoom handlers ---
@@ -303,6 +412,7 @@ export function registerIpcHandlers(
 
   /** Open a path in VS Code. Uses URI scheme first (instant), then CLI fallback. */
   ipcMain.handle(IPC_CHANNELS.SHELL_OPEN_IN_VSCODE, async (_event, { path: targetPath }: { path: string }): Promise<boolean> => {
+    validateIpcSender(_event)
     logger.debug(`SHELL_OPEN_IN_VSCODE path=${targetPath}`)
 
     // Normalize Windows backslashes to forward slashes for URI compatibility.
@@ -343,6 +453,7 @@ export function registerIpcHandlers(
 
   /** Open a folder in the system file explorer (Explorer on Windows, Finder on macOS). */
   ipcMain.handle(IPC_CHANNELS.SHELL_OPEN_IN_EXPLORER, async (_event, { path: targetPath }: { path: string }): Promise<boolean> => {
+    validateIpcSender(_event)
     logger.debug(`SHELL_OPEN_IN_EXPLORER path=${targetPath}`)
     try {
       // shell.openPath() returns an empty string on success, or an error message on failure.

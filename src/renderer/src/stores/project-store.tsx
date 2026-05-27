@@ -25,7 +25,7 @@ const logger = createLogger('project-store')
 export type SessionStatus = 'idle' | 'streaming' | 'error'
 
 /** Which main view is currently shown in the content area */
-export type ActiveView = 'chat' | 'settings'
+export type ActiveView = 'chat' | 'settings' | 'git'
 
 interface ProjectState {
   projects: ProjectInfo[]

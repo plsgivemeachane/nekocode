@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, shell } from 'electron'
+import { app, BrowserWindow, Menu, shell, session } from 'electron'
 import { join } from 'path'
 import { ProjectManager } from './project-manager'
 import { registerIpcHandlers, sendEventToRenderer } from './ipc-handlers'
@@ -62,9 +62,35 @@ function createWindow(): BrowserWindow {
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: true,
+      contextIsolation: true
     }
   })
+
+  // Security: Set Content Security Policy to prevent XSS, data exfiltration,
+  // and unauthorized script execution.
+  // - script-src 'self': Only load scripts from the app's own origin
+  // - style-src 'self' 'unsafe-inline': Tailwind CSS requires inline styles
+  // - connect-src 'self': API calls only to same origin (renderer->main via IPC)
+  //   Plus specific AI provider endpoints for direct streaming if needed
+  // - img-src 'self' data: https:: Images from app, data URIs, and HTTPS
+  // - font-src 'self': Fonts only from app origin
+  // - default-src 'self': Fallback - only same-origin resources
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self'; " +
+          "script-src 'self'; " +
+          "style-src 'self' 'unsafe-inline'; " +
+          "connect-src 'self' https://api.anthropic.com https://api.openai.com https://generativelanguage.googleapis.com https://*.gitlab.com; " +
+          "img-src 'self' data: https:; " +
+          "font-src 'self'"
+        ]
+      }
+    })
+    })
 
   // Forward maximize/unmaximize state changes to renderer for custom titlebar
   mainWindow.on('maximize', () => {
@@ -81,16 +107,32 @@ function createWindow(): BrowserWindow {
 
   mainWindow.setMenuBarVisibility(false)
 
+  // Security: Only allow http: and https: URLs to be opened externally.
+  // Block file://, javascript:, and custom scheme URLs that could be used
+  // for local file access, XSS, or protocol handler abuse.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
+    try {
+      const parsed = new URL(url)
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        shell.openExternal(url)
+      } else {
+        logger.warn(`Blocked openExternal for non-HTTP URL: ${url}`)
+      }
+    } catch {
+      logger.warn(`Blocked invalid URL in setWindowOpenHandler: ${url}`)
+    }
     return { action: 'deny' }
   })
 
   // Keyboard shortcuts for zoom and DevTools
   mainWindow.webContents.on('before-input-event', (event, input) => {
+    // Security: Only allow DevTools toggle in development mode.
+    // Disabling in production prevents exposure of sensitive state and API keys.
     if (input.key === 'F12' && !input.control && !input.meta && !input.alt && !input.shift) {
       event.preventDefault()
-      mainWindow.webContents.toggleDevTools()
+      if (!app.isPackaged) {
+        mainWindow.webContents.toggleDevTools()
+      }
       return
     }
 

@@ -368,10 +368,25 @@ export function TreeSidebar() {
       </div>
 
       {/* Settings button at sidebar bottom */}
-      <div className="px-3 py-3 border-t border-surface-800/50">
+      <div className="px-3 py-3 border-t border-surface-800/50 space-y-1">
+        {/* Git button */}
+        <button
+          onClick={() => setActiveView('git')}
+          className={`w-full flex items-center gap-2 px-2.5 py-[7px] ${state.activeView === 'git' ? 'text-accent bg-accent/10 border-accent/20' : 'text-text-secondary hover:text-text-primary hover:bg-surface-800/80 border-transparent hover:border-surface-600'} rounded-lg border transition-colors duration-200`}
+          title="Git"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M6 3.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm0 0V11a2 2 0 0 0 2 2h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M13 3.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M13 12.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span className="text-[13px] font-medium">Git</span>
+        </button>
+
+        {/* Settings button */}
         <button
           onClick={() => setActiveView('settings')}
-          className="w-full flex items-center gap-2 px-2.5 py-[7px] text-text-secondary hover:text-text-primary hover:bg-surface-800/80 rounded-lg border border-transparent hover:border-surface-600 transition-colors duration-200"
+          className={`w-full flex items-center gap-2 px-2.5 py-[7px] ${state.activeView === 'settings' ? 'text-accent bg-accent/10 border-accent/20' : 'text-text-secondary hover:text-text-primary hover:bg-surface-800/80 border-transparent hover:border-surface-600'} rounded-lg border transition-colors duration-200`}
           title="Settings"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
