@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useZoom } from '../../hooks/useZoom'
 import { useProjectStore } from '../../stores/project-store'
 import { VSCodeIcon } from '../icons/VSCodeIcon'
@@ -13,6 +13,8 @@ export function NavBar() {
   const { zoom, zoomIn, zoomOut, resetZoom, minZoom, maxZoom } = useZoom()
   const { addProject, state: projectState } = useProjectStore()
   const [isMaximized, setIsMaximized] = useState(false)
+  const [openDropdown, setOpenDropdown] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
   const percentage = Math.round(zoom * 100)
 
   // Subscribe to maximize state changes from the main process
@@ -48,6 +50,19 @@ export function NavBar() {
       await addProject(folder)
     }
   }, [addProject])
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpenDropdown(false)
+      }
+    }
+    if (openDropdown) {
+      document.addEventListener("mousedown", handleClickOutside)
+      return () => document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [openDropdown])
 
   return (
     <header
@@ -85,23 +100,71 @@ export function NavBar() {
             </svg>
           </button>
 
-          {/* Open in VS Code button - highlighted with background and text label */}
-          <button
-            onClick={async () => {
-              if (projectState.activeProjectPath) {
-                const success = await window.nekocode.shell.openInVscode(projectState.activeProjectPath)
-                if (!success) {
-                  // Could show a toast/notification here in the future
-                  console.warn('VS Code not found on system')
-                }
-              }
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-surface-200 bg-surface-800/60 hover:bg-surface-700/60 border border-surface-600/30 hover:border-surface-500/40 shadow-sm shadow-surface-900/50 hover:shadow-md hover:shadow-surface-900/60 rounded-lg transition-all"
-            title="Open Project in VS Code"
-          >
-            <VSCodeIcon size={14} />
-            <span>Open in VS Code</span>
-          </button>
+          {/* Open in VS Code split button with dropdown */}
+          <div className="relative" ref={dropdownRef}>
+            <div className="flex">
+              {/* Main action: Open in VS Code — rounded left only */}
+              <button
+                onClick={async () => {
+                  if (projectState.activeProjectPath) {
+                    const success = await window.nekocode.shell.openInVscode(projectState.activeProjectPath)
+                    if (!success) {
+                      console.warn('VS Code not found on system')
+                    }
+                  }
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-surface-200 bg-surface-800/60 hover:bg-surface-700/60 border border-surface-600/30 hover:border-surface-500/40 border-r-0 shadow-sm shadow-surface-900/50 hover:shadow-md hover:shadow-surface-900/60 rounded-l-lg rounded-r-none transition-all"
+                title="Open Project in VS Code"
+              >
+                <VSCodeIcon size={14} />
+                <span>Open in VS Code</span>
+              </button>
+
+              {/* Dropdown toggle: down arrow — rounded right only */}
+              <button
+                onClick={() => setOpenDropdown(prev => !prev)}
+                className="flex items-center px-1.5 py-1.5 text-xs font-medium text-surface-200 bg-surface-800/60 hover:bg-surface-700/60 border border-surface-600/30 hover:border-surface-500/40 shadow-sm shadow-surface-900/50 hover:shadow-md hover:shadow-surface-900/60 rounded-r-lg rounded-l-none transition-all"
+                title="More open options"
+                aria-expanded={openDropdown}
+                aria-haspopup="true"
+              >
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 10 10"
+                  fill="none"
+                  className={`transition-transform duration-150 ${openDropdown ? 'rotate-180' : ''}`}
+                >
+                  <path d="M2.5 3.75L5 6.25L7.5 3.75" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Floating dropdown menu */}
+            {openDropdown && (
+              <div className="absolute top-full left-0 mt-1.5 w-full bg-surface-800 border border-surface-600/40 rounded-lg shadow-lg shadow-surface-950/60 z-50 py-0.5 overflow-hidden">
+                {/* Open in Explorer */}
+                <button
+                  onClick={async () => {
+                    setOpenDropdown(false)
+                    if (projectState.activeProjectPath) {
+                      const success = await window.nekocode.shell.openInExplorer(projectState.activeProjectPath)
+                      if (!success) {
+                        console.warn('Failed to open in Explorer')
+                      }
+                    }
+                  }}
+                  className="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-surface-200 hover:bg-surface-700/60 hover:text-text-primary transition-colors"
+                  title="Open Project in File Explorer"
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="shrink-0">
+                    <path d="M1.5 3.5v9h13v-7l-2-2h-6l-1.5-2h-2.5z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
+                  </svg>
+                  <span>Open in Explorer</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Separator between project actions and zoom controls */}
