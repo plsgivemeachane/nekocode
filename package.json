@@ -1,6 +1,6 @@
 {
   "name": "nekocode",
-  "version": "0.2.64",
+  "version": "0.2.65",
   "description": "AI-powered coding assistant desktop app",
   "author": {
     "name": "Nekocode",
@@ -32,6 +32,7 @@
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "0.75.3",
+    "@pierre/diffs": "^1.2.4",
     "@tanstack/react-virtual": "^3.13.23",
     "dompurify": "^3.4.5",
     "react": "^19.0.0",
