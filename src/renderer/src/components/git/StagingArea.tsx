@@ -28,13 +28,13 @@ function getStatusStyle(code: string): { label: string; colorClass: string } {
     case 'C':
       return { label: 'C', colorClass: 'text-blue-500' }
     case '?':
-      return { label: 'U', colorClass: 'text-gray-500' }
+      return { label: 'U', colorClass: 'text-text-tertiary' }
     case '!':
-      return { label: 'I', colorClass: 'text-gray-400' }
+      return { label: 'I', colorClass: 'text-text-tertiary' }
     case 'U':
       return { label: 'C', colorClass: 'text-red-600' } // conflict
     default:
-      return { label: code || '·', colorClass: 'text-gray-400' }
+      return { label: code || '·', colorClass: 'text-text-tertiary' }
   }
 }
 
@@ -84,7 +84,7 @@ function FileRow({ file, statusCode, isSelected, onClick, actionIcon, onAction }
     <div
       className={`
         flex items-center gap-2 px-2 py-1 text-xs cursor-pointer group
-        ${isSelected ? 'bg-accent/10 text-accent' : 'hover:bg-white/5'}
+        ${isSelected ? 'bg-accent/10 text-accent' : 'hover:bg-surface-800/40 text-text-secondary'}
       `}
       onClick={onClick}
     >
@@ -102,7 +102,7 @@ function FileRow({ file, statusCode, isSelected, onClick, actionIcon, onAction }
       <button
         className="
           opacity-0 group-hover:opacity-100 transition-opacity
-          p-0.5 rounded hover:bg-white/10
+          p-0.5 rounded-md hover:bg-surface-800/60
         "
         onClick={(e) => {
           e.stopPropagation()
@@ -176,7 +176,7 @@ export function StagingArea({
           </div>
           {hasStaged && (
             <button
-              className="p-0.5 rounded hover:bg-white/10 text-green-400/60 hover:text-green-400"
+              className="p-0.5 rounded-md hover:bg-surface-800/60 text-green-400/60 hover:text-green-400"
               onClick={onUnstageAll}
               title="Unstage all"
             >
@@ -206,7 +206,7 @@ export function StagingArea({
           </div>
           {hasUnstaged && (
             <button
-              className="p-0.5 rounded hover:bg-white/10 text-yellow-400/60 hover:text-yellow-400"
+              className="p-0.5 rounded-md hover:bg-surface-800/60 text-yellow-400/60 hover:text-yellow-400"
               onClick={onStageAll}
               title="Stage all"
             >

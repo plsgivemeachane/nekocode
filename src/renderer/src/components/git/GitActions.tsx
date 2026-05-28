@@ -28,12 +28,12 @@ interface GitActionsProps {
 
 export function GitActions({ ahead, behind, onPush, onPull, onFetch, isLoading }: GitActionsProps) {
   return (
-    <div className="flex items-center gap-1 px-2 py-1.5 border-b border-white/5">
+    <div className="flex items-center gap-1 px-2 py-1.5 border-b border-surface-800/50">
       {/* Push */}
       <button
         className="
-          flex items-center gap-1 rounded px-2 py-1 text-xs
-          hover:bg-white/10 transition-colors
+          flex items-center gap-1 rounded-md px-2.5 py-1 text-xs text-text-secondary
+          hover:bg-surface-800/60 hover:text-text-primary transition-colors
           disabled:opacity-40 disabled:cursor-not-allowed
         "
         onClick={onPush}
@@ -52,8 +52,8 @@ export function GitActions({ ahead, behind, onPush, onPull, onFetch, isLoading }
       {/* Pull */}
       <button
         className="
-          flex items-center gap-1 rounded px-2 py-1 text-xs
-          hover:bg-white/10 transition-colors
+          flex items-center gap-1 rounded-md px-2.5 py-1 text-xs text-text-secondary
+          hover:bg-surface-800/60 hover:text-text-primary transition-colors
           disabled:opacity-40 disabled:cursor-not-allowed
         "
         onClick={onPull}
@@ -72,8 +72,8 @@ export function GitActions({ ahead, behind, onPush, onPull, onFetch, isLoading }
       {/* Fetch */}
       <button
         className="
-          flex items-center gap-1 rounded px-2 py-1 text-xs
-          hover:bg-white/10 transition-colors
+          flex items-center gap-1 rounded-md px-2.5 py-1 text-xs text-text-secondary
+          hover:bg-surface-800/60 hover:text-text-primary transition-colors
           disabled:opacity-40 disabled:cursor-not-allowed
         "
         onClick={onFetch}

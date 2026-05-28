@@ -1,9 +1,9 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useCallback } from 'react'
 import { ProjectProvider, useProjectStore } from './stores/project-store'
 import { TreeSidebar } from './components/layout/TreeSidebar'
 import { ChatView } from './components/chat/ChatView'
 import { SettingsView } from './components/settings/SettingsView'
-import { GitView } from './components/git'
+import { GitCommandCenter } from './components/git/GitCommandCenter'
 import { NavBar } from './components/layout/NavBar'
 import { createLogger } from './utils/logger'
 import { soundManager } from './utils/sound-manager'
@@ -11,7 +11,7 @@ import { soundManager } from './utils/sound-manager'
 const logger = createLogger('App')
 
 function AppLayout() {
-  const { state } = useProjectStore()
+  const { state, setGitOverlay } = useProjectStore()
 
   useEffect(() => {
     soundManager.init()
@@ -19,6 +19,18 @@ function AppLayout() {
       soundManager.dispose()
     }
   }, [])
+
+  // Close overlay on Escape key
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape' && state.showGitOverlay) {
+      setGitOverlay(false)
+    }
+  }, [state.showGitOverlay, setGitOverlay])
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleKeyDown])
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-surface-950">
@@ -28,12 +40,55 @@ function AppLayout() {
         <TreeSidebar />
         {state.activeView === 'settings' ? (
           <SettingsView />
-        ) : state.activeView === 'git' ? (
-          <GitView />
         ) : (
           <ChatView sessionId={state.activeSessionId} className="flex-1 min-w-0" />
         )}
       </div>
+
+      {/* Git overlay modal — full-screen with blur backdrop */}
+      {state.showGitOverlay && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          onClick={(e) => {
+            // Close when clicking the backdrop (not the content)
+            if (e.target === e.currentTarget) {
+              setGitOverlay(false)
+            }
+          }}
+        >
+          {/* Backdrop with blur */}
+          <div className="absolute inset-0 bg-surface-950/70 backdrop-blur-md" />
+
+          {/* Modal content — nearly full screen with rounded corners */}
+          <div className="relative z-10 w-[calc(100vw-80px)] h-[calc(100vh-80px)] max-w-[1400px] rounded-2xl bg-surface-900 border border-surface-700/50 shadow-2xl shadow-surface-950/80 overflow-hidden flex flex-col">
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-surface-800/50 bg-surface-900/80">
+              <div className="flex items-center gap-2">
+                <svg width="18" height="18" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="text-accent">
+                  <path d="M6 3.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm0 0V11a2 2 0 0 0 2 2h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M13 3.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M13 12.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <h2 className="text-sm font-semibold text-text-primary">Git</h2>
+              </div>
+              <button
+                onClick={() => setGitOverlay(false)}
+                className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-800/60 transition-colors"
+                title="Close (Esc)"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Git content */}
+            <div className="flex-1 overflow-hidden">
+              <GitCommandCenter />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

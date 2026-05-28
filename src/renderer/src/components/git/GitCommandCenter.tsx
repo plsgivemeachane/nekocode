@@ -94,7 +94,7 @@ export function GitCommandCenter() {
 
   if (!activeProjectPath) {
     return (
-      <div className="flex items-center justify-center h-full text-sm text-gray-500">
+      <div className="flex items-center justify-center h-full text-sm text-text-tertiary">
         Open a project to use Git features
       </div>
     )
@@ -105,7 +105,7 @@ export function GitCommandCenter() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* ── Top toolbar: branch + actions ── */}
-      <div className="flex items-center gap-2 border-b border-white/5 px-2 py-1.5">
+      <div className="flex items-center gap-2 border-b border-surface-800/50 px-3 py-2">
         <BranchSelector
           branches={git.branches}
           onSwitchBranch={git.switchBranch}
@@ -126,7 +126,7 @@ export function GitCommandCenter() {
 
         {/* Stash button */}
         <button
-          className="flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-white/10 transition-colors"
+          className="flex items-center gap-1 rounded-md px-2.5 py-1 text-xs hover:bg-surface-800/60 text-text-secondary hover:text-text-primary transition-colors"
           onClick={handleStash}
           title="Stash current changes"
         >
@@ -136,7 +136,7 @@ export function GitCommandCenter() {
 
         {/* Refresh button */}
         <button
-          className="rounded p-1 text-xs hover:bg-white/10 transition-colors text-gray-400 hover:text-white"
+          className="rounded-md p-1.5 text-xs hover:bg-surface-800/60 text-text-tertiary hover:text-text-primary transition-colors"
           onClick={git.refreshAll}
           title="Refresh all Git data"
         >
@@ -146,7 +146,7 @@ export function GitCommandCenter() {
 
       {/* ── Error banner ── */}
       {git.error && (
-        <div className="flex items-center justify-between px-3 py-1.5 text-xs bg-red-500/10 text-red-400 border-b border-red-500/20">
+        <div className="flex items-center justify-between px-3 py-1.5 text-xs bg-red-500/10 text-red-400 border-b border-red-500/20 rounded-sm mx-2">
           <span className="truncate">{git.error}</span>
           <button
             className="ml-2 text-red-400/60 hover:text-red-300"
@@ -160,7 +160,7 @@ export function GitCommandCenter() {
       {/* ── Main content: staging + diff ── */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left panel: staging + commit */}
-        <div className="w-72 flex flex-col border-r border-white/5 overflow-y-auto shrink-0">
+        <div className="w-72 flex flex-col border-r border-surface-800/50 overflow-y-auto shrink-0">
           <StagingArea
             staged={git.status.staged}
             unstaged={[...git.status.modified, ...git.status.untracked]}
@@ -174,7 +174,7 @@ export function GitCommandCenter() {
           />
 
           {/* Commit input at bottom of left panel */}
-          <div className="mt-auto border-t border-white/5">
+          <div className="mt-auto border-t border-surface-800/50">
             <CommitInput
               hasStagedChanges={git.status.staged.length > 0}
               onCommit={handleCommit}
@@ -194,24 +194,24 @@ export function GitCommandCenter() {
       </div>
 
       {/* ── Bottom: recent commits ── */}
-      <div className="border-t border-white/5 max-h-48 overflow-y-auto">
-        <div className="px-3 py-1.5 text-xs font-semibold text-gray-400 bg-white/[0.02]">
+      <div className="border-t border-surface-800/50 max-h-48 overflow-y-auto">
+        <div className="px-3 py-1.5 text-xs font-semibold text-text-tertiary bg-surface-900/60">
           Recent Commits
         </div>
         {git.log.commits.length === 0 ? (
-          <div className="px-3 py-2 text-xs text-gray-500">No commits yet</div>
+          <div className="px-3 py-2 text-xs text-text-tertiary">No commits yet</div>
         ) : (
           git.log.commits.slice(0, 10).map((commit) => (
             <div
               key={commit.hash}
-              className="flex items-start gap-2 px-3 py-1.5 text-xs hover:bg-white/[0.02]"
+              className="flex items-start gap-2 px-3 py-1.5 text-xs hover:bg-surface-800/40"
             >
-              <GitCommitIcon size={14} className="text-gray-500 mt-0.5 shrink-0" />
+              <GitCommitIcon size={14} className="text-text-tertiary mt-0.5 shrink-0" />
               <div className="min-w-0 flex-1">
-                <div className="truncate text-gray-200" title={commit.message}>
+                <div className="truncate text-text-primary" title={commit.message}>
                   {commit.message}
                 </div>
-                <div className="text-[10px] text-gray-500">
+                <div className="text-[10px] text-text-tertiary">
                   <span className="font-mono">{commit.hashAbbrev}</span>
                   {' · '}
                   <span>{commit.author}</span>

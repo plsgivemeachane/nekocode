@@ -13,7 +13,7 @@ import { GitCommandCenter } from './GitCommandCenter'
 
 export function GitView() {
   return (
-    <div className="flex flex-col h-full bg-[#181825] text-gray-200">
+    <div className="flex flex-col h-full bg-surface-900 text-text-primary">
       {/*
         Phase 1: Just the command center.
         Phase 2: Add tab bar for "Source Control" / "Commit Graph" tabs.

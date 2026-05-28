@@ -63,7 +63,7 @@ function lineClass(type: LineType): string {
     case 'remove':
       return 'text-red-300 bg-red-500/10'
     case 'context':
-      return 'text-gray-300'
+      return 'text-text-secondary'
   }
 }
 
@@ -77,7 +77,7 @@ export function DiffViewer({ diff, isLoading, title }: DiffViewerProps) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center p-4 text-xs text-gray-500">
+      <div className="flex items-center justify-center p-4 text-xs text-text-tertiary">
         Loading diff...
       </div>
     )
@@ -85,7 +85,7 @@ export function DiffViewer({ diff, isLoading, title }: DiffViewerProps) {
 
   if (!diff || !diff.patch) {
     return (
-      <div className="flex items-center justify-center p-4 text-xs text-gray-500">
+      <div className="flex items-center justify-center p-4 text-xs text-text-tertiary">
         Select a file to view its diff
       </div>
     )
@@ -95,7 +95,7 @@ export function DiffViewer({ diff, isLoading, title }: DiffViewerProps) {
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
       {title && (
-        <div className="px-3 py-1.5 text-xs font-mono border-b border-white/5 text-gray-300 truncate" title={title}>
+        <div className="px-3 py-1.5 text-xs font-mono border-b border-surface-800/50 text-text-secondary truncate" title={title}>
           {title}
         </div>
       )}

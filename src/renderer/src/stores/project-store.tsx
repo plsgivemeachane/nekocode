@@ -25,7 +25,7 @@ const logger = createLogger('project-store')
 export type SessionStatus = 'idle' | 'streaming' | 'error'
 
 /** Which main view is currently shown in the content area */
-export type ActiveView = 'chat' | 'settings' | 'git'
+export type ActiveView = 'chat' | 'settings'
 
 interface ProjectState {
   projects: ProjectInfo[]
@@ -38,6 +38,8 @@ interface ProjectState {
   sessionErrorMessages: Record<string, string>
   /** Preloaded message history keyed by sessionId (lightweight disk read, no agent) */
   preloadedHistory: Record<string, ChatMessageIPC[]>
+  /** Whether the Git overlay modal is shown */
+  showGitOverlay: boolean
   /** Whether the agent for the active session is fully connected and ready */
   agentReady: boolean
   /** Refresh counter per session — incremented when user requests a message refresh from context menu */
@@ -61,6 +63,7 @@ export type ProjectAction =
   | { type: 'SET_AGENT_READY'; sessionId: string }
   | { type: 'REPLACE_PENDING_SESSION'; projectPath: string; pendingId: string; realSession: SessionInfoDisplay }
   | { type: 'SET_ACTIVE_VIEW'; view: ActiveView }
+  | { type: 'SET_GIT_OVERLAY'; show: boolean }
   | { type: 'REFRESH_SESSION_MESSAGES'; sessionId: string }
 
 // ---------------------------------------------------------------------------
@@ -72,6 +75,7 @@ const INITIAL_STATE: ProjectState = {
   activeSessionId: null,
   activeProjectPath: null,
   activeView: 'chat',
+  showGitOverlay: false,
   sessionStatuses: {},
   sessionErrorMessages: {},
   preloadedHistory: {},
@@ -140,6 +144,7 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
         activeProjectPath: action.projectPath,
         // Always switch to chat view when selecting a session
         activeView: 'chat',
+        showGitOverlay: false,
       }
 
     case 'RECONNECT_SESSION':
@@ -226,6 +231,14 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
       return {
         ...state,
         activeView: action.view,
+        // Close git overlay when switching views
+        showGitOverlay: false,
+      }
+
+    case 'SET_GIT_OVERLAY':
+      return {
+        ...state,
+        showGitOverlay: action.show,
       }
 
     case 'REFRESH_SESSION_MESSAGES': {
@@ -273,6 +286,7 @@ interface ProjectStoreAPI {
   removeProject: (projectId: string) => Promise<void>
   setActiveSession: (sessionId: string, projectPath: string) => void
   setActiveView: (view: ActiveView) => void
+  setGitOverlay: (show: boolean) => void
   reconnectSession: (sessionId: string, projectPath: string) => Promise<void>
   createSession: (projectPath: string) => Promise<void>
   refreshSessions: (projectId: string) => Promise<void>
@@ -455,12 +469,20 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     [],
   )
 
+  const setGitOverlay = useCallback(
+    (show: boolean) => {
+      dispatch({ type: 'SET_GIT_OVERLAY', show })
+    },
+    [],
+  )
+
   const api: ProjectStoreAPI = {
     state,
     addProject,
     removeProject,
     setActiveSession,
     setActiveView,
+    setGitOverlay,
     reconnectSession,
     createSession,
     refreshSessions,

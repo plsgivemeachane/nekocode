@@ -55,8 +55,8 @@ export function CommitInput({ hasStagedChanges, onCommit, isCommitting }: Commit
       <textarea
         ref={textareaRef}
         className="
-          w-full resize-none rounded-md border border-white/10 bg-black/20
-          px-3 py-2 text-sm placeholder:text-gray-500
+          w-full resize-none rounded-lg border border-surface-700/50 bg-surface-950
+          px-3 py-2 text-sm placeholder:text-text-tertiary
           focus:outline-none focus:ring-1 focus:ring-accent/50
           disabled:opacity-50 disabled:cursor-not-allowed
         "
@@ -75,7 +75,7 @@ export function CommitInput({ hasStagedChanges, onCommit, isCommitting }: Commit
           transition-colors
           ${canCommit
             ? 'bg-green-600 hover:bg-green-500 text-white'
-            : 'bg-white/5 text-gray-500 cursor-not-allowed'
+            : 'bg-surface-800/40 text-text-tertiary cursor-not-allowed'
           }
         `}
         onClick={handleCommit}

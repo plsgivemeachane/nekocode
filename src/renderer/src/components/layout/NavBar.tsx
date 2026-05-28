@@ -11,7 +11,7 @@ import { VSCodeIcon } from '../icons/VSCodeIcon'
  */
 export function NavBar() {
   const { zoom, zoomIn, zoomOut, resetZoom, minZoom, maxZoom } = useZoom()
-  const { addProject, state: projectState } = useProjectStore()
+  const { addProject, setGitOverlay, state: projectState } = useProjectStore()
   const [isMaximized, setIsMaximized] = useState(false)
   const [openDropdown, setOpenDropdown] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -98,6 +98,20 @@ export function NavBar() {
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
               <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
             </svg>
+          </button>
+
+          {/* Git button — same style as Open in VS Code */}
+          <button
+            onClick={() => setGitOverlay(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-surface-200 bg-surface-800/60 hover:bg-surface-700/60 border border-surface-600/30 hover:border-surface-500/40 shadow-sm shadow-surface-900/50 hover:shadow-md hover:shadow-surface-900/60 rounded-lg transition-all mr-2"
+            title="Git"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M6 3.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm0 0V11a2 2 0 0 0 2 2h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M13 3.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M13 12.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span>Git</span>
           </button>
 
           {/* Open in VS Code split button with dropdown */}
