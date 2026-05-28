@@ -49,12 +49,12 @@ function validateCommitMessage(message: string): void {
   if (message.includes('\0')) {
     throw new Error('Invalid commit message: must not contain null bytes')
   }
-  // Security: Reject shell metacharacters that could be exploited if simple-git
-  // ever falls back to shell execution. Defense-in-depth measure.
-  // Backticks and $(...) allow command substitution; backslashes can escape quoting.
-  if (/`|\$\(|\\/.test(message)) {
-    throw new Error('Invalid commit message: must not contain shell metacharacters (backticks, $(), backslashes)')
-  }
+  // Security: simple-git uses child_process.spawn (not shell execution), so shell
+  // metacharacters like backticks, $(), and backslashes are NOT exploitable here.
+  // Previously we rejected these as defense-in-depth, but that was too aggressive —
+  // legitimate commit messages frequently contain backticks (e.g., Markdown code,
+  // Git trailers with references). The null byte check above is sufficient since
+  // spawn arguments are passed as an array, not interpolated into a shell command.
 }
 
 import type {
@@ -187,7 +187,7 @@ function mapLog(raw: LogResult): GitLogResult {
     const parentHashes: string[] = []
     // Try to extract parents from the commit — simple-git may populate
     // them in different fields depending on version
-    const rawCommit = c as Record<string, unknown>
+    const rawCommit = c as unknown as Record<string, unknown>
     if (Array.isArray(rawCommit.parents)) {
       parentHashes.push(...(rawCommit.parents as string[]))
     } else if (typeof rawCommit.refs === 'string') {

@@ -5,6 +5,7 @@ import { unlinkSync } from 'fs'
 import { StreamBatcher } from './stream-batcher'
 import type { SessionStreamEvent, ChatMessageIPC, CommandInfo, ModelInfo, ExtensionLoadError, UsageData, UIResponse } from '../shared/ipc-types'
 import { createLogger } from './logger'
+import { createSecureAuthStorage } from './secure-key-store'
 import { loadWithFallback } from './extension-loader'
 import { ElectronUIContext, MainThreadUITransport } from './electron-ui-context'
 import { extractHistoryFromSdkMessages, loadHistoryFromDisk as loadHistoryFromDiskImpl } from './message-store'
@@ -375,8 +376,8 @@ export class PiSessionManager {
       break
     }
     if (!modelRegistry) {
-      const { ModelRegistry, AuthStorage } = await import('@earendil-works/pi-coding-agent')
-      const authStorage = AuthStorage.create()
+      const { ModelRegistry } = await import('@earendil-works/pi-coding-agent')
+      const authStorage = await createSecureAuthStorage()
       modelRegistry = ModelRegistry.create(authStorage)
     }
     const available = modelRegistry.getAvailable()

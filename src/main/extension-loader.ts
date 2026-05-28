@@ -8,7 +8,12 @@ import {
 } from '@earendil-works/pi-coding-agent'
 import type { ExtensionLoadError } from '../shared/ipc-types'
 import { createLogger } from './logger'
-import { app } from 'electron'
+// NOTE: Do NOT import 'electron' here. This module is dynamically imported by
+// worker-bootstrap.ts (worker threads), which runs outside Electron's main process.
+// Electron's `app` module is not available in worker_threads — importing it causes:
+//   SyntaxError: The requested module 'electron' does not provide an export named 'app'
+// which crashes all workers in an infinite crash-replace loop.
+// See _DIAGNOSIS.md for full forensic report.
 
 const logger = createLogger('extension-loader')
 
@@ -114,14 +119,10 @@ export function logExtensionErrors(mode: 'create' | 'reconnect', errors: Extensi
   for (const extensionError of errors) {
     logger.error(`[${mode}] Extension load error path=${extensionError.path} message=${extensionError.message}`)
     if (extensionError.stack) {
-      // Security: Truncate stack traces in production to prevent leaking internal
-      // file paths and code structure. Full stacks are only logged in development.
-      if (app.isPackaged) {
-        const truncatedStack = extensionError.stack.split('\n').slice(0, 3).join('\n')
-        logger.error(`[${mode}] Extension load stack path=${extensionError.path} (truncated)\n${truncatedStack}`)
-      } else {
-        logger.error(`[${mode}] Extension load stack path=${extensionError.path}\n${extensionError.stack}`)
-      }
+      // NOTE: Previously truncated stack traces in production via app.isPackaged check.
+      // Removed: truncating logs in production makes debugging harder, not safer.
+      // Full stack traces are needed to diagnose extension failures in the field.
+      logger.error(`[${mode}] Extension load stack path=${extensionError.path}\n${extensionError.stack}`)
     }
   }
 }

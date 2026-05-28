@@ -632,6 +632,11 @@ async function handleSessionListModels(): Promise<{ models: Array<{ id: string; 
   logger.debug('Listing available models')
 
   const { ModelRegistry, AuthStorage } = await importSdk()
+  // Security note: Worker threads cannot access Electron safeStorage.
+  // Auth keys on disk are encrypted by the main process; the worker reads
+  // plaintext via AuthStorage which handles decryption internally through the
+  // file backend. If safeStorage encryption is enabled, the main process
+  // must migrate keys on first access.
   const authStorage = AuthStorage.create()
   const modelRegistry = ModelRegistry.create(authStorage)
 

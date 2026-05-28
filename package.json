@@ -1,6 +1,6 @@
 {
   "name": "nekocode",
-  "version": "0.2.61",
+  "version": "0.2.62",
   "description": "AI-powered coding assistant desktop app",
   "author": {
     "name": "Nekocode",
@@ -54,7 +54,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitest/coverage-v8": "^4.1.2",
-    "electron": "^42.1.0",
+    "electron": "^42.3.0",
     "electron-builder": "^26.8.1",
     "electron-log": "^5.4.3",
     "electron-updater": "^6.8.3",
@@ -192,6 +192,8 @@
     "@smithy/util-utf8": "4.3.3",
     "@aws-sdk/types": "3.973.8",
     "@aws-sdk/core": "3.974.12",
-    "@aws-sdk/nested-clients": "3.997.10"
+    "@aws-sdk/nested-clients": "3.997.10",
+    "cross-spawn": ">=6.0.6",
+    "tmp": ">=0.2.6"
   }
 }

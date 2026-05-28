@@ -3,7 +3,7 @@ import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { gitOperationsManager } from './git-operations-manager'
 import { IPC_CHANNELS } from '../shared/ipc-channels'
-import { validateIpcSender, validatePathWithinProject, stripShellMetacharacters } from './security-utils'
+import { validateIpcSender, validatePathWithinProject } from './security-utils'
 import type {
   SessionCreatePayload,
   SessionCreateResult,

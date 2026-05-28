@@ -22,6 +22,7 @@ export function VSCodeIcon({ size = 13, className }: { size?: number; className?
       xmlns="http://www.w3.org/2000/svg"
       className={className}
     >
+      {/* eslint-disable-next-line react/no-unknown-property -- mask-type is a valid SVG attribute not recognized by React ESLint plugin */}
       <mask id={maskId} mask-type="alpha" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100">
         <path
           fillRule="evenodd"

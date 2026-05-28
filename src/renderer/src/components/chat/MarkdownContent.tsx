@@ -173,6 +173,13 @@ function CodeBlockWithShiki({ code, language }: CodeBlockWithShikiProps) {
     }
   }, [code, language])
 
+  // Security: Sanitize Shiki output with DOMPurify before rendering.
+  // While Shiki is generally safe (only produces <span> elements), a compromised
+  // Shiki version, a malicious language grammar, or cache poisoning could inject XSS.
+  // NOTE: This hook MUST be called before any conditional returns to obey React's
+  // Rules of Hooks (hooks must always be called in the same order every render).
+  const sanitizedHtml = useMemo(() => (html ? DOMPurify.sanitize(html) : ''), [html])
+
   if (!html) {
     return (
       <div className="code-block-container">
@@ -183,11 +190,6 @@ function CodeBlockWithShiki({ code, language }: CodeBlockWithShikiProps) {
       </div>
     )
   }
-
-  // Security: Sanitize Shiki output with DOMPurify before rendering.
-  // While Shiki is generally safe (only produces <span> elements), a compromised
-  // Shiki version, a malicious language grammar, or cache poisoning could inject XSS.
-  const sanitizedHtml = useMemo(() => DOMPurify.sanitize(html), [html])
 
   return (
     <div className="code-block-container">
