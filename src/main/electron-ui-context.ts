@@ -38,6 +38,8 @@ export interface UIRequestTransport {
 interface PendingRequest {
   resolve: (value: unknown) => void
   timeoutTimer?: ReturnType<typeof setTimeout>
+  /** Valid option values for select requests; used to validate the response */
+  validOptions?: string[]
 }
 
 export class ElectronUIContext {
@@ -75,7 +77,7 @@ export class ElectronUIContext {
       }, { once: true })
     }
 
-    return this.sendRequestAndWait<string | undefined>(request, opts?.timeout)
+    return this.sendRequestAndWait<string | undefined>(request, opts?.timeout, options)
   }
 
   /**
@@ -358,7 +360,17 @@ export class ElectronUIContext {
       default:
         // User confirmed - resolve with the appropriate value
         if (response.selectedValue !== undefined) {
-          pending.resolve(response.selectedValue)
+          // Validate that the selectedValue is one of the valid options
+          // for select requests. If not, treat as invalid and resolve undefined.
+          if (pending.validOptions && !pending.validOptions.includes(response.selectedValue)) {
+            logger.warn(
+              `handleResponse: selectedValue "${response.selectedValue}" is not in valid options [${pending.validOptions.join(', ')}]. ` +
+              'Rejecting response and resolving with undefined.'
+            )
+            pending.resolve(undefined)
+          } else {
+            pending.resolve(response.selectedValue)
+          }
         } else if (response.inputValue !== undefined) {
           pending.resolve(response.inputValue)
         } else {
@@ -386,10 +398,15 @@ export class ElectronUIContext {
   /**
    * Send a UI request to the renderer and wait for the response.
    */
-  private sendRequestAndWait<T>(request: UIRequest, timeoutMs?: number): Promise<T> {
+  private sendRequestAndWait<T>(request: UIRequest, timeoutMs?: number, validOptions?: string[]): Promise<T> {
+    // Validate timeout: negative values are programming errors
+    if (timeoutMs !== undefined && timeoutMs < 0) {
+      throw new Error(`Invalid timeout: ${timeoutMs}ms. Timeout must be a positive number or undefined.`)
+    }
+
     return new Promise<T>((resolve) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const pending: PendingRequest = { resolve: resolve as (value: any) => void }
+      const pending: PendingRequest = { resolve: resolve as (value: any) => void, validOptions }
 
       // Set up timeout if provided
       if (timeoutMs && timeoutMs > 0) {

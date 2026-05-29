@@ -8,8 +8,10 @@ import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
  * - react-virtuoso manages its own scroll container, eliminating the
  *   fragile hybrid "virtualized prefix + unvirtualized tail" pattern
  *   that @tanstack/react-virtual required.
- * - followOutput="smooth" handles auto-scroll during streaming without
- *   manual ResizeObserver / scroll-position bookkeeping.
+ * - followOutput="smooth" handles auto-scroll during streaming AND when
+ *   the user sends a message, without manual ResizeObserver / scroll-position
+ *   bookkeeping. Virtuoso only auto-scrolls when the user is near the bottom,
+ *   so scrolling up to read older messages is respected.
  * - atBottomStateChange replaces the manual isAtBottomRef tracking in
  *   useAutoScroll for the scroll-to-bottom button visibility.
  * - Dynamic row heights (code blocks, images, Shiki highlighting) are

@@ -29,6 +29,7 @@ vi.mock("@/renderer/src/hooks/useClickOutside", () => ({
 const defaultProps = {
   sessionId: "test-session-id",
   isStreaming: false,
+  isAgentConnecting: false,
   input: "",
   setInput: vi.fn(),
   sendPrompt: vi.fn(() => Promise.resolve()),
@@ -117,6 +118,21 @@ describe("ChatInput", () => {
   it("disables send button when no session is active", () => {
     renderChatInput({ sessionId: undefined })
     expect(screen.getByRole("button", { name: /send message/i })).toBeDisabled()
+  })
+
+  it("disables textarea when agent is connecting", () => {
+    renderChatInput({ isAgentConnecting: true })
+    expect(screen.getByPlaceholderText(/Agent starting/i)).toBeDisabled()
+  })
+
+  it("disables send button when agent is connecting", () => {
+    renderChatInput({ isAgentConnecting: true, input: "Hello" })
+    expect(screen.getByRole("button", { name: /send message/i })).toBeDisabled()
+  })
+
+  it("shows connecting placeholder when agent is connecting", () => {
+    renderChatInput({ isAgentConnecting: true })
+    expect(screen.getByPlaceholderText(/Agent starting/i)).toBeInTheDocument()
   })
 
   // ═══════════════════════════════════════════════════════════════════

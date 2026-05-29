@@ -131,13 +131,19 @@ describe('Contract Audit: ElectronUIContext.select(title, options, opts?)', () =
     expect(request).toBeDefined()
   })
 
-  it('negative timeout is silently ignored — is this intentional?', async () => {
-    // timeoutMs > 0 check means negative values are silently treated as "no timeout".
-    // But a negative timeout is arguably a programming error.
-    context.select('Choose', ['opt1'], { timeout: -100 })
-    const request = transport.lastRequest()
-    expect(request).toBeDefined()
-    // No timeout is set — the promise may hang forever.
+  it('negative timeout is now correctly rejected — throws an error', async () => {
+    // Previously, negative timeout was silently ignored (treated as "no timeout"),
+    // which was a bug. Now the implementation correctly throws for negative values.
+    // Since select() is async, the throw becomes a rejected promise.
+    await expect(context.select('Choose', ['opt1'], { timeout: -100 })).rejects.toThrow(/Invalid timeout/)
+  })
+
+  it('negative timeout should throw or clamp, not silently ignore', async () => {
+    // A negative timeout is a programming error. The contract should reject it
+    // explicitly rather than silently treating it as "no timeout" (which could
+    // cause the promise to hang forever). Since select() is async, the throw
+    // becomes a rejected promise.
+    await expect(context.select('Choose', ['opt1'], { timeout: -100 })).rejects.toThrow(/Invalid timeout/)
   })
 
   it('AbortSignal abort resolves with undefined, not rejection', async () => {
@@ -173,9 +179,11 @@ describe('Contract Audit: ElectronUIContext.select(title, options, opts?)', () =
     // The response.selectedValue will be 'same' regardless of which was clicked.
   })
 
-  it('response with selectedValue not in original options is still accepted', async () => {
-    // handleResponse doesn't validate that selectedValue matches any option.
-    // This means a malicious or buggy renderer can return any value.
+  it('response with selectedValue not in original options is now correctly rejected', async () => {
+    // Previously, handleResponse didn't validate that selectedValue matches any option.
+    // This meant a malicious or buggy renderer could return any value.
+    // Now the implementation validates selectedValue against the original options
+    // and resolves undefined when the value is not valid.
     const promise = context.select('Choose', ['a', 'b'])
     const request = transport.lastRequest()
     
@@ -189,8 +197,29 @@ describe('Contract Audit: ElectronUIContext.select(title, options, opts?)', () =
     context.handleResponse(rogueResponse)
     
     const result = await promise
-    expect(result).toBe('hacked-value-not-in-options')
-    // The contract trusts the renderer completely. No validation of selectedValue.
+    expect(result).toBeUndefined()
+    // The contract now validates selectedValue against the original options.
+  })
+
+  it('response with selectedValue not in options should reject or clamp to valid options', async () => {
+    // SECURITY FIX: handleResponse should validate that selectedValue matches
+    // one of the original options. A malicious/buggy renderer should not be
+    // able to inject arbitrary values. Now fixed — validOptions stored on
+    // PendingRequest and validated in handleResponse.
+    const promise = context.select('Choose', ['a', 'b'])
+    const request = transport.lastRequest()
+
+    const rogueResponse: UIResponse = {
+      requestId: request!.id,
+      sessionId: 'test-session',
+      confirmed: true,
+      selectedValue: 'hacked-value-not-in-options',
+    }
+    context.handleResponse(rogueResponse)
+
+    // CORRECT behavior: the result should be undefined — rejected as invalid
+    const result = await promise
+    expect(result).toBeUndefined()
   })
 
   it('request is sent BEFORE timeout is set up — no race condition', async () => {

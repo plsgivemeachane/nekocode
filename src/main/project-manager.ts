@@ -37,6 +37,37 @@ export class ProjectManager {
     this.workspacePath = join(app.getPath('userData'), 'workspace.json')
   }
 
+  /** Get the workspace file path for offloading to worker threads. */
+  getWorkspacePath(): string {
+    return this.workspacePath
+  }
+
+  /**
+   * Restore workspace state from data loaded by a worker thread.
+   * This is used by ThreadedProjectManager after the worker reads workspace.json.
+   * The worker does the I/O; this method applies the results to in-memory state.
+   */
+  async restoreWorkspace(data: {
+    projectPaths: string[]
+    activeSessionId: string | null
+    activeProjectPath: string | null
+  }): Promise<void> {
+    this.activeSessionId = data.activeSessionId
+    this.activeProjectPath = data.activeProjectPath
+
+    // Restore each project path — discover sessions for each
+    for (const path of data.projectPaths) {
+      const id = `project-${this.nextId++}`
+      const sessions = await this.discoverSessions(path)
+      const key = path.toLowerCase()
+      const project: Project = { id, path, sessions }
+      this.projects.set(key, project)
+      logger.info(`Restored ${id} path=${path} sessions=${sessions.length}`)
+    }
+
+    logger.info(`Workspace restored: ${this.projects.size} project(s)`)
+  }
+
   /**
    * Load persisted workspace from disk and restore projects.
    * Call once on app startup before registering IPC handlers.

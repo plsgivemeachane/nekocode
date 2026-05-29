@@ -379,6 +379,8 @@ async function dispatchOperation(type: OperationType, input: unknown): Promise<u
     // Project operations
     case 'project:discover-sessions':
       return handleProjectDiscoverSessions(input as { path: string })
+    case 'project:load-workspace':
+      return handleProjectLoadWorkspace(input as { workspacePath: string })
     case 'project:save-workspace':
       return handleProjectSaveWorkspace(input as {
         projectPaths: string[]
@@ -821,6 +823,52 @@ async function handleProjectDiscoverSessions(input: { path: string }): Promise<{
   } catch (err) {
     logger.error(`Failed to discover sessions for ${input.path}:`, err)
     return { sessions: [] }
+  }
+}
+
+/**
+ * Load workspace from disk.
+ * Reads workspace.json and discovers sessions for each project path.
+ * Returns the workspace data so the main thread can apply it to ProjectManager.
+ */
+async function handleProjectLoadWorkspace(input: {
+  workspacePath: string
+}): Promise<import('./types').ProjectLoadWorkspaceOutput> {
+  logger.debug(`Loading workspace from: ${input.workspacePath}`)
+
+  const { readFile } = await import('fs/promises')
+
+  try {
+    const data = await readFile(input.workspacePath, 'utf-8')
+    const state = JSON.parse(data)
+
+    // Discover sessions for each project path
+    const projectPaths: string[] = state.projectPaths ?? []
+    const activeSessionId: string | null = state.activeSessionId ?? null
+    const activeProjectPath: string | null = state.activeProjectPath ?? null
+
+    return {
+      projectPaths,
+      activeSessionId,
+      activeProjectPath,
+    }
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      // Workspace file doesn't exist yet — return empty state
+      logger.debug('No workspace file found, starting fresh')
+      return {
+        projectPaths: [],
+        activeSessionId: null,
+        activeProjectPath: null,
+      }
+    }
+    // Corrupt or unreadable — log and return empty state
+    logger.error('Failed to load workspace:', err)
+    return {
+      projectPaths: [],
+      activeSessionId: null,
+      activeProjectPath: null,
+    }
   }
 }
 

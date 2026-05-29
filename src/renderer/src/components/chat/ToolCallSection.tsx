@@ -1,5 +1,6 @@
 import React from 'react'
-import { extractToolSummary } from './tool-summary'
+import { extractToolSummary, extractDiffStats } from './tool-summary'
+import type { DiffStats } from './tool-summary'
 
 interface ToolCallData {
   id: string
@@ -7,6 +8,7 @@ interface ToolCallData {
   status: 'running' | 'done'
   isError?: boolean
   args?: unknown
+  result?: unknown
 }
 
 function StatusDot({ status, isError }: { status: 'running' | 'done'; isError?: boolean }) {
@@ -24,27 +26,75 @@ function StatusDot({ status, isError }: { status: 'running' | 'done'; isError?: 
   return <span className="h-[7px] w-[7px] rounded-full bg-success shrink-0" />
 }
 
-function ToolCallRow({ toolName, status, isError, summary }: {
+/** Inline diff stats badge: "+3 -1" style */
+function DiffStatsBadge({ stats }: { stats: DiffStats }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] font-mono shrink-0">
+      {stats.added > 0 && (
+        <span className="text-[#4ade80]">+{stats.added}</span>
+      )}
+      {stats.removed > 0 && (
+        <span className="text-[#f87171]">-{stats.removed}</span>
+      )}
+    </span>
+  )
+}
+
+function ToolCallRow({ toolName, status, isError, summary, diffStats, onClick }: {
   toolName: string
   status: 'running' | 'done'
   isError?: boolean
   summary: string
+  diffStats: DiffStats | null
+  onClick?: () => void
 }) {
   const shortName = toolName.replace(/^toolcall_/, '')
+  const isFileModifying = diffStats !== null
 
   return (
-    <div className="flex items-center gap-2.5 px-3 py-[5px] hover:bg-surface-800/30 transition-colors">
+    <div
+      className={`flex items-center gap-2.5 px-3 py-[5px] transition-colors ${
+        isFileModifying
+          ? 'hover:bg-surface-800/50 cursor-pointer'
+          : 'hover:bg-surface-800/30'
+      }`}
+      onClick={isFileModifying ? onClick : undefined}
+      role={isFileModifying ? 'button' : undefined}
+      tabIndex={isFileModifying ? 0 : undefined}
+      onKeyDown={isFileModifying ? (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick?.()
+        }
+      } : undefined}
+      title={isFileModifying ? 'Click to view diff' : undefined}
+    >
       <StatusDot status={status} isError={isError} />
       <span className="text-[12px] font-mono font-medium text-text-secondary w-[88px] shrink-0 truncate">{shortName}</span>
-      <span className="text-[12px] font-mono text-text-tertiary truncate">{summary}</span>
+      <span className="text-[12px] font-mono text-text-tertiary truncate flex-1 min-w-0">{summary}</span>
+      {diffStats && <DiffStatsBadge stats={diffStats} />}
     </div>
   )
 }
 
-export function ToolCallGroup({ toolCalls }: { toolCalls: ToolCallData[] }) {
+export function ToolCallGroup({ toolCalls, onToolCallClick }: { 
+  toolCalls: ToolCallData[]
+  onToolCallClick?: (toolCallId: string) => void 
+}) {
   const totalCount = toolCalls.length
   const runningCount = toolCalls.filter(tc => tc.status === 'running').length
   const doneCount = toolCalls.filter(tc => tc.status === 'done' && !tc.isError).length
+
+  // Compute total diff stats across all tool calls in this group
+  const totalAdded = toolCalls.reduce((sum, tc) => {
+    const stats = extractDiffStats(tc.toolName, tc.args, tc.result)
+    return sum + (stats?.added ?? 0)
+  }, 0)
+  const totalRemoved = toolCalls.reduce((sum, tc) => {
+    const stats = extractDiffStats(tc.toolName, tc.args, tc.result)
+    return sum + (stats?.removed ?? 0)
+  }, 0)
+  const hasAnyDiff = totalAdded > 0 || totalRemoved > 0
 
   return (
     <div className="rounded-lg border border-surface-800/80 bg-surface-900/50 overflow-hidden">
@@ -62,6 +112,13 @@ export function ToolCallGroup({ toolCalls }: { toolCalls: ToolCallData[] }) {
         {doneCount > 0 && !runningCount && (
           <span className="text-[11px] font-mono text-text-muted">{doneCount} done</span>
         )}
+        {/* Aggregate diff stats badge in header */}
+        {hasAnyDiff && !runningCount && (
+          <span className="ml-auto inline-flex items-center gap-1 text-[11px] font-mono">
+            {totalAdded > 0 && <span className="text-[#4ade80]">+{totalAdded}</span>}
+            {totalRemoved > 0 && <span className="text-[#f87171]">-{totalRemoved}</span>}
+          </span>
+        )}
       </div>
 
       {/* Tool rows */}
@@ -73,9 +130,14 @@ export function ToolCallGroup({ toolCalls }: { toolCalls: ToolCallData[] }) {
             status={tc.status}
             isError={tc.isError}
             summary={extractToolSummary(tc.toolName, tc.args)}
+            diffStats={extractDiffStats(tc.toolName, tc.args, tc.result)}
+            onClick={onToolCallClick ? () => onToolCallClick(tc.id) : undefined}
           />
         ))}
       </div>
     </div>
   )
 }
+
+// Re-export ToolCallData for use in ChatView
+export type { ToolCallData }

@@ -415,32 +415,39 @@ describe('Category 2: Argument Boundary & Assumption Drilling', () => {
 
   // ── maxCount argument ─────────────────────────────────────────────
   describe('maxCount?: number — log pagination boundaries', () => {
-    it('maxCount=0 — does it return 0 commits or ignore the parameter?', async () => {
+    it('maxCount=0 — falls back to default (50), returns 0 commits from mock', async () => {
       mockGitInstance.log.mockResolvedValue({ all: [], total: 0 })
       const result = await manager.getLog('/repo', 0)
-      // Passing 0 should return 0 commits, but the contract doesn't specify.
+      // 0 is not a valid maxCount (< 1), so it falls back to default (50)
       expect(result.commits).toHaveLength(0)
+      expect(mockGitInstance.log).toHaveBeenCalledWith({ maxCount: 50 })
     })
 
-    it('maxCount=-1 — now validated, falls back to default', async () => {
+    it('maxCount=-1 — now validated, falls back to default (50)', async () => {
       mockGitInstance.log.mockResolvedValue({ all: [], total: 0 })
       // FIX: maxCount validation now clamps negative values to default (50)
       const result = await manager.getLog('/repo', -1)
-      expect(result).toBeDefined()
+      // Strengthened: verify the contract returns a valid GitLogResult structure,
+      // not just "something defined". The fallback means maxCount=50 was used,
+      // and mockGitInstance.log should have been called with { maxCount: 50 }
+      expect(result).toEqual({ commits: [], total: 0 })
+      expect(mockGitInstance.log).toHaveBeenCalledWith({ maxCount: 50 })
     })
 
-    it('maxCount=Infinity — now validated, falls back to default', async () => {
+    it('maxCount=Infinity — now validated, falls back to default (50)', async () => {
       mockGitInstance.log.mockResolvedValue({ all: [], total: 0 })
       // FIX: maxCount validation now clamps Infinity to default (50)
       const result = await manager.getLog('/repo', Infinity)
-      expect(result).toBeDefined()
+      expect(result).toEqual({ commits: [], total: 0 })
+      expect(mockGitInstance.log).toHaveBeenCalledWith({ maxCount: 50 })
     })
 
-    it('maxCount=1.5 — now validated, floored to integer', async () => {
+    it('maxCount=1.5 — now validated, floored to integer (1)', async () => {
       mockGitInstance.log.mockResolvedValue({ all: [], total: 0 })
       // FIX: maxCount validation now floors floating point values
       const result = await manager.getLog('/repo', 1.5)
-      expect(result).toBeDefined()
+      expect(result).toEqual({ commits: [], total: 0 })
+      expect(mockGitInstance.log).toHaveBeenCalledWith({ maxCount: 1 })
     })
   })
 

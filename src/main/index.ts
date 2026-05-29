@@ -196,8 +196,12 @@ app.whenReady().then(async () => {
   logger.info('App ready, loading workspace')
   Menu.setApplicationMenu(null)
   await notificationService.loadSettings()
-  await projectManager.loadWorkspace()
-  logger.info(`Workspace loaded, ${projectManager.listProjects().length} project(s)`)
+  try {
+    await projectManager.loadWorkspace()
+    logger.info(`Workspace loaded, ${projectManager.listProjects().length} project(s)`)
+  } catch (err) {
+    logger.error('Failed to load workspace', err)
+  }
   registerIpcHandlers(sessionManager, projectManager, notificationService)
   createWindow()
   initAutoUpdater(() => mainWindowRef)

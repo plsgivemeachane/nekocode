@@ -1,7 +1,7 @@
 import { SessionManager as SdkSessionManager } from '@earendil-works/pi-coding-agent'
 import type { AgentSession, AgentSessionEvent } from '@earendil-works/pi-coding-agent'
 import type { TextContent } from '@earendil-works/pi-ai'
-import { unlinkSync } from 'fs'
+import { unlinkSync, readFileSync, existsSync } from 'fs'
 import { StreamBatcher } from './stream-batcher'
 import type { SessionStreamEvent, ChatMessageIPC, CommandInfo, ModelInfo, ExtensionLoadError, UsageData, UIResponse } from '../shared/ipc-types'
 import { createLogger } from './logger'
@@ -33,6 +33,8 @@ interface ManagedSession {
   usageTotals: { input: number; output: number; totalCost: number }
   /** Tracks the current tool call being executed */
   currentToolCallId: string | null
+  /** Previous file content before write/edit tool execution (toolCallId -> previousContent) */
+  previousFileContent: Map<string, string>
   /** Electron-specific UI context for forwarding extension UI requests to renderer */
   uiContext: ElectronUIContext
 }
@@ -440,6 +442,7 @@ export class PiSessionManager {
       currentThinkingId: null,
       currentThinkingContent: '',
       currentToolCallId: null,
+      previousFileContent: new Map(),
       hasPrompted: false,
       usageTotals: { input: 0, output: 0, totalCost: 0 },
       uiContext,
@@ -579,6 +582,27 @@ export class PiSessionManager {
         this.finalizeThinkingMessage(managed)
         this.finalizeAssistantMessage(managed)
         managed.currentToolCallId = event.toolCallId ?? crypto.randomUUID()
+
+        // Capture previous file content for write/edit tools so the renderer
+        // can show diffs. We read the file BEFORE the tool modifies it.
+        const shortToolName = event.toolName.replace(/^toolcall_/, '')
+        if ((shortToolName === 'write' || shortToolName === 'edit') && event.args) {
+          try {
+            const args = event.args as Record<string, unknown>
+            const filePath = typeof args.path === 'string' ? args.path : null
+            if (filePath && existsSync(filePath)) {
+              const prevContent = readFileSync(filePath, 'utf-8')
+              managed.previousFileContent.set(managed.currentToolCallId, prevContent)
+              logger.debug(`Captured previous content for ${filePath} (${prevContent.length} chars) before ${shortToolName}`)
+            } else if (filePath) {
+              // File doesn't exist yet — it's a new file creation
+              managed.previousFileContent.set(managed.currentToolCallId, '')
+              logger.debug(`No previous content for ${filePath} (new file) before ${shortToolName}`)
+            }
+          } catch (err) {
+            logger.warn(`Failed to capture previous content for ${event.toolName}:`, err)
+          }
+        }
         const lastMsg = managed.messages[managed.messages.length - 1]
         if (lastMsg && lastMsg.role === 'assistant') {
           if (!lastMsg.toolCalls) lastMsg.toolCalls = []
@@ -602,14 +626,33 @@ export class PiSessionManager {
         }
         break
       }
-      case 'tool_execution_end':
+      case 'tool_execution_end': {
         batcher.flush()
         logger.debug(`tool_execution_end: name=${event.toolName}, id=${event.toolCallId}, isError=${event.isError}, result=${JSON.stringify(event.result)?.slice(0, 200)}`)
+
+        // Inject previousContent into tool result for write/edit tools so the
+        // renderer can display diffs between old and new file content.
+        let enrichedResult = event.result
+        const toolCallId = event.toolCallId ?? managed.currentToolCallId ?? ''
+        if (managed.previousFileContent.has(toolCallId)) {
+          const previousContent = managed.previousFileContent.get(toolCallId)!
+          managed.previousFileContent.delete(toolCallId)
+          // Preserve the existing result structure but add previousContent
+          if (typeof enrichedResult === 'object' && enrichedResult !== null) {
+            enrichedResult = { ...enrichedResult as Record<string, unknown>, previousContent }
+          } else {
+            // If result is a simple string (e.g. "File written successfully"),
+            // wrap it in an object with both the message and previousContent
+            enrichedResult = { message: String(enrichedResult), previousContent }
+          }
+          logger.debug(`Injected previousContent (${previousContent.length} chars) into tool result for ${event.toolName}`)
+        }
+
         emit({
           type: 'tool_result',
-          toolCallId: event.toolCallId ?? managed.currentToolCallId ?? '',
+          toolCallId: toolCallId,
           toolName: event.toolName,
-          result: event.result,
+          result: enrichedResult,
           isError: event.isError,
         })
         if (managed.currentToolCallId) {
@@ -626,6 +669,7 @@ export class PiSessionManager {
           managed.currentToolCallId = null
         }
         break
+      }
       case 'agent_end':
         batcher.flush()
         this.finalizeThinkingMessage(managed)

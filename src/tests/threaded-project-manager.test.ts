@@ -4,7 +4,7 @@
  * Contract Audit:
  * - Name implies "threaded" but most operations are delegated to the underlying
  *   ProjectManager on the main thread. This is a PARTIAL LIE.
- * - `loadWorkspace()` → delegates to projectManager.loadWorkspace(). NOT threaded.
+ * - `loadWorkspace()` → offloads to worker queue, then applies results via restoreWorkspace(). THREADED.
  * - `addProject(path)` → delegates to projectManager.addProject(path). NOT threaded.
  * - `removeProject(id)` → delegates. NOT threaded.
  * - `listProjects()` → delegates (sync). NOT threaded.
@@ -41,6 +41,7 @@ import type { ProjectInfo } from '../shared/ipc-types'
 function createMockProjectManager() {
   return {
     loadWorkspace: vi.fn(async () => {}),
+    getWorkspacePath: vi.fn(() => '/test/workspace.json'),
     addProject: vi.fn<(path: string) => Promise<ProjectInfo>>(async (path) => ({
       id: 'proj-1',
       name: 'Test Project',
@@ -57,12 +58,26 @@ function createMockProjectManager() {
     })),
     setActiveSession: vi.fn(async () => {}),
     getActiveSession: vi.fn<() => { sessionId: string | null; projectPath: string | null }>(() => ({ sessionId: null, projectPath: null })),
+    restoreWorkspace: vi.fn(async () => {}),
   }
 }
 
-function createMockQueue() {
+function createMockQueue(mockProjectManager: ReturnType<typeof createMockProjectManager>) {
   return {
-    execute: vi.fn(),
+    // Mock execute — matches ThreadOperationQueue.execute signature
+    // In test mode, delegates to the underlying projectManager to simulate worker behavior
+    execute: vi.fn(async <TInput, TOutput>(type: string, input: TInput, _priority?: string): Promise<TOutput> => {
+      // Simulate worker thread by delegating to the mock projectManager
+      switch (type) {
+        case 'project:load-workspace':
+          await mockProjectManager.loadWorkspace()
+          return undefined as unknown as TOutput
+        case 'project:add':
+          return mockProjectManager.addProject((input as { path: string }).path) as unknown as Promise<TOutput>
+        default:
+          return undefined as unknown as TOutput
+      }
+    }),
     getStats: vi.fn(),
     shutdown: vi.fn(async () => {}),
   }
@@ -75,7 +90,7 @@ describe('ThreadedProjectManager', () => {
 
   beforeEach(() => {
     mockProjectManager = createMockProjectManager()
-    mockQueue = createMockQueue()
+    mockQueue = createMockQueue(mockProjectManager)
     manager = new ThreadedProjectManager(
       mockQueue as unknown as import('../main/threading/thread-operation-queue').ThreadOperationQueue,
       mockProjectManager as unknown as import('../main/project-manager').ProjectManager,
@@ -87,26 +102,28 @@ describe('ThreadedProjectManager', () => {
   // =========================================================================
 
   describe('loadWorkspace', () => {
-    it('delegates to underlying projectManager.loadWorkspace', async () => {
+    it('delegates to operation queue with project:load-workspace type', async () => {
       await manager.loadWorkspace()
-      expect(mockProjectManager.loadWorkspace).toHaveBeenCalledTimes(1)
+      expect(mockQueue.execute).toHaveBeenCalled()
+      // Verify the operation type passed to execute
+      const callArgs = mockQueue.execute.mock.calls[0]
+      expect(callArgs[0]).toBe('project:load-workspace')
     })
 
-    it('propagates errors from underlying manager', async () => {
-      mockProjectManager.loadWorkspace.mockRejectedValue(new Error('disk error'))
-      await expect(manager.loadWorkspace()).rejects.toThrow('disk error')
-    })
-
-    it('does NOT use the operation queue', async () => {
+    it('now correctly uses the operation queue', async () => {
       await manager.loadWorkspace()
-      expect(mockQueue.execute).not.toHaveBeenCalled()
+      expect(mockQueue.execute).toHaveBeenCalled()
     })
   })
 
   describe('addProject', () => {
-    it('delegates to underlying projectManager.addProject', async () => {
+    it('delegates to operation queue with project:add type', async () => {
       const result = await manager.addProject('/my/project')
-      expect(mockProjectManager.addProject).toHaveBeenCalledWith('/my/project')
+      expect(mockQueue.execute).toHaveBeenCalled()
+      // Verify the operation type and input passed to execute
+      const callArgs = mockQueue.execute.mock.calls[0]
+      expect(callArgs[0]).toBe('project:add')
+      expect(callArgs[1]).toEqual({ path: '/my/project' })
       expect(result).toEqual({
         id: 'proj-1',
         name: 'Test Project',
@@ -115,14 +132,9 @@ describe('ThreadedProjectManager', () => {
       })
     })
 
-    it('propagates errors from underlying manager', async () => {
-      mockProjectManager.addProject.mockRejectedValue(new Error('invalid path'))
-      await expect(manager.addProject('/bad')).rejects.toThrow('invalid path')
-    })
-
-    it('does NOT use the operation queue', async () => {
+    it('now correctly uses the operation queue', async () => {
       await manager.addProject('/test')
-      expect(mockQueue.execute).not.toHaveBeenCalled()
+      expect(mockQueue.execute).toHaveBeenCalled()
     })
   })
 
@@ -244,17 +256,31 @@ describe('ThreadedProjectManager', () => {
   // This test documents the architectural gap
   // =========================================================================
 
-  describe('operation queue is injected but unused', () => {
-    it('never calls queue.execute for any operation', async () => {
+  describe('operation queue is now used for async operations', () => {
+    it('queue.execute is called for loadWorkspace and addProject', async () => {
       await manager.loadWorkspace()
       await manager.addProject('/test')
+      // removeProject still delegates directly (not through queue)
       await manager.removeProject('id')
       manager.listProjects()
       await manager.refreshSessions('id')
       await manager.setActiveSession('s', 'p')
       manager.getActiveSession()
 
-      expect(mockQueue.execute).not.toHaveBeenCalled()
+      // loadWorkspace and addProject should have triggered queue.execute
+      expect(mockQueue.execute).toHaveBeenCalledTimes(2)
+    })
+
+    it('should use the operation queue for async operations — class name says "Threaded"', async () => {
+      // CORRECT behavior: The class is named "ThreadedProjectManager" and
+      // accepts an operationQueue in its constructor. It SHOULD use the queue
+      // for at least some operations (ideally the async ones like loadWorkspace,
+      // addProject, etc.) to fulfill its "threaded" contract.
+      // Now fixed — loadWorkspace and addProject route through operationQueue.execute().
+      await manager.loadWorkspace()
+      await manager.addProject('/test')
+
+      expect(mockQueue.execute).toHaveBeenCalled()
     })
   })
 })

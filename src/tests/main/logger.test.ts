@@ -75,16 +75,24 @@ describe("logger", () => {
   // ═══════════════════════════════════════════════════════════════════
 
   describe("winston logger properties", () => {
-    it("winston logger has transports array", () => {
+    it("winston logger has transports array with expected entries", () => {
       // In main thread, createLogger returns a winston child logger
       if ("transports" in logger) {
-        expect(Array.isArray((logger as any).transports)).toBe(true)
+        const transports = (logger as any).transports
+        expect(Array.isArray(transports)).toBe(true)
+        // Strengthened: verify there is at least one transport configured
+        expect(transports.length).toBeGreaterThan(0)
       }
     })
 
-    it("winston logger has format property", () => {
+    it("winston logger has format property with expected structure", () => {
       if ("format" in logger) {
-        expect((logger as any).format).toBeDefined()
+        // Strengthened: verify the format is a winston format object, not just "defined"
+        const format = (logger as any).format
+        expect(typeof format).toBe("object")
+        expect(format).not.toBeNull()
+        // Winston format objects have a transform function
+        expect(typeof format.transform).toBe("function")
       }
     })
 

@@ -1,5 +1,6 @@
 import type { ProjectInfo } from '../../shared/ipc-types'
 import { ThreadOperationQueue } from './thread-operation-queue'
+import type { ProjectLoadWorkspaceInput, ProjectLoadWorkspaceOutput, ProjectAddInput, ProjectAddOutput } from './types'
 import { createLogger } from '../logger'
 import type { ProjectManager } from '../project-manager'
 import type { IProjectManager } from '../manager-types'
@@ -41,13 +42,18 @@ export class ThreadedProjectManager implements IProjectManager {
 
   /**
    * Load workspace from disk.
-   * Offloaded to worker thread for file I/O.
+   * Offloads file I/O to worker thread, then applies results to main-thread ProjectManager.
    */
   async loadWorkspace(): Promise<void> {
-    logger.debug('loadWorkspace - delegating to underlying manager')
-    // Keep on main thread for now - workspace loading needs session discovery
-    // which requires the SDK SessionManager
-    return this.projectManager.loadWorkspace()
+    logger.debug('loadWorkspace - offloading to operation queue')
+    const result = await this.operationQueue.execute<ProjectLoadWorkspaceInput, ProjectLoadWorkspaceOutput>(
+      'project:load-workspace',
+      { workspacePath: this.projectManager.getWorkspacePath() }
+    )
+    // Apply the workspace data to the main-thread ProjectManager
+    // Session discovery happens on main thread since it uses SessionManager
+    // which may need access to Electron APIs
+    await this.projectManager.restoreWorkspace(result)
   }
 
   /**
@@ -55,9 +61,11 @@ export class ThreadedProjectManager implements IProjectManager {
    * Session discovery is offloaded to worker thread.
    */
   async addProject(path: string): Promise<ProjectInfo> {
-    logger.debug(`addProject: ${path}`)
-    // Use the underlying manager - it will use the threaded discovery internally
-    return this.projectManager.addProject(path)
+    logger.debug(`addProject: ${path} - offloading to operation queue`)
+    return this.operationQueue.execute<ProjectAddInput, ProjectAddOutput>(
+      'project:add',
+      { path }
+    )
   }
 
   /**

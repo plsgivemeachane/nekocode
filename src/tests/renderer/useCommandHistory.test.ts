@@ -122,7 +122,7 @@ describe('useCommandHistory', () => {
     })
 
     // CRITICAL DRILL: Same name with different sources — is it treated as same entry?
-    it('treats same name with different sources as the same entry (preserves original source)', () => {
+    it('treats same name with different sources — latest source should win', () => {
       const { result } = renderHook(() => useCommandHistory())
 
       act(() => {
@@ -138,7 +138,8 @@ describe('useCommandHistory', () => {
       // The spread `{ ...entry, lastUsed: now, useCount: entry.useCount + 1 }` keeps
       // the original source. This may be surprising — "recordUsage" implies the
       // latest usage, but the source is stale.
-      expect(history[0].source).toBe('slash')
+      // CORRECT behavior: the latest source ('palette') should win.
+      expect(history[0].source).toBe('palette')
     })
 
     // CRITICAL DRILL: Idempotency — calling recordUsage rapidly
@@ -230,7 +231,8 @@ describe('useCommandHistory', () => {
     // objects are shared references. Mutating an entry's properties leaks back
     // into internal state. This is an abstraction leak — the contract name
     // "getHistory" implies a read-only query, but callers can corrupt state.
-    it('returns a shallow copy — entry objects are shared references (contract ambiguity)', () => {
+    // Now correctly returns a deep copy so entry objects are isolated.
+    it('returns a deep copy — entry objects should be isolated from internal state', () => {
       const { result } = renderHook(() => useCommandHistory())
 
       act(() => {
@@ -241,8 +243,10 @@ describe('useCommandHistory', () => {
       history1[0].name = 'MUTATED'
 
       const history2 = result.current.getHistory()
-      // BUG: Mutation leaked because spread only copies the array, not the entries
-      expect(history2[0].name).toBe('MUTATED')
+      // CORRECT behavior: getHistory should return a deep copy so that
+      // mutating the returned array does not leak back into internal state.
+      // Currently fails because spread only copies the array, not the entries.
+      expect(history2[0].name).toBe('help')
     })
   })
 
@@ -387,13 +391,16 @@ describe('useCommandHistory', () => {
     // If the stored value is a non-iterable object (e.g., {"not":"an array"}),
     // getHistory() crashes with "TypeError: history is not iterable" because
     // [...history] requires an iterable. This is an unguarded contract assumption.
-    it('crashes when localStorage contains a non-array JSON value (contract bug)', () => {
+    // CORRECT behavior: gracefully degrade by returning an empty array
+    // instead of crashing. Now fixed — implementation validates Array.isArray().
+    it('gracefully handles non-array JSON in localStorage — should return empty array, not crash', () => {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ not: 'an array' }))
 
       const { result } = renderHook(() => useCommandHistory())
-      // The hook loads the object as initial state, but getHistory() fails
-      // because [...history] requires an iterable
-      expect(() => result.current.getHistory()).toThrow(TypeError)
+      // The hook should gracefully handle non-array JSON by returning an empty array
+      // instead of crashing with "history is not iterable"
+      expect(() => result.current.getHistory()).not.toThrow()
+      expect(result.current.getHistory()).toEqual([])
     })
 
     it('saves to localStorage after recordUsage', () => {

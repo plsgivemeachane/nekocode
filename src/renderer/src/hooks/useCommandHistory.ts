@@ -37,7 +37,14 @@ function loadHistory(): CommandHistoryEntry[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return []
-    return JSON.parse(raw) as CommandHistoryEntry[]
+    const parsed = JSON.parse(raw)
+    // Validate that the parsed value is actually an array;
+    // non-array JSON (e.g. {"not":"an array"}) would crash on spread
+    if (!Array.isArray(parsed)) {
+      logger.warn('Command history in localStorage is not an array, resetting')
+      return []
+    }
+    return parsed as CommandHistoryEntry[]
   } catch (err) {
     logger.warn('Failed to load command history from localStorage:', err)
     return []
@@ -90,6 +97,7 @@ export function useCommandHistory(): UseCommandHistoryOutput {
         updated.splice(existingIndex, 1)
         updated.unshift({
           ...entry,
+          source,
           lastUsed: now,
           useCount: entry.useCount + 1,
         })
@@ -109,7 +117,8 @@ export function useCommandHistory(): UseCommandHistoryOutput {
   }, [history])
 
   const getHistory = useCallback((): CommandHistoryEntry[] => {
-    return [...history]
+    // Return a deep copy so callers cannot mutate internal state
+    return history.map((entry) => ({ ...entry }))
   }, [history])
 
   const clearHistory = useCallback(() => {

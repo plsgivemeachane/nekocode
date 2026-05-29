@@ -14,6 +14,7 @@ const TEXTAREA_MAX_HEIGHT_PX = 200
 interface ChatInputProps {
   sessionId: string | null
   isStreaming: boolean
+  isAgentConnecting: boolean
   input: string
   setInput: (value: string) => void
   sendPrompt: (text: string) => Promise<void>
@@ -33,12 +34,13 @@ export interface ChatInputHandle {
 function trySend(
   input: string,
   isStreaming: boolean,
+  isAgentConnecting: boolean,
   setInput: (v: string) => void,
   resetHeight: () => void,
   sendPrompt: (text: string) => Promise<void>,
 ): boolean {
   const text = input.trim()
-  if (!text || isStreaming) return false
+  if (!text || isStreaming || isAgentConnecting) return false
   setInput('')
   resetHeight()
   logger.info(`submit: ${text.slice(0, 80)}${text.length > 80 ? '...' : ''}`)
@@ -49,6 +51,7 @@ function trySend(
 export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput({
   sessionId,
   isStreaming,
+  isAgentConnecting,
   input,
   setInput,
   sendPrompt,
@@ -121,9 +124,9 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault()
-      trySend(input, isStreaming, setInput, resetHeight, sendPrompt)
+      trySend(input, isStreaming, isAgentConnecting, setInput, resetHeight, sendPrompt)
     },
-    [input, isStreaming, setInput, resetHeight, sendPrompt],
+    [input, isStreaming, isAgentConnecting, setInput, resetHeight, sendPrompt],
   )
 
   const handleKeyDown = useCallback(
@@ -140,10 +143,10 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
           return
         }
         e.preventDefault()
-        trySend(input, isStreaming, setInput, resetHeight, sendPrompt)
+        trySend(input, isStreaming, isAgentConnecting, setInput, resetHeight, sendPrompt)
       }
     },
-    [input, isStreaming, setInput, resetHeight, sendPrompt, showCommandPalette],
+    [input, isStreaming, isAgentConnecting, setInput, resetHeight, sendPrompt, showCommandPalette],
   )
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -187,8 +190,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
               value={input}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder="Ask anything, @tag files/folders, or type / for commands"
-              disabled={!sessionId || isStreaming}
+              placeholder={isAgentConnecting ? 'Agent starting, please wait...' : 'Ask anything, @tag files/folders, or type / for commands'}
+              disabled={!sessionId || isStreaming || isAgentConnecting}
               rows={1}
               className="w-full bg-transparent text-sm text-text-primary placeholder:text-text-tertiary/50 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed resize-none overflow-y-auto leading-relaxed"
             />
@@ -244,7 +247,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
             ) : (
               <button
                 type="submit"
-                disabled={!sessionId || !input.trim()}
+                disabled={!sessionId || !input.trim() || isAgentConnecting}
                 className="absolute right-1.5 bottom-1.5 w-7 h-7 flex items-center justify-center rounded-full bg-accent-700 text-white hover:bg-accent-600 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-accent-700/25 hover:shadow-accent-600/35"
                 aria-label="Send message"
                 title="Send"

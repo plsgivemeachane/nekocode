@@ -5,6 +5,7 @@ import { useWorkflowSteps } from '../../hooks/useWorkflowSteps'
 import { UserMessage } from './UserMessage'
 import { AssistantMessage } from './AssistantMessage'
 import { ToolCallGroup } from './ToolCallSection'
+import { ActivityRail } from './ActivityRail'
 import { ThinkingBlock } from './ThinkingBlock'
 import { UIDialog } from './UIDialog'
 import { WorkflowStepProgress } from './WorkflowStepProgress'
@@ -37,6 +38,17 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
   const timelineRef = useRef<MessagesTimelineHandle>(null)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
   const [gitBranch, setGitBranch] = React.useState<string | null>(null)
+
+  // --- Activity rail: diff viewer for tool call results ---
+  const [railOpen, setRailOpen] = useState(false)
+  const [selectedToolCallId, setSelectedToolCallId] = useState<string | null>(null)
+  const handleToolCallClick = useCallback((toolCallId: string) => {
+    setSelectedToolCallId(toolCallId)
+    setRailOpen(true)
+  }, [])
+  const handleRailClose = useCallback(() => {
+    setRailOpen(false)
+  }, [])
 
   // --- UI protocol: dialog requests from extensions/workflows ---
   const { activeRequest: activeUIRequest, updateLocalState, confirm: confirmUI, cancel: cancelUI } = useUIRequests(sessionId)
@@ -220,9 +232,9 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
       {/* NavBar removed — custom TitleBar now handles window controls at the App level */}
 
       <main
-        className="flex-1 overflow-hidden relative"
+        className="flex-1 overflow-hidden relative flex"
       >
-        <div className={`h-full ${contentOverflow} px-6`}>
+        <div className={`flex-1 min-w-0 ${contentOverflow} px-6`}>
           {!sessionId ? (
             <div className="flex flex-col items-center justify-center min-h-full select-none pt-16">
               {/* Logo */}
@@ -316,7 +328,9 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
                               status: m.status,
                               isError: m.isError,
                               args: m.args,
+                              result: m.result,
                             }))}
+                            onToolCallClick={handleToolCallClick}
                           />
                         )
                       }
@@ -382,6 +396,14 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
             </svg>
           </button>
         )}
+
+      {/* Activity Rail: diff viewer for file changes */}
+      <ActivityRail
+        isOpen={railOpen}
+        onClose={handleRailClose}
+        messages={messages}
+        selectedToolCallId={selectedToolCallId}
+      />
       </main>
 
       {error && (
@@ -418,6 +440,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
         ref={chatInputRef}
         sessionId={sessionId}
         isStreaming={isStreaming}
+        isAgentConnecting={isAgentConnecting}
         input={input}
         setInput={setInput}
         sendPrompt={sendPrompt}
