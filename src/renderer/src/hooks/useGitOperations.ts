@@ -138,6 +138,10 @@ export interface UseGitOperationsResult {
   refreshBranches: () => Promise<void>
   /** Clear the selected diff */
   clearDiff: () => void
+
+  // ── Repository detection ──
+  /** Whether the active project is a git repository. null = not yet checked */
+  isGitRepo: boolean | null
 }
 
 // ━━ Hook implementation ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -160,6 +164,17 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
   const [isDiffLoading, setIsDiffLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // ── isGitRepo flag ──
+  // Tracks whether the active project is a git repository.
+  // When false, all git operations are skipped and empty state is shown.
+  const [isGitRepo, setIsGitRepoState] = useState<boolean | null>(null) // null = not yet checked
+
+  // Keep the ref in sync with the state
+  const setIsGitRepo = useCallback((value: boolean | null) => {
+    isGitRepoRef.current = value
+    setIsGitRepoState(value)
+  }, [])
+
   // ── isInitialLoad sentinel ──
   // Distinguishes "we haven't loaded status yet" from "status loaded and repo is clean"
   const [isInitialLoad, setIsInitialLoad] = useState(true)
@@ -180,6 +195,11 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
   // ── Visibility tracking ──
   // Pause polling when the window is hidden to save battery
   const isWindowVisibleRef = useRef(true)
+
+  // ── Git repo detection ref ──
+  // Mirrors the isGitRepo state so the polling interval can read the latest value
+  // without being a dependency of the effect that sets up the interval.
+  const isGitRepoRef = useRef<boolean | null>(null)
 
   // ── Helpers ──
 
@@ -216,6 +236,8 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
 
   const refreshStatus = useCallback(async () => {
     if (!activeProjectPath) return
+    // Skip if we know this is not a git repo
+    if (isGitRepo === false) return
     try {
       setIsStatusLoading(true)
       const result = await window.nekocode.git.getStatus(activeProjectPath)
@@ -239,15 +261,15 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
     } finally {
       setIsStatusLoading(false)
     }
-  }, [activeProjectPath, pollInterval])
+  }, [activeProjectPath, isGitRepo, pollInterval])
 
   const refreshLog = useCallback(async () => {
     if (!activeProjectPath) return
+    if (isGitRepo === false) return
     try {
       setIsLogLoading(true)
       const result = await window.nekocode.git.getLog(activeProjectPath, 50)
       setLog(result)
-      // Don't clear error here — only the operation that succeeded should clear its own error
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       logger.error('refreshLog failed', msg)
@@ -255,10 +277,11 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
     } finally {
       setIsLogLoading(false)
     }
-  }, [activeProjectPath])
+  }, [activeProjectPath, isGitRepo])
 
   const refreshBranches = useCallback(async () => {
     if (!activeProjectPath) return
+    if (isGitRepo === false) return
     try {
       setIsBranchesLoading(true)
       const result = await window.nekocode.git.branchList(activeProjectPath)
@@ -270,17 +293,18 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
     } finally {
       setIsBranchesLoading(false)
     }
-  }, [activeProjectPath])
+  }, [activeProjectPath, isGitRepo])
 
   const refreshStashes = useCallback(async () => {
     if (!activeProjectPath) return
+    if (isGitRepo === false) return
     try {
       const result = await window.nekocode.git.stashList(activeProjectPath)
       setStashes(result)
     } catch (err) {
       logger.debug('refreshStashes failed (may not be a git repo)', err)
     }
-  }, [activeProjectPath])
+  }, [activeProjectPath, isGitRepo])
 
   const refreshAll = useCallback(async () => {
     await Promise.allSettled([refreshStatus(), refreshLog(), refreshBranches(), refreshStashes()])
@@ -290,6 +314,7 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
 
   const stageFile = useCallback(async (filePath: string) => {
     if (!activeProjectPath) return
+    if (isGitRepo === false) return
     await withLock('stage', async () => {
       try {
         await window.nekocode.git.stage(activeProjectPath, filePath)
@@ -300,10 +325,11 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
         throw err
       }
     })
-  }, [activeProjectPath, refreshStatus, withLock])
+  }, [activeProjectPath, isGitRepo, refreshStatus, withLock])
 
   const unstageFile = useCallback(async (filePath: string) => {
     if (!activeProjectPath) return
+    if (isGitRepo === false) return
     await withLock('unstage', async () => {
       try {
         await window.nekocode.git.unstage(activeProjectPath, filePath)
@@ -314,10 +340,11 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
         throw err
       }
     })
-  }, [activeProjectPath, refreshStatus, withLock])
+  }, [activeProjectPath, isGitRepo, refreshStatus, withLock])
 
   const stageAll = useCallback(async () => {
     if (!activeProjectPath) return
+    if (isGitRepo === false) return
     await withLock('stageAll', async () => {
       try {
         await window.nekocode.git.stageAll(activeProjectPath)
@@ -328,10 +355,11 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
         throw err
       }
     })
-  }, [activeProjectPath, refreshStatus, withLock])
+  }, [activeProjectPath, isGitRepo, refreshStatus, withLock])
 
   const unstageAll = useCallback(async () => {
     if (!activeProjectPath) return
+    if (isGitRepo === false) return
     await withLock('unstageAll', async () => {
       try {
         await window.nekocode.git.unstageAll(activeProjectPath)
@@ -342,20 +370,22 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
         throw err
       }
     })
-  }, [activeProjectPath, refreshStatus, withLock])
+  }, [activeProjectPath, isGitRepo, refreshStatus, withLock])
 
   const commit = useCallback(async (message: string): Promise<GitCommitResult> => {
     if (!activeProjectPath) throw new Error('No active project')
+    if (isGitRepo === false) throw new Error('Not a git repository')
     return withLock<GitCommitResult>('commit', async () => {
       const result = await window.nekocode.git.commit(activeProjectPath, message)
       await Promise.allSettled([refreshStatus(), refreshLog()])
       setError(null)
       return result
     })
-  }, [activeProjectPath, refreshStatus, refreshLog, withLock])
+  }, [activeProjectPath, isGitRepo, refreshStatus, refreshLog, withLock])
 
   const push = useCallback(async () => {
     if (!activeProjectPath) return
+    if (isGitRepo === false) return
     try {
       await window.nekocode.git.push(activeProjectPath)
       await refreshStatus()
@@ -365,10 +395,11 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
       setError(msg)
       throw err
     }
-  }, [activeProjectPath, refreshStatus])
+  }, [activeProjectPath, isGitRepo, refreshStatus])
 
   const pull = useCallback(async (): Promise<GitPullResult> => {
     if (!activeProjectPath) throw new Error('No active project')
+    if (isGitRepo === false) throw new Error('Not a git repository')
     try {
       const result = await window.nekocode.git.pull(activeProjectPath)
       await Promise.allSettled([refreshStatus(), refreshLog()])
@@ -379,10 +410,11 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
       setError(msg)
       throw err
     }
-  }, [activeProjectPath, refreshStatus, refreshLog])
+  }, [activeProjectPath, isGitRepo, refreshStatus, refreshLog])
 
   const fetch = useCallback(async () => {
     if (!activeProjectPath) return
+    if (isGitRepo === false) return
     try {
       await window.nekocode.git.fetch(activeProjectPath)
       await refreshStatus()
@@ -392,10 +424,11 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
       setError(msg)
       throw err
     }
-  }, [activeProjectPath, refreshStatus])
+  }, [activeProjectPath, isGitRepo, refreshStatus])
 
   const createBranch = useCallback(async (name: string, checkout: boolean = true) => {
     if (!activeProjectPath) return
+    if (isGitRepo === false) return
     try {
       await window.nekocode.git.branchCreate(activeProjectPath, name, checkout)
       await Promise.allSettled([refreshBranches(), refreshStatus()])
@@ -405,10 +438,11 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
       setError(msg)
       throw err
     }
-  }, [activeProjectPath, refreshBranches, refreshStatus])
+  }, [activeProjectPath, isGitRepo, refreshBranches, refreshStatus])
 
   const switchBranch = useCallback(async (name: string) => {
     if (!activeProjectPath) return
+    if (isGitRepo === false) return
     try {
       await window.nekocode.git.branchSwitch(activeProjectPath, name)
       await Promise.allSettled([refreshBranches(), refreshStatus(), refreshLog()])
@@ -418,10 +452,11 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
       setError(msg)
       throw err
     }
-  }, [activeProjectPath, refreshBranches, refreshStatus, refreshLog])
+  }, [activeProjectPath, isGitRepo, refreshBranches, refreshStatus, refreshLog])
 
   const stashChanges = useCallback(async (message?: string) => {
     if (!activeProjectPath) return
+    if (isGitRepo === false) return
     try {
       await window.nekocode.git.stash(activeProjectPath, message)
       await Promise.allSettled([refreshStatus(), refreshStashes()])
@@ -431,10 +466,11 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
       setError(msg)
       throw err
     }
-  }, [activeProjectPath, refreshStatus, refreshStashes])
+  }, [activeProjectPath, isGitRepo, refreshStatus, refreshStashes])
 
   const stashPop = useCallback(async () => {
     if (!activeProjectPath) return
+    if (isGitRepo === false) return
     try {
       await window.nekocode.git.stashPop(activeProjectPath)
       await Promise.allSettled([refreshStatus(), refreshStashes()])
@@ -444,12 +480,13 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
       setError(msg)
       throw err
     }
-  }, [activeProjectPath, refreshStatus, refreshStashes])
+  }, [activeProjectPath, isGitRepo, refreshStatus, refreshStashes])
 
   // ── Diff queries ──
 
   const viewDiff = useCallback(async (filePath: string, staged: boolean = false) => {
     if (!activeProjectPath) return
+    if (isGitRepo === false) return
     try {
       setIsDiffLoading(true)
       const [diffResult, summaryResult] = await Promise.all([
@@ -464,7 +501,7 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
     } finally {
       setIsDiffLoading(false)
     }
-  }, [activeProjectPath])
+  }, [activeProjectPath, isGitRepo])
 
   // ── Auto-poll status on mount and when project changes ──
 
@@ -479,6 +516,7 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
       setDiffSummary(null)
       setError(null)
       setIsInitialLoad(true)
+      setIsGitRepo(null) // Reset git repo detection
       consecutiveErrorsRef.current = 0
       effectivePollInterval.current = pollInterval
       prevProjectPathRef.current = activeProjectPath
@@ -488,26 +526,44 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
     const handleVisibilityChange = () => {
       isWindowVisibleRef.current = !document.hidden
       // When becoming visible again, immediately refresh and restart polling
-      if (!document.hidden && activeProjectPath) {
+      if (!document.hidden && activeProjectPath && isGitRepo !== false) {
         refreshStatus()
       }
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
 
-    // Initial load
+    // Initial load — check if this is a git repo first, then load data
     if (activeProjectPath) {
-      refreshAll()
+      // Check if the directory is a git repository before attempting any operations
+      window.nekocode.git.isRepo(activeProjectPath).then((isRepo) => {
+        setIsGitRepo(isRepo)
+        if (isRepo) {
+          // It's a git repo, load all data
+          refreshAll()
+        } else {
+          // Not a git repo, show empty state without errors
+          logger.info(`Project at ${activeProjectPath} is not a git repository — skipping git operations`)
+          setIsInitialLoad(false)
+        }
+      }).catch((err) => {
+        // If the isRepo check itself fails, assume it's not a git repo
+        logger.debug('isRepo check failed, assuming not a git repo', err)
+        setIsGitRepo(false)
+        setIsInitialLoad(false)
+      })
     }
 
-    // Set up polling with backoff — only poll when window is visible
+    // Set up polling with backoff — only poll when window is visible AND it's a git repo
     if (pollTimerRef.current) {
       clearInterval(pollTimerRef.current)
     }
 
-    if (activeProjectPath) {
+    if (activeProjectPath && isGitRepo !== false) {
       pollTimerRef.current = setInterval(() => {
         // Skip polling if window is hidden
         if (!isWindowVisibleRef.current) return
+        // Skip polling if not a git repo (read from ref for latest value)
+        if (isGitRepoRef.current === false) return
         refreshStatus()
       }, effectivePollInterval.current)
     }
@@ -519,7 +575,7 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
       }
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [activeProjectPath, refreshAll, refreshStatus, pollInterval])
+  }, [activeProjectPath, refreshAll, refreshStatus, pollInterval, isGitRepo])
 
   return {
     status,
@@ -553,5 +609,6 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
     refreshLog,
     refreshBranches,
     clearDiff,
+    isGitRepo,
   }
 }

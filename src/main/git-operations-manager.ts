@@ -222,6 +222,17 @@ function mapLog(raw: LogResult): GitLogResult {
  * scoped to the requested working directory.
  */
 export class GitOperationsManager {
+  /** Check if the given directory is inside a git repository */
+  async isGitRepo(cwd: string): Promise<boolean> {
+    validateCwd(cwd)
+    try {
+      await git(cwd).checkIsRepo()
+      return true
+    } catch {
+      return false
+    }
+  }
+
   /** Get the current branch name */
   async getBranch(cwd: string): Promise<string | null> {
     validateCwd(cwd)
@@ -241,8 +252,23 @@ export class GitOperationsManager {
       const raw = await git(cwd).status()
       return mapStatus(raw)
     } catch (err) {
+      // Gracefully handle non-git repository directories
+      const errMsg = err instanceof Error ? err.message : String(err)
+      if (errMsg.includes('not a git repository')) {
+        logger.debug(`getStatus: ${cwd} is not a git repository`)
+        return {
+          current: null,
+          isClean: true,
+          staged: [],
+          modified: [],
+          untracked: [],
+          conflicting: [],
+          ahead: 0,
+          behind: 0,
+        }
+      }
       logger.error(`getStatus failed for ${cwd}`, err)
-      throw new Error(`Failed to get git status: ${err instanceof Error ? err.message : String(err)}`)
+      throw new Error(`Failed to get git status: ${errMsg}`)
     }
   }
 
@@ -258,8 +284,14 @@ export class GitOperationsManager {
       const raw = await git(cwd).log({ maxCount })
       return mapLog(raw)
     } catch (err) {
+      // Gracefully handle non-git repository directories
+      const errMsg = err instanceof Error ? err.message : String(err)
+      if (errMsg.includes('not a git repository')) {
+        logger.debug(`getLog: ${cwd} is not a git repository`)
+        return { commits: [], total: 0 }
+      }
       logger.error(`getLog failed for ${cwd}`, err)
-      throw new Error(`Failed to get git log: ${err instanceof Error ? err.message : String(err)}`)
+      throw new Error(`Failed to get git log: ${errMsg}`)
     }
   }
 
@@ -280,8 +312,14 @@ export class GitOperationsManager {
       }
       return { patch }
     } catch (err) {
+      // Gracefully handle non-git repository directories
+      const errMsg = err instanceof Error ? err.message : String(err)
+      if (errMsg.includes('not a git repository')) {
+        logger.debug(`getDiff: ${cwd} is not a git repository`)
+        return { patch: '' }
+      }
       logger.error(`getDiff failed for ${cwd}`, err)
-      throw new Error(`Failed to get diff: ${err instanceof Error ? err.message : String(err)}`)
+      throw new Error(`Failed to get diff: ${errMsg}`)
     }
   }
 
@@ -307,8 +345,14 @@ export class GitOperationsManager {
         deletions: raw.deletions ?? 0,
       }
     } catch (err) {
+      // Gracefully handle non-git repository directories
+      const errMsg = err instanceof Error ? err.message : String(err)
+      if (errMsg.includes('not a git repository')) {
+        logger.debug(`getDiffSummary: ${cwd} is not a git repository`)
+        return { files: [], insertions: 0, deletions: 0 }
+      }
       logger.error(`getDiffSummary failed for ${cwd}`, err)
-      throw new Error(`Failed to get diff summary: ${err instanceof Error ? err.message : String(err)}`)
+      throw new Error(`Failed to get diff summary: ${errMsg}`)
     }
   }
 
@@ -475,8 +519,14 @@ export class GitOperationsManager {
         current: raw.current || null,
       }
     } catch (err) {
+      // Gracefully handle non-git repository directories
+      const errMsg = err instanceof Error ? err.message : String(err)
+      if (errMsg.includes('not a git repository')) {
+        logger.debug(`branchList: ${cwd} is not a git repository`)
+        return { branches: [], current: null }
+      }
       logger.error(`branchList failed for ${cwd}`, err)
-      throw new Error(`Failed to list branches: ${err instanceof Error ? err.message : String(err)}`)
+      throw new Error(`Failed to list branches: ${errMsg}`)
     }
   }
 
@@ -559,8 +609,14 @@ export class GitOperationsManager {
       })
       return { stashes }
     } catch (err) {
+      // Gracefully handle non-git repository directories
+      const errMsg = err instanceof Error ? err.message : String(err)
+      if (errMsg.includes('not a git repository')) {
+        logger.debug(`stashList: ${cwd} is not a git repository`)
+        return { stashes: [] }
+      }
       logger.error(`stashList failed for ${cwd}`, err)
-      throw new Error(`Failed to list stashes: ${err instanceof Error ? err.message : String(err)}`)
+      throw new Error(`Failed to list stashes: ${errMsg}`)
     }
   }
 

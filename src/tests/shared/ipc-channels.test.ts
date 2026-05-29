@@ -6,7 +6,7 @@ describe('IPC_CHANNELS', () => {
   const allValues = Object.values(channels)
 
   it('has expected number of channels', () => {
-    expect(allValues).toHaveLength(64)
+    expect(allValues).toHaveLength(65)
   })
 
   it('has no duplicate values', () => {
@@ -151,6 +151,7 @@ it('IpcChannel type is a union of all values', () => {
       'GIT_STASH_POP',
       'GIT_STASH_LIST',
       'GIT_REMOTE_URL',
+      'GIT_IS_REPO',
       'ZOOM_GET',
       'ZOOM_SET',
       'ZOOM_RESET',

@@ -117,6 +117,7 @@ export function createMockIPC(): NekoCodeIPC {
       stashPop: vi.fn().mockResolvedValue(undefined),
       stashList: vi.fn().mockResolvedValue({ stashes: [] }),
       getRemoteUrl: vi.fn().mockResolvedValue(null),
+      isRepo: vi.fn().mockResolvedValue(true),
     },
     zoom: {
       get: vi.fn().mockResolvedValue({ factor: 1.0 }),

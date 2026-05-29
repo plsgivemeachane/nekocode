@@ -100,6 +100,21 @@ export function GitCommandCenter() {
     )
   }
 
+  // ── Not a git repository ──
+
+  if (git.isGitRepo === false) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-3 px-4">
+        <div className="text-text-tertiary text-sm text-center">
+          This project is not a Git repository
+        </div>
+        <div className="text-text-quaternary text-xs text-center">
+          Initialize a repository with <code className="bg-surface-800 px-1.5 py-0.5 rounded text-text-secondary">git init</code> to enable Git features
+        </div>
+      </div>
+    )
+  }
+
   // ── Render ──
 
   return (

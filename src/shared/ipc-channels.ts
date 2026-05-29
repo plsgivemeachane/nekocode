@@ -53,6 +53,7 @@ export const IPC_CHANNELS = {
   GIT_STASH_POP: 'git:stash-pop',
   GIT_STASH_LIST: 'git:stash-list',
   GIT_REMOTE_URL: 'git:remote-url',
+  GIT_IS_REPO: 'git:is-repo',
   ZOOM_GET: 'zoom:get',
   ZOOM_SET: 'zoom:set',
   ZOOM_RESET: 'zoom:reset',

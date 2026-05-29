@@ -551,6 +551,8 @@ export interface NekoCodeIPC {
     stashList: (cwd: string) => Promise<GitStashListResult>
     /** Get remote URL */
     getRemoteUrl: (cwd: string, remote?: string) => Promise<string | null>
+    /** Check if the directory is inside a git repository */
+    isRepo: (cwd: string) => Promise<boolean>
   }
   update: {
     check: () => Promise<UpdateAvailableInfo | null>

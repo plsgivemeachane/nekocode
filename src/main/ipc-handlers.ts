@@ -348,6 +348,11 @@ export function registerIpcHandlers(
     return gitOperationsManager.getRemoteUrl(payload.cwd, payload.remote)
   })
 
+  ipcMain.handle(IPC_CHANNELS.GIT_IS_REPO, async (_event, payload: { cwd: string }): Promise<boolean> => {
+    logger.debug(`GIT_IS_REPO cwd=${payload.cwd}`)
+    return gitOperationsManager.isGitRepo(payload.cwd)
+  })
+
   // --- Zoom handlers ---
 
   ipcMain.handle(IPC_CHANNELS.ZOOM_GET, async (): Promise<{ factor: number }> => {

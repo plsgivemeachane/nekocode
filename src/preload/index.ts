@@ -151,6 +151,8 @@ contextBridge.exposeInMainWorld('nekocode', {
       ipcRenderer.invoke(IPC_CHANNELS.GIT_STASH_LIST, { cwd }),
     getRemoteUrl: (cwd: string, remote?: string): Promise<string | null> =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_REMOTE_URL, { cwd, remote }),
+    isRepo: (cwd: string): Promise<boolean> =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_IS_REPO, { cwd }),
   },
   dialog: {
     openFolder: (): Promise<string | null> =>
