@@ -9,7 +9,7 @@ export function SettingsView() {
   const percentage = Math.round(zoom * 100)
 
   return (
-    <div className="flex-1 min-w-0 flex flex-col bg-surface-950">
+    <div className="flex-1 min-w-0 min-h-0 flex flex-col bg-surface-950">
       {/* Header */}
       <header className="h-12 flex items-center px-6 border-b border-surface-800/50 bg-surface-950/80 backdrop-blur-sm">
         <button

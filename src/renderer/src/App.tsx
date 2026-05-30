@@ -42,7 +42,7 @@ function AppLayout() {
       <div className="flex flex-1 min-h-0">
         <TreeSidebar />
         {/* Content group: messages + input (prepared for future split-screen) */}
-        <div className="flex-1 min-w-0 flex flex-col">
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col">
           {state.activeView === 'settings' ? (
             <SettingsView />
           ) : (
