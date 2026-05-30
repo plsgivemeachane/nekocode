@@ -57,6 +57,15 @@ const RAIL_ITEMS: RailItem[] = [
   },
 ]
 
+// Compile-time assertion: every non-null RightSidebarPanel value must have a RAIL_ITEMS entry
+// If this type resolves to `never`, all panel values are covered. If not, TypeScript
+// will report the missing panel values as a type error.
+type _RailCoverageCheck = Exclude<RightSidebarPanel, null> extends (typeof RAIL_ITEMS)[number]['id']
+  ? true
+  : never
+const _railCoverageCheck: _RailCoverageCheck = true as _RailCoverageCheck
+void _railCoverageCheck
+
 // ---------------------------------------------------------------------------
 // Diff entry builder (extracted from old ActivityRail)
 // ---------------------------------------------------------------------------
@@ -75,10 +84,13 @@ function buildDiffEntries(messages: ChatMessage[]): DiffEntry[] {
 
     if (short === 'write') {
       const filePath = typeof args.path === 'string' ? args.path : ''
-      const newContent = typeof args.content === 'string' ? args.content : ''
+      // 'content' is the key field for write tools. If it's not a string at all,
+      // skip (malformed message). But if it's '' (empty string), that's a valid
+      // write meaning 'clear the file' — must NOT be skipped.
+      const newContent = typeof args.content === 'string' ? args.content : undefined
       const previousContent = typeof result?.previousContent === 'string' ? result.previousContent : ''
 
-      if (!filePath || !newContent) continue
+      if (!filePath || newContent === undefined) continue
       if (previousContent === newContent) continue
 
       const stats = extractDiffStats(msg.toolName, args, result)
@@ -98,15 +110,23 @@ function buildDiffEntries(messages: ChatMessage[]): DiffEntry[] {
       const edits = Array.isArray(rawEdits) ? rawEdits : []
       if (edits.length === 0) continue
 
-      let oldContent = ''
-      let newContent = ''
+      // Build old/new content by joining edit texts with newlines as separators
+      // (not as suffixes — avoids phantom trailing newlines that corrupt the diff)
+      const oldTexts: string[] = []
+      const newTexts: string[] = []
       for (const edit of edits) {
         const e = edit as Record<string, unknown>
         const oldText = typeof e.oldText === 'string' ? e.oldText : ''
         const newText = typeof e.newText === 'string' ? e.newText : ''
-        oldContent += oldText + '\n'
-        newContent += newText + '\n'
+        oldTexts.push(oldText)
+        newTexts.push(newText)
       }
+      const oldContent = oldTexts.join('\n')
+      const newContent = newTexts.join('\n')
+
+      // Skip entries where both contents are empty (e.g., non-string oldText/newText
+      // that defaulted to empty strings). Such edits produce no meaningful diff.
+      if (!oldContent && !newContent) continue
 
       const stats = extractDiffStats(msg.toolName, args, result)
       entries.push({
@@ -168,6 +188,8 @@ export function RightSidebar() {
   const isDraggingRef = useRef(false)
   const startX = useRef(0)
   const startWidth = useRef(0)
+  // Store active resize handlers so they can be cleaned up on unmount mid-drag
+  const activeResizeHandlersRef = useRef<{ mousemove: ((e: MouseEvent) => void) | null; mouseup: (() => void) | null }>({ mousemove: null, mouseup: null })
   const [isHoveringResize, setIsHoveringResize] = useState(false)
   const [isDraggingState, setIsDraggingState] = useState(false)
 
@@ -198,10 +220,12 @@ export function RightSidebar() {
   // Scroll to the selected diff entry when the diff panel opens or selection changes
   useEffect(() => {
     if (activePanel !== 'diff' || !selectedToolCallId) return
-    requestAnimationFrame(() => {
+    const rafId = requestAnimationFrame(() => {
       const el = document.getElementById(`diff-entry-${selectedToolCallId}`)
       el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
+    // Cancel the rAF on unmount to prevent calling scrollIntoView on a detached DOM element
+    return () => cancelAnimationFrame(rafId)
   }, [activePanel, selectedToolCallId])
 
   // Toggle a panel: clicking an active icon closes it, clicking inactive opens it
@@ -234,10 +258,14 @@ export function RightSidebar() {
         setIsDraggingState(false)
         document.removeEventListener('mousemove', handleMouseMove)
         document.removeEventListener('mouseup', handleMouseUp)
+        // Clear the stored handlers — no longer active
+        activeResizeHandlersRef.current = { mousemove: null, mouseup: null }
         document.body.style.cursor = ''
         document.body.style.userSelect = ''
       }
 
+      // Store handlers so they can be cleaned up on unmount mid-drag
+      activeResizeHandlersRef.current = { mousemove: handleMouseMove, mouseup: handleMouseUp }
       document.body.style.cursor = 'col-resize'
       document.body.style.userSelect = 'none'
       document.addEventListener('mousemove', handleMouseMove)
@@ -245,6 +273,25 @@ export function RightSidebar() {
     },
     [width, setRightSidebarWidth],
   )
+
+  // Cleanup: remove resize listeners and reset drag state on unmount
+  // This prevents listener leaks if the component unmounts mid-drag
+  useEffect(() => {
+    return () => {
+      if (activeResizeHandlersRef.current.mousemove) {
+        document.removeEventListener('mousemove', activeResizeHandlersRef.current.mousemove)
+      }
+      if (activeResizeHandlersRef.current.mouseup) {
+        document.removeEventListener('mouseup', activeResizeHandlersRef.current.mouseup)
+      }
+      isDraggingRef.current = false
+      // Reset body cursor/userSelect if we were dragging
+      if (activeResizeHandlersRef.current.mousemove || activeResizeHandlersRef.current.mouseup) {
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
+    }
+  }, [])
 
   // Compute badge counts per panel (excluding null)
   const badgeCounts: Record<string, number> = useMemo(

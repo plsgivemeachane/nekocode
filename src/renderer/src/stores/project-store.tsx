@@ -274,16 +274,21 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
       return {
         ...state,
         rightSidebarActivePanel: action.panel,
-        // Preserve selected tool call ID when opening diff panel, clear when closing
+        // Preserve selected tool call ID only when selectedToolCallId is undefined (not passed).
+        // Explicitly passing null clears the selection. This avoids sticky stale selections.
         rightSidebarSelectedToolCallId: action.panel
-          ? (action.selectedToolCallId ?? state.rightSidebarSelectedToolCallId)
+          ? (action.selectedToolCallId !== undefined
+              ? action.selectedToolCallId
+              : state.rightSidebarSelectedToolCallId)
           : null,
       }
     }
 
     case 'SET_RIGHT_SIDEBAR_WIDTH': {
-      // Clamp width between 280 and 900 pixels
-      const clampedWidth = Math.max(280, Math.min(900, action.width))
+      // Clamp width between 280 and 900 pixels.
+      // Guard against NaN (Math.max/min propagate NaN) by defaulting to 480.
+      const safeWidth = Number.isFinite(action.width) ? action.width : 480
+      const clampedWidth = Math.max(280, Math.min(900, safeWidth))
       return {
         ...state,
         rightSidebarWidth: clampedWidth,
@@ -514,7 +519,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   const setRightSidebarPanel = useCallback(
     (panel: RightSidebarPanel, selectedToolCallId?: string | null) => {
-      dispatch({ type: 'SET_RIGHT_SIDEBAR_PANEL', panel, selectedToolCallId: selectedToolCallId ?? null })
+      // Pass selectedToolCallId as-is: undefined means "preserve current selection",
+      // null means "clear selection", string means "set to this ID".
+      // Do NOT coerce undefined to null — that would make clicking an icon clear
+      // the selection when the intent is to preserve it.
+      dispatch({ type: 'SET_RIGHT_SIDEBAR_PANEL', panel, selectedToolCallId })
     },
     [],
   )
