@@ -59,17 +59,24 @@ export function extractDiffStats(toolName: string, args: unknown, result: unknow
     const edits = Array.isArray(argsObj.edits) ? argsObj.edits : []
     if (edits.length === 0) return null
 
-    // For edit tool, we can compute stats from oldText/newText in each edit
-    let totalAdded = 0
-    let totalRemoved = 0
+    // For edit tool, compute real diff stats between oldText and newText.
+    // Previously this naively counted lines: oldText.split('\n').length removed,
+    // newText.split('\n').length added — which overcounts because it treats
+    // every line as changed rather than computing an actual diff.
+    // Using computeLineDiffStats (LCS-based) produces stats that match what
+    // @pierre/diffs shows in its PatchDiff header, since both use the same
+    // underlying diff algorithm.
+    let combinedOld = ''
+    let combinedNew = ''
     for (const edit of edits) {
       const e = edit as Record<string, unknown>
       const oldText = typeof e.oldText === 'string' ? e.oldText : ''
       const newText = typeof e.newText === 'string' ? e.newText : ''
-      totalRemoved += oldText.split('\n').length
-      totalAdded += newText.split('\n').length
+      combinedOld += (combinedOld ? '\n' : '') + oldText
+      combinedNew += (combinedNew ? '\n' : '') + newText
     }
-    return totalAdded > 0 || totalRemoved > 0 ? { added: totalAdded, removed: totalRemoved } : null
+    if (combinedOld === '' && combinedNew === '') return null
+    return computeLineDiffStats(combinedOld, combinedNew)
   }
 
   return null

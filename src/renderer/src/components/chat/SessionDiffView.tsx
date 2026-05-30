@@ -80,8 +80,9 @@ function DiffStyleToggle({ diffStyle, onToggle }: {
 /**
  * SessionDiffView renders a list of diff entries, each with its own PatchDiff.
  *
- * When multiple files were modified, each file gets its own diff section
- * with a file header showing the path and change stats.
+ * The @pierre/diffs PatchDiff component renders its own file header from the
+ * patch content (showing filename and change stats), so we don't add a separate
+ * custom header. This avoids duplicate/mismatched headers.
  */
 export function SessionDiffView({ entries, selectedId, onSelectEntry }: SessionDiffViewProps) {
   const [diffStyle, setDiffStyle] = useState<'unified' | 'split'>('unified')
@@ -148,19 +149,9 @@ export function SessionDiffView({ entries, selectedId, onSelectEntry }: SessionD
               className={`border-b border-surface-800/40 ${isSelected ? 'ring-1 ring-accent-500/30' : ''}`}
               onClick={() => onSelectEntry?.(entry.id)}
             >
-              {/* Per-file header */}
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-surface-900/50 border-b border-surface-800/30">
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="text-text-muted shrink-0">
-                  <path d="M1 3.5A1.5 1.5 0 0 1 2.5 2h3.879a1.5 1.5 0 0 1 1.06.44l1.122 1.12A1.5 1.5 0 0 0 9.62 4H13.5A1.5 1.5 0 0 1 15 5.5v7a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 12.5v-9z" fill="none" stroke="currentColor" strokeWidth="1.5"/>
-                </svg>
-                <span className="text-[11px] font-mono text-text-secondary truncate flex-1">{entry.filePath}</span>
-                <span className="inline-flex items-center gap-1 text-[11px] font-mono shrink-0">
-                  {entry.stats.added > 0 && <span className="text-[#4ade80]">+{entry.stats.added}</span>}
-                  {entry.stats.removed > 0 && <span className="text-[#f87171]">-{entry.stats.removed}</span>}
-                </span>
-              </div>
-
-              {/* The PatchDiff component renders inside a Shadow DOM */}
+              {/* The PatchDiff component renders its own file header from the patch content,
+                  so we don't need a separate custom header. The @pierre/diffs header shows
+                  the filename and change stats, matching the patch's --- a/ and +++ b/ lines. */}
               <PatchDiff
                 patch={patch}
                 options={diffOptions}

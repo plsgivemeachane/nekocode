@@ -45,8 +45,8 @@ function getPatchDiffCallProps(index: number = 0): PatchDiffProps {
 //      The name says "diffStyle" but it's really "layoutStyle"
 //   4. onSelectEntry callback — React catches errors in event handlers
 //      so the component doesn't need try/catch
-//   5. Stats in the per-file header show +0/-0 — the same ambiguity
-//      as DiffStatsBadge: invisible zero-stats
+//   5. Stats now handled by @pierre/diffs PatchDiff header (Shadow DOM)
+//      — removed custom per-file header to avoid duplicate headers
 // ═══════════════════════════════════════════════════════════════════════
 
 const makeEntry = (overrides: Partial<DiffEntry> = {}): DiffEntry => ({
@@ -167,37 +167,33 @@ describe("SessionDiffView — Contract Violations", () => {
   // changed" looks identical to "file was modified with additions only".
   // ═══════════════════════════════════════════════════════════════════════
 
-  describe("Abstraction Ambiguity: stats display in per-file header", () => {
-    it("entry with added:0 removed:0 shows no stats text", () => {
-      const entries = [makeEntry({ stats: { added: 0, removed: 0 } })]
+  describe("Stats are delegated to @pierre/diffs PatchDiff header", () => {
+    // The custom per-file header was removed to avoid colliding with
+    // @pierre/diffs' built-in file header. Stats (+N/-N) and file path
+    // are now shown exclusively by PatchDiff's own header rendered
+    // inside Shadow DOM. We verify that no duplicate stats appear
+    // in our DOM and that the patch string contains correct file info.
+    it("no duplicate +N/-N stats rendered outside PatchDiff", () => {
+      const entries = [makeEntry({ stats: { added: 5, removed: 3 } })]
       const { container } = render(<SessionDiffView entries={entries} />)
-      // No +/- text because both are 0 and the code checks > 0
-      // Use text content matching instead of CSS selectors
-      const text = container.textContent ?? ""
-      // The entry should not contain "+0" or "-0"
-      expect(text).not.toContain("+0")
-      expect(text).not.toContain("-0")
+      // Stats should NOT appear in our DOM — they're inside PatchDiff's Shadow DOM
+      expect(screen.queryByText("+5")).toBeNull()
+      expect(screen.queryByText("-3")).toBeNull()
     })
 
-    it("entry with added:5 removed:0 shows +5 but no red text", () => {
-      const entries = [makeEntry({ stats: { added: 5, removed: 0 } })]
+    it("patch string passed to PatchDiff contains the file path", () => {
+      const entries = [makeEntry({ filePath: "/src/app.ts" })]
       render(<SessionDiffView entries={entries} />)
-      expect(screen.getByText("+5")).toBeTruthy()
-      // No red text for removed
-      expect(screen.queryByText(/-\d+/)).toBeNull()
+      const props = getPatchDiffCallProps(0)
+      // The patch should reference the file path in its headers
+      expect(props.patch).toContain("/src/app.ts")
     })
 
-    it("entry with added:0 removed:3 shows -3 but no green text", () => {
-      const entries = [makeEntry({ stats: { added: 0, removed: 3 } })]
+    it("entry with zero stats still renders PatchDiff", () => {
+      const entries = [makeEntry({ stats: { added: 0, removed: 0 } })]
       render(<SessionDiffView entries={entries} />)
-      expect(screen.getByText("-3")).toBeTruthy()
-    })
-
-    it("entry with both stats shows both indicators", () => {
-      const entries = [makeEntry({ stats: { added: 4, removed: 2 } })]
-      render(<SessionDiffView entries={entries} />)
-      expect(screen.getByText("+4")).toBeTruthy()
-      expect(screen.getByText("-2")).toBeTruthy()
+      // PatchDiff should still be rendered even with zero changes
+      expect(mockPatchDiff).toHaveBeenCalledTimes(1)
     })
   })
 

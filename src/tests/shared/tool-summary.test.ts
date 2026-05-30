@@ -141,19 +141,14 @@ describe('extractDiffStats — Contract Violations', () => {
       // This is a REAL BUG: the function crashes instead of gracefully handling invalid edits.
     })
 
-    it('edit with edits containing undefined oldText/newText — counts as +1 -1', () => {
+    it('edit with edits containing undefined oldText/newText — now returns null (no phantom stats)', () => {
       // edit without oldText or newText: both default to ''
-      // ''.split('\n').length === 1
-      // So we get { added: 1, removed: 1 } for an edit that does NOTHING
+      // With computeLineDiffStats, combinedOld='' and combinedNew=''
+      // The early return catches this: no content means no diff stats.
+      // Previously (BUG): treated as +1 -1 because ''.split('\n').length === 1.
+      // Now: correctly returns null — an edit with no text is not a meaningful diff.
       const result = extractDiffStats('edit', { path: '/f', edits: [{ path: '/f' }] }, null)
-      // The edit has no oldText or newText — it's meaningless.
-      // But the function counts it as +1 -1.
-      expect(result).not.toBeNull()
-      if (result) {
-        // This reveals the function treats empty strings as 1-line edits
-        expect(result.added).toBe(1)
-        expect(result.removed).toBe(1)
-      }
+      expect(result).toBeNull()
     })
 
     it('edit with edits where oldText is multiline but newText is empty string', () => {
@@ -173,14 +168,15 @@ describe('extractDiffStats — Contract Violations', () => {
         path: '/f',
         edits: [
           { oldText: 'real old', newText: 'real new' },
-          { oldText: '', newText: '' }, // Does nothing but counts +1 -1
+          { oldText: '', newText: '' }, // No-op edit — no longer contributes phantom +1/-1
         ],
       }, null)
-      // First edit: 1 removed, 1 added
-      // Second edit: '' split = [''] → 1 removed, 1 added
-      // Total: 2 added, 2 removed
-      // But the second edit is semantically a no-op!
-      expect(result).toEqual({ added: 2, removed: 2 })
+      // With computeLineDiffStats: combinedOld='real old\n', combinedNew='real new\n'
+      // Old: ['real old', ''] (2 lines), New: ['real new', ''] (2 lines)
+      // LCS: '' matches '' → length 1. added=2-1=1, removed=2-1=1
+      // Previously (BUG): naive counting gave +2 -2 because empty edit counted as +1/-1
+      // Now: +1 -1 because the empty edit's '' line is common (not a real change)
+      expect(result).toEqual({ added: 1, removed: 1 })
     })
   })
 
