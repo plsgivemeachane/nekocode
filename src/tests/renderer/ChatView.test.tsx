@@ -76,6 +76,16 @@ vi.mock("@/renderer/src/stores/project-store", () => ({
   useProjectStore: () => ({ state: mockProjectState }),
 }))
 
+// Mock useSessionMessages
+const mockUseSessionMessages = {
+  onToolCallClick: vi.fn(),
+  setMessages: vi.fn(),
+}
+
+vi.mock("@/renderer/src/contexts/session-messages-context", () => ({
+  useSessionMessages: () => mockUseSessionMessages,
+}))
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function makeUserMessage(overrides: Partial<ChatMessage> = {}): ChatMessage {

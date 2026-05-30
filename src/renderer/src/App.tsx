@@ -1,6 +1,8 @@
 import React, { useEffect, useCallback } from 'react'
 import { ProjectProvider, useProjectStore } from './stores/project-store'
+import { SessionMessagesProvider } from './contexts/session-messages-context'
 import { TreeSidebar } from './components/layout/TreeSidebar'
+import { RightSidebar } from './components/layout/RightSidebar'
 import { ChatView } from './components/chat/ChatView'
 import { SettingsView } from './components/settings/SettingsView'
 import { GitCommandCenter } from './components/git/GitCommandCenter'
@@ -36,13 +38,19 @@ function AppLayout() {
     <div className="flex flex-col h-screen overflow-hidden bg-surface-950">
       {/* NavBar doubles as titlebar in frameless mode */}
       <NavBar />
+      {/* Main content area: [LeftSidebar] [ContentGroup] [RightSidebar] */}
       <div className="flex flex-1 min-h-0">
         <TreeSidebar />
-        {state.activeView === 'settings' ? (
-          <SettingsView />
-        ) : (
-          <ChatView sessionId={state.activeSessionId} className="flex-1 min-w-0" />
-        )}
+        {/* Content group: messages + input (prepared for future split-screen) */}
+        <div className="flex-1 min-w-0 flex flex-col">
+          {state.activeView === 'settings' ? (
+            <SettingsView />
+          ) : (
+            <ChatView sessionId={state.activeSessionId} className="flex-1 min-w-0" />
+          )}
+        </div>
+        {/* Right sidebar: full-height, like the left sidebar */}
+        <RightSidebar />
       </div>
 
       {/* Git overlay modal — full-screen with blur backdrop */}
@@ -97,7 +105,9 @@ function App() {
   logger.info('App mounted')
   return (
     <ProjectProvider>
-      <AppLayout />
+      <SessionMessagesProvider>
+        <AppLayout />
+      </SessionMessagesProvider>
     </ProjectProvider>
   )
 }

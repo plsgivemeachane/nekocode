@@ -27,6 +27,9 @@ export type SessionStatus = 'idle' | 'streaming' | 'error'
 /** Which main view is currently shown in the content area */
 export type ActiveView = 'chat' | 'settings'
 
+/** Which panel is active in the right sidebar. null = closed */
+export type RightSidebarPanel = 'diff' | 'outline' | null
+
 interface ProjectState {
   projects: ProjectInfo[]
   activeSessionId: string | null
@@ -44,6 +47,12 @@ interface ProjectState {
   agentReady: boolean
   /** Refresh counter per session — incremented when user requests a message refresh from context menu */
   sessionRefreshKeys: Record<string, number>
+  /** Which panel is active in the right sidebar (null = closed) */
+  rightSidebarActivePanel: RightSidebarPanel
+  /** Width of the right sidebar content panel in pixels */
+  rightSidebarWidth: number
+  /** Tool call ID selected in the right sidebar for scrolling */
+  rightSidebarSelectedToolCallId: string | null
 }
 
 export type ProjectAction =
@@ -65,6 +74,8 @@ export type ProjectAction =
   | { type: 'SET_ACTIVE_VIEW'; view: ActiveView }
   | { type: 'SET_GIT_OVERLAY'; show: boolean }
   | { type: 'REFRESH_SESSION_MESSAGES'; sessionId: string }
+  | { type: 'SET_RIGHT_SIDEBAR_PANEL'; panel: RightSidebarPanel; selectedToolCallId?: string | null }
+  | { type: 'SET_RIGHT_SIDEBAR_WIDTH'; width: number }
 
 // ---------------------------------------------------------------------------
 // Reducer (pure)
@@ -81,6 +92,9 @@ const INITIAL_STATE: ProjectState = {
   preloadedHistory: {},
   agentReady: true,
   sessionRefreshKeys: {},
+  rightSidebarActivePanel: null,
+  rightSidebarWidth: 480,
+  rightSidebarSelectedToolCallId: null,
 }
 
 function reducer(state: ProjectState, action: ProjectAction): ProjectState {
@@ -256,6 +270,26 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
       }
     }
 
+    case 'SET_RIGHT_SIDEBAR_PANEL': {
+      return {
+        ...state,
+        rightSidebarActivePanel: action.panel,
+        // Preserve selected tool call ID when opening diff panel, clear when closing
+        rightSidebarSelectedToolCallId: action.panel
+          ? (action.selectedToolCallId ?? state.rightSidebarSelectedToolCallId)
+          : null,
+      }
+    }
+
+    case 'SET_RIGHT_SIDEBAR_WIDTH': {
+      // Clamp width between 280 and 900 pixels
+      const clampedWidth = Math.max(280, Math.min(900, action.width))
+      return {
+        ...state,
+        rightSidebarWidth: clampedWidth,
+      }
+    }
+
     case 'REPLACE_PENDING_SESSION': {
       // Replace a pending session with the real one, and update active session ID
       const { projectPath, pendingId, realSession } = action
@@ -287,6 +321,8 @@ interface ProjectStoreAPI {
   setActiveSession: (sessionId: string, projectPath: string) => void
   setActiveView: (view: ActiveView) => void
   setGitOverlay: (show: boolean) => void
+  setRightSidebarPanel: (panel: RightSidebarPanel, selectedToolCallId?: string | null) => void
+  setRightSidebarWidth: (width: number) => void
   reconnectSession: (sessionId: string, projectPath: string) => Promise<void>
   createSession: (projectPath: string) => Promise<void>
   refreshSessions: (projectId: string) => Promise<void>
@@ -476,6 +512,20 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     [],
   )
 
+  const setRightSidebarPanel = useCallback(
+    (panel: RightSidebarPanel, selectedToolCallId?: string | null) => {
+      dispatch({ type: 'SET_RIGHT_SIDEBAR_PANEL', panel, selectedToolCallId: selectedToolCallId ?? null })
+    },
+    [],
+  )
+
+  const setRightSidebarWidth = useCallback(
+    (width: number) => {
+      dispatch({ type: 'SET_RIGHT_SIDEBAR_WIDTH', width })
+    },
+    [],
+  )
+
   const api: ProjectStoreAPI = {
     state,
     addProject,
@@ -483,6 +533,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     setActiveSession,
     setActiveView,
     setGitOverlay,
+    setRightSidebarPanel,
+    setRightSidebarWidth,
     reconnectSession,
     createSession,
     refreshSessions,

@@ -175,7 +175,7 @@ describe("SessionDiffView — Contract Violations", () => {
     // in our DOM and that the patch string contains correct file info.
     it("no duplicate +N/-N stats rendered outside PatchDiff", () => {
       const entries = [makeEntry({ stats: { added: 5, removed: 3 } })]
-      const { container } = render(<SessionDiffView entries={entries} />)
+      render(<SessionDiffView entries={entries} />)
       // Stats should NOT appear in our DOM — they're inside PatchDiff's Shadow DOM
       expect(screen.queryByText("+5")).toBeNull()
       expect(screen.queryByText("-3")).toBeNull()

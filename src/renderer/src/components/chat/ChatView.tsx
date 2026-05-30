@@ -5,7 +5,6 @@ import { useWorkflowSteps } from '../../hooks/useWorkflowSteps'
 import { UserMessage } from './UserMessage'
 import { AssistantMessage } from './AssistantMessage'
 import { ToolCallGroup } from './ToolCallSection'
-import { ActivityRail } from './ActivityRail'
 import { ThinkingBlock } from './ThinkingBlock'
 import { UIDialog } from './UIDialog'
 import { WorkflowStepProgress } from './WorkflowStepProgress'
@@ -16,6 +15,7 @@ import { StatusIndicator } from '../layout/StatusIndicator'
 import { WelcomeScreen } from '../ui/WelcomeScreen'
 import { ChatInput, type ChatInputHandle } from './ChatInput'
 import { useProjectStore } from '../../stores/project-store'
+import { useSessionMessages } from '../../contexts/session-messages-context'
 import { createLogger } from '../../utils/logger'
 
 const logger = createLogger('ChatView')
@@ -39,16 +39,16 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
   const [showScrollBtn, setShowScrollBtn] = useState(false)
   const [gitBranch, setGitBranch] = React.useState<string | null>(null)
 
-  // --- Activity rail: diff viewer for tool call results ---
-  const [railOpen, setRailOpen] = useState(false)
-  const [selectedToolCallId, setSelectedToolCallId] = useState<string | null>(null)
+  // --- Right sidebar: tool call click delegates to RightSidebar via context ---
+  const { onToolCallClick, setMessages: setSessionMessages } = useSessionMessages()
   const handleToolCallClick = useCallback((toolCallId: string) => {
-    setSelectedToolCallId(toolCallId)
-    setRailOpen(true)
-  }, [])
-  const handleRailClose = useCallback(() => {
-    setRailOpen(false)
-  }, [])
+    onToolCallClick(toolCallId)
+  }, [onToolCallClick])
+
+  // Sync messages to the shared context so RightSidebar can build diff entries
+  useEffect(() => {
+    setSessionMessages(messages)
+  }, [messages, setSessionMessages])
 
   // --- UI protocol: dialog requests from extensions/workflows ---
   const { activeRequest: activeUIRequest, updateLocalState, confirm: confirmUI, cancel: cancelUI } = useUIRequests(sessionId)
@@ -384,11 +384,11 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
           )}
         </div>
 
-        {/* Scroll-to-bottom button */}
+        {/* Scroll-to-bottom button — positioned absolute within the chat container */}
         {showScrollBtn && (
           <button
             onClick={() => handleScrollToBottom(true)}
-            className="fixed bottom-24 right-8 w-9 h-9 flex items-center justify-center bg-surface-800 hover:bg-surface-700 text-text-secondary rounded-full shadow-lg shadow-surface-950/50 border border-surface-700 transition-all duration-200 opacity-0 translate-y-2 animate-slide-up"
+            className="absolute bottom-24 right-4 w-9 h-9 flex items-center justify-center bg-surface-800 hover:bg-surface-700 text-text-secondary rounded-full shadow-lg shadow-surface-950/50 border border-surface-700 transition-all duration-200 opacity-0 translate-y-2 animate-slide-up z-20"
             aria-label="Scroll to bottom"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -397,13 +397,6 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
           </button>
         )}
 
-      {/* Activity Rail: diff viewer for file changes */}
-      <ActivityRail
-        isOpen={railOpen}
-        onClose={handleRailClose}
-        messages={messages}
-        selectedToolCallId={selectedToolCallId}
-      />
       </main>
 
       {error && (
