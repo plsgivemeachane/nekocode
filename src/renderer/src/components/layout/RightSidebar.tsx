@@ -313,7 +313,7 @@ className='absolute top-0 bottom-0 -left-1.5 w-3 cursor-col-resize z-20 group/re
         >
           {/* Small floating stick indicator (like a scrollbar thumb) */}
           <div
-            className={`absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 w-[3px] rounded-full transition-all duration-200 ${
+            className={`absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 w-0.75 rounded-full transition-all duration-200 ${
               isHoveringResize || isDraggingState
                 ? 'h-12 bg-accent/70'
                 : 'h-8 bg-surface-600/60 group-hover/resize:h-10 group-hover/resize:bg-surface-500/80'
@@ -345,13 +345,13 @@ className='absolute top-0 bottom-0 -left-1.5 w-3 cursor-col-resize z-20 group/re
               {item.icon}
               {/* Badge count */}
               {badge !== undefined && badge > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 text-[9px] font-mono font-bold text-accent bg-accent/10 rounded-full min-w-[16px] h-4 flex items-center justify-center border border-accent/20 px-0.5">
+                <span className="absolute -top-0.5 -right-0.5 text-[9px] font-mono font-bold text-accent bg-accent/10 rounded-full min-w-4 h-4 flex items-center justify-center border border-accent/20 px-0.5">
                   {badge > 99 ? '99+' : badge}
                 </span>
               )}
               {/* Active indicator bar */}
               {isActive && (
-                <span className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-accent" />
+                <span className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-0.75 h-5 rounded-r-full bg-accent" />
               )}
             </button>
           )
@@ -361,7 +361,7 @@ className='absolute top-0 bottom-0 -left-1.5 w-3 cursor-col-resize z-20 group/re
       {/* ═══════ Content Panel (always mounted, animated in/out) ═══════ */}
       <aside
         className={`h-full flex flex-col shrink-0 bg-surface-950 relative transition-[width,opacity] duration-300 ease-out overflow-hidden ${
-          activePanel ? 'opacity-100' : 'opacity-0 !w-0'
+          activePanel ? 'opacity-100' : 'opacity-0 w-0!'
         }`}
         style={activePanel ? { width: `${width}px` } : undefined}
         role="complementary"
