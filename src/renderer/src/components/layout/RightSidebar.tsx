@@ -358,36 +358,38 @@ className='absolute top-0 bottom-0 -left-1.5 w-3 cursor-col-resize z-20 group/re
         })}
       </div>
 
-      {/* ═══════ Content Panel ═══════ */}
-      {activePanel && (
-        <aside
-          className="h-full flex flex-col shrink-0 bg-surface-950 relative"
-          style={{ width: `${width}px` }}
-          role="complementary"
-          aria-label={`${activePanel} panel`}
-        >
-          {/* Panel header */}
-          <div className="flex items-center justify-between px-3 py-2 border-b border-surface-800/60 bg-surface-900/70 shrink-0">
-            <div className="flex items-center gap-2">
-              {/* Show the matching icon small */}
-              {RAIL_ITEMS.find((i) => i.id === activePanel)?.icon && (
-                <span className="text-text-muted scale-75 origin-left">
-                  {RAIL_ITEMS.find((i) => i.id === activePanel)!.icon}
-                </span>
-              )}
-              <span className="text-[12px] font-mono font-medium text-text-secondary">
-                {RAIL_ITEMS.find((i) => i.id === activePanel)?.label ?? activePanel}
+      {/* ═══════ Content Panel (always mounted, animated in/out) ═══════ */}
+      <aside
+        className={`h-full flex flex-col shrink-0 bg-surface-950 relative transition-[width,opacity] duration-300 ease-out overflow-hidden ${
+          activePanel ? 'opacity-100' : 'opacity-0 !w-0'
+        }`}
+        style={activePanel ? { width: `${width}px` } : undefined}
+        role="complementary"
+        aria-label={activePanel ? `${activePanel} panel` : 'sidebar panel'}
+      >
+        {/* Panel header */}
+        <div className="flex items-center justify-between px-3 py-2 border-b border-surface-800/60 bg-surface-900/70 shrink-0 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
+            {/* Show the matching icon small */}
+            {activePanel && RAIL_ITEMS.find((i) => i.id === activePanel)?.icon && (
+              <span className="text-text-muted scale-75 origin-left shrink-0">
+                {RAIL_ITEMS.find((i) => i.id === activePanel)!.icon}
               </span>
-              {/* Diff count badge */}
-              {activePanel === 'diff' && diffCount > 0 && (
-                <span className="text-[10px] font-mono text-text-tertiary bg-surface-800/60 px-1.5 py-0.5 rounded">
-                  {diffCount} file{diffCount !== 1 ? 's' : ''}
-                </span>
-              )}
-            </div>
+            )}
+            <span className="text-[12px] font-mono font-medium text-text-secondary truncate">
+              {activePanel ? (RAIL_ITEMS.find((i) => i.id === activePanel)?.label ?? activePanel) : '\u200B'}
+            </span>
+            {/* Diff count badge */}
+            {activePanel === 'diff' && diffCount > 0 && (
+              <span className="text-[10px] font-mono text-text-tertiary bg-surface-800/60 px-1.5 py-0.5 rounded shrink-0">
+                {diffCount} file{diffCount !== 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+          {activePanel && (
             <button
               onClick={() => setRightSidebarPanel(null)}
-              className="flex items-center justify-center w-6 h-6 rounded-md hover:bg-surface-800/50 text-text-tertiary hover:text-text-secondary transition-colors"
+              className="flex items-center justify-center w-6 h-6 rounded-md hover:bg-surface-800/50 text-text-tertiary hover:text-text-secondary transition-colors shrink-0"
               title="Close panel (Escape)"
               aria-label="Close panel"
             >
@@ -395,17 +397,27 @@ className='absolute top-0 bottom-0 -left-1.5 w-3 cursor-col-resize z-20 group/re
                 <path d="M4 4l8 8M12 4l-8 8" />
               </svg>
             </button>
-          </div>
+          )}
+        </div>
 
-          {/* Panel content */}
-          <div className="flex-1 min-h-0 overflow-hidden">
-            {activePanel === 'diff' && (
-              <DiffPanel diffEntries={diffEntries} selectedId={selectedToolCallId} />
-            )}
-            {activePanel === 'outline' && <OutlinePanel />}
+        {/* Panel content — crossfade between panels */}
+        <div className="flex-1 min-h-0 overflow-hidden relative">
+          <div
+            className={`absolute inset-0 transition-opacity duration-200 ${
+              activePanel === 'diff' ? 'opacity-100' : 'opacity-0 pointer-events-none'
+            }`}
+          >
+            <DiffPanel diffEntries={diffEntries} selectedId={selectedToolCallId} />
           </div>
-        </aside>
-      )}
+          <div
+            className={`absolute inset-0 transition-opacity duration-200 ${
+              activePanel === 'outline' ? 'opacity-100' : 'opacity-0 pointer-events-none'
+            }`}
+          >
+            <OutlinePanel />
+          </div>
+        </div>
+      </aside>
     </div>
   )
 }
