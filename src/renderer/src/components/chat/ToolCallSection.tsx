@@ -26,10 +26,18 @@ function StatusDot({ status, isError }: { status: 'running' | 'done'; isError?: 
   return <span className="h-[7px] w-[7px] rounded-full bg-success shrink-0" />
 }
 
-/** Inline diff stats badge: "+3 -1" style */
+/** Inline diff stats badge: "+3 -1" style. Shows "0 changes" when added/removed are both 0
+ *  to distinguish from null stats (not applicable). */
 function DiffStatsBadge({ stats }: { stats: DiffStats }) {
+  if (stats.added === 0 && stats.removed === 0) {
+    return (
+      <span data-diff-badge className="inline-flex items-center text-[11px] font-mono shrink-0 text-text-muted">
+        0 changes
+      </span>
+    )
+  }
   return (
-    <span className="inline-flex items-center gap-1 text-[11px] font-mono shrink-0">
+    <span data-diff-badge className="inline-flex items-center gap-1 text-[11px] font-mono shrink-0">
       {stats.added > 0 && (
         <span className="text-[#4ade80]">+{stats.added}</span>
       )}
@@ -59,8 +67,8 @@ function ToolCallRow({ toolName, status, isError, summary, diffStats, onClick }:
           : 'hover:bg-surface-800/30'
       }`}
       onClick={isFileModifying ? onClick : undefined}
-      role={isFileModifying ? 'button' : undefined}
-      tabIndex={isFileModifying ? 0 : undefined}
+      role={isFileModifying ? 'button' : 'listitem'}
+      tabIndex={isFileModifying ? 0 : -1}
       onKeyDown={isFileModifying ? (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
@@ -85,15 +93,11 @@ export function ToolCallGroup({ toolCalls, onToolCallClick }: {
   const runningCount = toolCalls.filter(tc => tc.status === 'running').length
   const doneCount = toolCalls.filter(tc => tc.status === 'done' && !tc.isError).length
 
-  // Compute total diff stats across all tool calls in this group
-  const totalAdded = toolCalls.reduce((sum, tc) => {
-    const stats = extractDiffStats(tc.toolName, tc.args, tc.result)
-    return sum + (stats?.added ?? 0)
-  }, 0)
-  const totalRemoved = toolCalls.reduce((sum, tc) => {
-    const stats = extractDiffStats(tc.toolName, tc.args, tc.result)
-    return sum + (stats?.removed ?? 0)
-  }, 0)
+  // Compute diff stats once per tool call (cache to avoid redundant recomputation)
+  // Previously called 3x per tool call (totalAdded + totalRemoved + row) — now called 1x
+  const toolCallStats = toolCalls.map(tc => extractDiffStats(tc.toolName, tc.args, tc.result))
+  const totalAdded = toolCallStats.reduce((sum, stats) => sum + (stats?.added ?? 0), 0)
+  const totalRemoved = toolCallStats.reduce((sum, stats) => sum + (stats?.removed ?? 0), 0)
   const hasAnyDiff = totalAdded > 0 || totalRemoved > 0
 
   return (
@@ -123,14 +127,14 @@ export function ToolCallGroup({ toolCalls, onToolCallClick }: {
 
       {/* Tool rows */}
       <div className="divide-y divide-surface-800/40">
-        {toolCalls.map(tc => (
+        {toolCalls.map((tc, i) => (
           <ToolCallRow
             key={tc.id}
             toolName={tc.toolName}
             status={tc.status}
             isError={tc.isError}
             summary={extractToolSummary(tc.toolName, tc.args)}
-            diffStats={extractDiffStats(tc.toolName, tc.args, tc.result)}
+            diffStats={toolCallStats[i]}
             onClick={onToolCallClick ? () => onToolCallClick(tc.id) : undefined}
           />
         ))}

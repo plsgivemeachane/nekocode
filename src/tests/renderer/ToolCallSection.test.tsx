@@ -58,8 +58,8 @@ describe("ToolCallGroup — Contract Violations", () => {
   // This is a performance bug and a potential correctness bug
   // ═══════════════════════════════════════════════════════════════════════
 
-  describe("Redundant computation: extractDiffStats called 3x per tool call", () => {
-    it("calls extractDiffStats 3x per tool call — totalAdded + totalRemoved + row", () => {
+  describe("Efficient computation: extractDiffStats called 1x per tool call (cached)", () => {
+    it("calls extractDiffStats once per tool call — cached result used for total + row", () => {
       mockExtractDiffStats.mockReturnValue({ added: 1, removed: 0 })
       render(
         <ToolCallGroup
@@ -69,28 +69,29 @@ describe("ToolCallGroup — Contract Violations", () => {
           ]}
         />
       )
-      // 2 tool calls x 3 calls each (totalAdded, totalRemoved, row) = 6 total calls
-      expect(mockExtractDiffStats).toHaveBeenCalledTimes(6)
+      // Previously BUG: 2 tool calls x 3 calls each = 6 total calls
+      // FIX: 2 tool calls x 1 call each = 2 total calls (cached for total + row)
+      expect(mockExtractDiffStats).toHaveBeenCalledTimes(2)
     })
 
-    it("calls extractDiffStats 3x for a single tool call with diff stats", () => {
-      // For 1 tool call: totalAdded loop (1 call) + totalRemoved loop (1 call) + row (1 call) = 3
+    it("calls extractDiffStats once for a single tool call with diff stats", () => {
+      // Previously: totalAdded loop (1 call) + totalRemoved loop (1 call) + row (1 call) = 3
+      // FIX: single call per tool call, result cached and reused
       mockExtractDiffStats.mockReturnValue({ added: 5, removed: 2 })
       render(<ToolCallGroup toolCalls={[baseToolCall]} />)
-      expect(mockExtractDiffStats).toHaveBeenCalledTimes(3)
+      expect(mockExtractDiffStats).toHaveBeenCalledTimes(1)
     })
 
-    it("if extractDiffStats had side effects, they would fire 3x per tool call", () => {
-      // This tests the PRINCIPLE: the function should be called once per tool call
-      // and the result cached. Currently it's called 3x per tool call.
+    it("extractDiffStats side effects fire once per tool call, not 3x", () => {
+      // Previously: 1 tool call x 3 invocations = 3 side effects for 1 tool call
+      // FIX: 1 tool call x 1 invocation = 1 side effect (result cached and reused)
       const sideEffectCounter = vi.fn()
       mockExtractDiffStats.mockImplementation(() => {
         sideEffectCounter()
         return { added: 1, removed: 0 }
       })
       render(<ToolCallGroup toolCalls={[baseToolCall]} />)
-      // 1 tool call x 3 invocations = 3 side effects for 1 tool call
-      expect(sideEffectCounter).toHaveBeenCalledTimes(3)
+      expect(sideEffectCounter).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -183,21 +184,24 @@ describe("ToolCallGroup — Contract Violations", () => {
   // ═══════════════════════════════════════════════════════════════════════
 
   describe("DiffStatsBadge: zero-stats visibility ambiguity", () => {
-    it("stats with added:0, removed:0 renders no visible text — same as null stats", () => {
+    it("stats with added:0, removed:0 renders visible '0 changes' text — distinguishes from null stats", () => {
       mockExtractDiffStats.mockReturnValue({ added: 0, removed: 0 })
       const { container } = render(
         <ToolCallGroup
           toolCalls={[{ ...baseToolCall, toolName: "write" }]}
         />
       )
-      // The badge exists but renders nothing because both checks are > 0
-      // This means a write that resulted in 0 changes looks the same as bash
+      // Previously: the badge rendered nothing when added=0 and removed=0,
+      // making it look the same as null stats (not applicable).
+      // FIX: Now shows "0 changes" text to distinguish "file written, no changes"
+      // from "not applicable".
+      const zeroChanges = screen.getAllByText("0 changes")
+      expect(zeroChanges.length).toBeGreaterThanOrEqual(1)
+      // Green and red badge text should NOT appear
       const greenText = container.querySelector("[class*='4ade80']")
       const redText = container.querySelector("[class*='f87171']")
       expect(greenText).toBeNull()
       expect(redText).toBeNull()
-      // AMBIGUITY: User can't tell "file was written but nothing changed"
-      // from "this tool doesn't modify files"
     })
 
     it("stats with added > 0 shows green badge in both header and row", () => {

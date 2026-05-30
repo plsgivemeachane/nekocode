@@ -85,18 +85,27 @@ export function useAutoScroll({
   }, [scrollDeps, isStreaming, scrollToBottom])
 
   // Keep auto-scroll stable when content height changes after render (e.g. markdown/code highlighting)
+  // Wrapped in try-catch to handle ResizeObserver errors gracefully
+  // (e.g. when observe() throws in constrained environments)
   useEffect(() => {
     const container = scrollContainerRef.current
     const content = messageContentRef.current
     if (container && content) {
-      const observer = new ResizeObserver(() => {
-        if (isAtBottomRef.current) {
-          scrollToBottom(false)
-        }
-      })
-
-      observer.observe(content)
-      return () => observer.disconnect()
+      let observer: ResizeObserver | null = null
+      try {
+        observer = new ResizeObserver(() => {
+          if (isAtBottomRef.current) {
+            scrollToBottom(false)
+          }
+        })
+        observer.observe(content)
+      } catch {
+        // ResizeObserver may throw in some environments (e.g. SSR, test environments,
+        // or when the element is detached). Fail silently — auto-scroll will still
+        // work via the other useEffects, just without height-change tracking.
+        observer = null
+      }
+      return () => observer?.disconnect()
     }
   }, [scrollContainerRef, messageContentRef, scrollToBottom])
 

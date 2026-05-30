@@ -84,14 +84,15 @@ describe("SessionDiffView — Contract Violations", () => {
       // A user would expect to see the cumulative diff for /same/file.ts.
     })
 
-    it("renders 1 file changed for 2 entries on same file — count is wrong", () => {
+    it("renders 1 file changed for 2 entries on same file — unique file count", () => {
       const entries = [
         makeEntry({ id: "e1", filePath: "/same/file.ts" }),
         makeEntry({ id: "e2", filePath: "/same/file.ts" }),
       ]
       render(<SessionDiffView entries={entries} />)
-      // "2 files changed" but it's really 1 file with 2 edits
-      expect(screen.getByText("2 files changed")).toBeTruthy()
+      // Previously BUG: "2 files changed" even though it's really 1 file with 2 edits.
+      // FIX: Now counts unique file paths — "1 file changed"
+      expect(screen.getByText("1 file changed")).toBeTruthy()
     })
 
     it("renders singular for 1 entry", () => {

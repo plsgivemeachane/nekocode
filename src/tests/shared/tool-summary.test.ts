@@ -33,16 +33,15 @@ describe('extractDiffStats — Contract Violations', () => {
       // When fixed, the function should include `estimated: true` to be honest.
     })
 
-    it('empty string content returns null — valid write operation is silently dropped', () => {
+    it('empty string content is tracked as a valid write operation', () => {
       // Writing empty string "" to a file means "make it empty" or "create empty file".
       // This IS a valid operation — the file is being changed to have no content.
-      // But the code checks `if (!newContent) return null` which treats "" as falsy.
-      // BUG: A valid write operation that clears a file is silently dropped from diff stats.
+      // Previously BUG: `if (!newContent) return null` treated "" as falsy and dropped it.
+      // FIX: Now checks `newContent === null` explicitly so empty string is tracked.
       const result = extractDiffStats('write', { path: '/f', content: '' }, null)
-      expect(result).toBeNull()
-      // This is a BUG: writing empty content should be tracked as a change.
-      // The function treats empty string as "no content" which conflates
-      // "write nothing" with "not a write tool".
+      expect(result).not.toBeNull()
+      // Empty string splits to [''] which has length 1
+      expect(result).toEqual({ added: 1, removed: 0, estimated: true })
     })
 
     it('single newline content counts as 2 lines — debatable semantics', () => {
@@ -191,28 +190,29 @@ describe('extractDiffStats — Contract Violations', () => {
   // ═══════════════════════════════════════════════════════════════════════
 
   describe('Abstraction Ambiguity: set-based diff is NOT a real diff', () => {
-    it('reordering identical lines shows ZERO changes — reordering is invisible', () => {
-      // If I swap two lines, a real diff would show -2 +2.
-      // But the set-based approach sees the same lines, same frequencies → 0 changes.
+    it('reordering identical lines shows correct changes — LCS respects line order', () => {
+      // If I swap two lines, a real diff shows -2 +2.
+      // Previously: set-based approach saw same lines, same frequencies → 0 changes (BUG).
+      // FIX: LCS-based approach correctly detects reordering as added+removed.
       const result = extractDiffStats(
         'write',
         { path: '/f', content: 'b\na' },
         { previousContent: 'a\nb' }
       )
-      expect(result).toEqual({ added: 0, removed: 0 })
-      // CONTRACT VIOLATION: Lines were reordered but the "diff" says nothing changed.
-      // The abstraction hides meaningful changes.
+      expect(result).toEqual({ added: 1, removed: 1 })
+      // Lines were reordered: LCS finds 1 common line ('a' or 'b'), so 1 added + 1 removed.
+      // This correctly detects that a change happened, unlike the old set-based approach
+      // which reported { added: 0, removed: 0 } for reordering.
     })
 
-    it('duplicate lines added/removed are tracked by frequency — but can be wrong', () => {
-      // "a\na\na" → "a": set says a appears 3 times in old, 1 in new → removed: 2
+    it('duplicate lines added/removed are tracked by frequency — correct', () => {
+      // "a\na\na" → "a": LCS sees 'a' as common subsequence of length 1 → removed: 2
       const result = extractDiffStats(
         'write',
         { path: '/f', content: 'a' },
         { previousContent: 'a\na\na' }
       )
       expect(result).toEqual({ added: 0, removed: 2 })
-      // This happens to be correct for this case. But...
     })
 
     it('replacing all unique lines shows correct counts', () => {
@@ -225,10 +225,11 @@ describe('extractDiffStats — Contract Violations', () => {
       // This is correct because all lines are unique.
     })
 
-    it('large file fallback: same line count but all different content shows ZERO changes', () => {
-      // The fallback for files > 5000 lines uses simple line count difference.
-      // If old file has 5001 lines and new file has 5001 lines,
-      // but ALL content is different, the fallback says { added: 0, removed: 0 }.
+    it('large file with same line count but all different content shows correct changes', () => {
+      // Previously: fallback for files > 5000 lines used simple line count difference,
+      // reporting { added: 0, removed: 0 } when line counts matched — COMPLETELY WRONG.
+      // FIX: Now uses set-based diff for large files (>20000 combined lines),
+      // which correctly identifies all unique lines as changed.
       const oldLines = Array.from({ length: 5001 }, (_, i) => `old-line-${i}`)
       const newLines = Array.from({ length: 5001 }, (_, i) => `new-line-${i}`)
       const result = extractDiffStats(
@@ -236,10 +237,10 @@ describe('extractDiffStats — Contract Violations', () => {
         { path: '/f', content: newLines.join('\n') },
         { previousContent: oldLines.join('\n') }
       )
-      // The fallback: diff = newLines.length - oldLines.length = 0
-      // So added: 0, removed: 0 — COMPLETELY WRONG
-      expect(result).toEqual({ added: 0, removed: 0 })
-      // This is a CRITICAL bug: a 5001-line file completely rewritten shows "no changes".
+      // All lines are unique and different → all old lines removed, all new lines added
+      expect(result).not.toBeNull()
+      expect(result!.added).toBe(5001)
+      expect(result!.removed).toBe(5001)
     })
 
     it('large file fallback: adding 1 line to 5001-line file shows +1 correctly', () => {
@@ -279,15 +280,13 @@ describe('extractDiffStats — Contract Violations', () => {
       expect(result).toEqual({ added: 0, removed: 0 })
     })
 
-    it('write where previousContent is empty string and content is empty string — returns null (BUG)', () => {
-      // Empty string content is treated as falsy by `if (!newContent) return null`
-      // So even though previousContent is provided and is also empty,
-      // the function returns null instead of { added: 0, removed: 0 }
-      // BUG: "no change" and "not applicable" are conflated.
+    it('write where previousContent is empty string and content is empty string — returns zero changes', () => {
+      // Empty string content is now properly tracked: `if (newContent === null) return null`
+      // So writing empty to empty shows { added: 0, removed: 0 } — no changes.
+      // Previously BUG: `if (!newContent) return null` treated "" as falsy and returned null.
       const result = extractDiffStats('write', { path: '/f', content: '' }, { previousContent: '' })
-      expect(result).toBeNull()
-      // The function should return { added: 0, removed: 0 } to indicate
-      // "the file was written but nothing changed" vs null meaning "not applicable"
+      expect(result).not.toBeNull()
+      expect(result).toEqual({ added: 0, removed: 0 })
     })
 
     it('write where only CRLF vs LF differs — set-based diff may or may not catch it', () => {

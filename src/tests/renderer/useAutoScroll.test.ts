@@ -499,25 +499,25 @@ describe('useAutoScroll - STRESS TESTS', () => {
     })
   })
 
-  it('BUG: throws when ResizeObserver throws during observe', async () => {
-    // This test documents a potential bug: the hook does not handle
-    // ResizeObserver constructor/observe errors gracefully
-    const errorRO = vi.fn(() => {
-      throw new Error('ResizeObserver error')
+  it('handles ResizeObserver errors gracefully without throwing', async () => {
+      // Previously BUG: the hook did not handle ResizeObserver constructor/observe errors,
+      // causing an uncaught exception. FIX: wrapped in try-catch so it fails silently.
+      const errorRO = vi.fn(() => {
+        throw new Error('ResizeObserver error')
+      })
+      globalThis.ResizeObserver = class {
+        observe = errorRO
+        unobserve = vi.fn()
+        disconnect = vi.fn()
+      } as unknown as typeof ResizeObserver
+
+      const opts = makeOpts()
+
+      // Should NOT throw — the error is caught internally
+      expect(() => {
+        renderHook((o) => useAutoScroll(o), { initialProps: opts })
+      }).not.toThrow()
     })
-    globalThis.ResizeObserver = class {
-      observe = errorRO
-      unobserve = vi.fn()
-      disconnect = vi.fn()
-    } as unknown as typeof ResizeObserver
-
-    const opts = makeOpts()
-
-    // Currently throws - this might be a bug
-    expect(() => {
-      renderHook((o) => useAutoScroll(o), { initialProps: opts })
-    }).toThrow('ResizeObserver error')
-  })
 
   it('handles zero scrollHeight', async () => {
     const opts = makeOpts()

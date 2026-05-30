@@ -33,8 +33,10 @@ export function extractDiffStats(toolName: string, args: unknown, result: unknow
 
   // Write tool — diff previousContent (from result) vs content (from args)
   if (short === 'write') {
+    // Note: empty string '' is a valid content value (means "clear the file" or "create empty file")
+    // We must NOT treat it as falsy — only null/undefined means "no content"
     const newContent = typeof argsObj.content === 'string' ? argsObj.content : null
-    if (!newContent) return null
+    if (newContent === null) return null
 
     const previousContent = typeof resultObj?.previousContent === 'string'
       ? resultObj.previousContent
@@ -81,19 +83,64 @@ function computeLineDiffStats(oldStr: string, newStr: string): DiffStats {
   const oldLines = oldStr.split('\n')
   const newLines = newStr.split('\n')
 
-  // Use a simple LCS-based approach for accurate counts
-  // For very large files, fall back to line-count difference
-  if (oldLines.length > 5000 || newLines.length > 5000) {
-    // Fallback: simple line count difference
-    const diff = newLines.length - oldLines.length
-    return {
-      added: diff > 0 ? diff : 0,
-      removed: diff < 0 ? Math.abs(diff) : 0,
-    }
+  // For very large files (combined >20000 lines), use set-based counting
+  // which is O(n) but misses reordering. The O(n*m) LCS approach would
+  // be too slow for such sizes. Set-based is a pragmatic trade-off for
+  // huge files where exact reordering counts matter less.
+  if (oldLines.length + newLines.length > 20000) {
+    return computeSetBasedDiffStats(oldLines, newLines)
   }
 
-  // Use set-based line counting for approximate but efficient diff stats.
-  // This counts lines that appear in new but not in old (added) and vice versa.
+  // Use LCS-based approach for accurate counts that respect line order.
+  // This correctly handles reordering (swapping lines shows as added+removed)
+  // unlike the set-based approach which treats reordering as "no change".
+  const lcsLength = computeLCSLength(oldLines, newLines)
+  return {
+    added: newLines.length - lcsLength,
+    removed: oldLines.length - lcsLength,
+  }
+}
+
+/**
+ * Compute the length of the Longest Common Subsequence of two line arrays.
+ * Uses O(min(n,m)) space optimization over the classic DP approach.
+ */
+function computeLCSLength(oldLines: string[], newLines: string[]): number {
+  const n = oldLines.length
+  const m = newLines.length
+
+  // Optimize: make sure we iterate over the shorter dimension for space
+  if (m < n) {
+    return computeLCSLength(newLines, oldLines)
+  }
+
+  // Space-optimized LCS: only need previous and current row
+  let prev = new Uint32Array(n + 1)
+  let curr = new Uint32Array(n + 1)
+
+  for (let j = 1; j <= m; j++) {
+    for (let i = 1; i <= n; i++) {
+      if (oldLines[i - 1] === newLines[j - 1]) {
+        curr[i] = prev[i - 1] + 1
+      } else {
+        curr[i] = Math.max(prev[i], curr[i - 1])
+      }
+    }
+    // Swap rows
+    const tmp = prev
+    prev = curr
+    curr = tmp
+    curr.fill(0)
+  }
+
+  return prev[n]
+}
+
+/**
+ * Set-based diff stats — O(n) but misses reordering.
+ * Used as fallback for very large files where LCS would be too slow.
+ */
+function computeSetBasedDiffStats(oldLines: string[], newLines: string[]): DiffStats {
   const oldSet = new Map<string, number>()
   for (const line of oldLines) {
     oldSet.set(line, (oldSet.get(line) ?? 0) + 1)

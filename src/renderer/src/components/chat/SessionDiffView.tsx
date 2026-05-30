@@ -126,7 +126,11 @@ export function SessionDiffView({ entries, selectedId, onSelectEntry }: SessionD
       {/* Header with view toggle */}
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-surface-800/60 bg-surface-900/70 shrink-0">
         <span className="text-[12px] font-mono text-text-secondary">
-          {entries.length} file{entries.length !== 1 ? 's' : ''} changed
+          {(() => {
+            // Count unique files — multiple edits to the same file count as 1 file changed
+            const uniqueFileCount = new Set(entries.map(e => e.filePath)).size
+            return `${uniqueFileCount} file${uniqueFileCount !== 1 ? 's' : ''} changed`
+          })()}
         </span>
         <DiffStyleToggle diffStyle={diffStyle} onToggle={toggleDiffStyle} />
       </div>
