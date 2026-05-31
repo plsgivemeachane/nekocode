@@ -12,6 +12,32 @@ interface PatchDiffProps {
   disableWorkerPool: boolean
 }
 
+// ── Mock react-virtuoso ──────────────────────────────────────────────
+// We mock Virtuoso because it requires a real DOM scroll container and
+// ResizeObserver which jsdom does not support.
+//
+// IMPORTANT: vi.mock factories are hoisted to the top of the file by Vitest.
+// Any variables referenced in the factory must also be hoisted (vi.hoisted)
+// or defined inline.
+const { MockVirtuoso } = vi.hoisted(() => {
+  const MockVirtuoso = vi.fn(({ data, itemContent }: { data: unknown[]; itemContent: (index: number) => React.ReactNode }) => {
+    return (
+      <div data-testid="virtuoso-mock">
+        {data.map((_: unknown, index: number) => (
+          <div key={index} data-testid={`virtuoso-row-${index}`}>
+            {itemContent(index)}
+          </div>
+        ))}
+      </div>
+    )
+  })
+  return { MockVirtuoso }
+})
+
+vi.mock("react-virtuoso", () => ({
+  Virtuoso: MockVirtuoso,
+}))
+
 // ── Mock @pierre/diffs/react ─────────────────────────────────────
 const mockPatchDiff = vi.fn<(props: PatchDiffProps) => React.ReactElement>(() => <div data-testid="patch-diff" />)
 vi.mock("@pierre/diffs/react", () => ({

@@ -36,7 +36,8 @@ function getLastCallProps(): SessionDiffViewProps {
 //   1. Name says "ActivityRail" but it only shows FILE CHANGES, not all activity
 //   2. buildDiffEntries silently drops tool calls that don't match its criteria
 //   3. Escape handler is on window — what if multiple rails exist?
-//   4. scrollIntoView with requestAnimationFrame is not cleaned up on unmount
+//   4. scrollIntoView — REMOVED: Scrolling is now handled by SessionDiffView
+//      internally via react-virtuoso's scrollToIndex
 //   5. selectedToolCallId="" is truthy — would try to scroll to id="diff-entry-"
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -345,7 +346,7 @@ describe("ActivityRail — Contract Violations", () => {
       const { container } = render(
         <ActivityRail isOpen={true} onClose={() => {}} messages={[]} selectedToolCallId="nonexistent" />
       )
-      // Should not crash. The scrollIntoView call will just find no element.
+      // Should not crash. SessionDiffView handles missing entries internally.
       expect(container.querySelector("[role=complementary]")).toBeTruthy()
     })
   })

@@ -39,9 +39,7 @@
 //    FIXED: Active handlers are now stored in a ref and cleaned up on unmount.
 //    isDraggingRef is also reset on unmount.
 //
-// 8. scrollIntoView — FIXED: requestAnimationFrame ID is now stored and
-//    cancelled on unmount. Previously, if the component unmounted before
-//    the frame fired, it called scrollIntoView on a detached DOM element.
+// 8. scrollIntoView — REMOVED: Scrolling is now handled by SessionDiffView\n//    internally via react-virtuoso's scrollToIndex. The old DOM-based\n//    scrollIntoView approach doesn't work with virtualized lists\n//    because off-screen entries may not be mounted in the DOM.
 //
 // 9. Badge counts — Only 'diff' has a badge. 'outline' has no entry in
 //    badgeCounts, so `badgeCounts['outline']` is `undefined`, and the
@@ -853,40 +851,40 @@ describe("RightSidebar — Contract Violations", () => {
   })
 
   // ═══════════════════════════════════════════════════════════════════════
-  // CATEGORY 12: scrollIntoView — unmount race condition
+  // CATEGORY 12: selectedId forwarding to SessionDiffView
   //
-  // The scrollIntoView effect uses requestAnimationFrame without
-  // cancellation. If the component unmounts before the frame fires,
-  // it calls scrollIntoView on a detached DOM element.
+  // Scrolling to the selected diff entry is now handled internally by
+  // SessionDiffView via react-virtuoso's scrollToIndex. The old DOM-based
+  // scrollIntoView approach was removed because it doesn't work with
+  // virtualized lists (off-screen entries may not be mounted in the DOM).
   // ═══════════════════════════════════════════════════════════════════════
 
-  describe("scrollIntoView — unmount race condition", () => {
+  describe("selectedId forwarding to SessionDiffView", () => {
     it("does not crash when selectedToolCallId changes and diff panel is active", () => {
       mockStoreState.rightSidebarActivePanel = "diff"
       mockStoreState.rightSidebarSelectedToolCallId = "tool-123"
       // No element with id="diff-entry-tool-123" exists in the test DOM
-      // The scrollIntoView effect should handle missing element gracefully
+      // SessionDiffView handles scrolling internally via Virtuoso
       expect(() => render(<RightSidebar />)).not.toThrow()
     })
 
-    it("does not scroll when activePanel is not 'diff'", () => {
+    it("does not crash when activePanel is not 'diff'", () => {
       mockStoreState.rightSidebarActivePanel = "outline"
       mockStoreState.rightSidebarSelectedToolCallId = "tool-123"
       render(<RightSidebar />)
-      // The effect returns early if activePanel !== 'diff'
-      // No scrollIntoView should be attempted
+      // selectedId is still passed to SessionDiffView but has no effect
+      // since the diff panel isn't visible
     })
 
-    it("scrollIntoView requestAnimationFrame is cancelled on unmount", () => {
-      // FIXED: The scrollIntoView effect now stores the rAF ID and cancels it
-      // in the cleanup function. This prevents scrollIntoView from being called
-      // on a detached DOM element after unmount.
+    it("unmounting does not throw — no more rAF-based scrollIntoView", () => {
+      // FIXED: The old scrollIntoView effect used requestAnimationFrame
+      // which could fire after unmount. Now scrolling is handled by
+      // SessionDiffView's internal Virtuoso, so there's no rAF race.
       mockStoreState.rightSidebarActivePanel = "diff"
       mockStoreState.rightSidebarSelectedToolCallId = "tool-123"
       const { unmount } = render(<RightSidebar />)
 
-      // Unmount before the rAF fires — should not throw
-      // The cancelAnimationFrame in the cleanup function prevents the callback
+      // Unmount — should not throw (no more rAF to cancel)
       expect(() => unmount()).not.toThrow()
     })
   })

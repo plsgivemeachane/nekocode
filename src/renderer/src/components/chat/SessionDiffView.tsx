@@ -6,9 +6,16 @@
  *
  * Uses the previousContent (from tool result) and content/edits (from tool args)
  * to generate a unified diff patch string, rendered via PatchDiff.
+ *
+ * PERFORMANCE: Uses react-virtuoso for virtualized rendering. Only diff entries
+ * visible in the viewport (plus an overscan buffer) are mounted in the DOM.
+ * This prevents screen lag when a session has 50+ edits, each with large diffs —
+ * the browser no longer renders thousands of off-screen DOM nodes.
+ * Same approach as MessagesTimeline for the message list.
  */
 
-import React, { useMemo, useState, useCallback } from 'react'
+import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react'
+import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 import { PatchDiff } from '@pierre/diffs/react'
 import type { FileDiffOptions } from '@pierre/diffs'
 import { createTwoFilesPatch } from 'diff'
@@ -78,14 +85,19 @@ function DiffStyleToggle({ diffStyle, onToggle }: {
 }
 
 /**
- * SessionDiffView renders a list of diff entries, each with its own PatchDiff.
+ * SessionDiffView renders a VIRTUALIZED list of diff entries, each with its own PatchDiff.
  *
  * The @pierre/diffs PatchDiff component renders its own file header from the
  * patch content (showing filename and change stats), so we don't add a separate
  * custom header. This avoids duplicate/mismatched headers.
+ *
+ * Uses react-virtuoso (same as MessagesTimeline) to virtualize rendering.
+ * Only diff entries visible in the viewport are mounted in the DOM, preventing
+ * screen lag when sessions have many large diffs.
  */
 export function SessionDiffView({ entries, selectedId, onSelectEntry }: SessionDiffViewProps) {
   const [diffStyle, setDiffStyle] = useState<'unified' | 'split'>('unified')
+  const virtuosoRef = useRef<VirtuosoHandle>(null)
 
   const toggleDiffStyle = useCallback(() => {
     setDiffStyle(prev => prev === 'unified' ? 'split' : 'unified')
@@ -109,6 +121,19 @@ export function SessionDiffView({ entries, selectedId, onSelectEntry }: SessionD
     // Sticky file header on scroll
     stickyHeader: true,
   }), [diffStyle])
+
+  // Scroll to the selected entry when selectedId changes
+  useEffect(() => {
+    if (!selectedId || !virtuosoRef.current) return
+    const index = entries.findIndex(e => e.id === selectedId)
+    if (index >= 0) {
+      virtuosoRef.current.scrollToIndex({
+        index,
+        align: 'start',
+        behavior: 'smooth',
+      })
+    }
+  }, [selectedId, entries])
 
   // If no entries, show empty state
   if (entries.length === 0) {
@@ -136,15 +161,19 @@ export function SessionDiffView({ entries, selectedId, onSelectEntry }: SessionD
         <DiffStyleToggle diffStyle={diffStyle} onToggle={toggleDiffStyle} />
       </div>
 
-      {/* Scrollable list of diffs */}
-      <div className="flex-1 overflow-auto">
-        {entries.map((entry) => {
+      {/* Virtualized list of diffs — only visible entries are rendered in the DOM */}
+      <Virtuoso
+        ref={virtuosoRef}
+        data={entries}
+        overscan={200}
+        defaultItemHeight={150}
+        itemContent={(index) => {
+          const entry = entries[index]
           const patch = generatePatch(entry.oldContent, entry.newContent, entry.filePath)
           const isSelected = entry.id === selectedId
 
           return (
             <div
-              key={entry.id}
               id={`diff-entry-${entry.id}`}
               className={`border-b border-surface-800/40 ${isSelected ? 'ring-1 ring-accent-500/30' : ''}`}
               onClick={() => onSelectEntry?.(entry.id)}
@@ -160,8 +189,9 @@ export function SessionDiffView({ entries, selectedId, onSelectEntry }: SessionD
               />
             </div>
           )
-        })}
-      </div>
+        }}
+        className="outline-none"
+      />
     </div>
   )
 }

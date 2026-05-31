@@ -218,15 +218,10 @@ export function RightSidebar() {
   }, [activePanel, setRightSidebarPanel])
 
   // Scroll to the selected diff entry when the diff panel opens or selection changes
-  useEffect(() => {
-    if (activePanel !== 'diff' || !selectedToolCallId) return
-    const rafId = requestAnimationFrame(() => {
-      const el = document.getElementById(`diff-entry-${selectedToolCallId}`)
-      el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    })
-    // Cancel the rAF on unmount to prevent calling scrollIntoView on a detached DOM element
-    return () => cancelAnimationFrame(rafId)
-  }, [activePanel, selectedToolCallId])
+  // NOTE: Scrolling to the selected diff entry is now handled internally by
+  // SessionDiffView via react-virtuoso's scrollToIndex. The old approach of
+  // using DOM scrollIntoView no longer works with virtualization because
+  // off-screen entries may not be mounted in the DOM.
 
   // Toggle a panel: clicking an active icon closes it, clicking inactive opens it
   const handleIconClick = useCallback(
