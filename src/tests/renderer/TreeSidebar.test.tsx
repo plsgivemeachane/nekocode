@@ -64,11 +64,6 @@ vi.mock("@/renderer/src/hooks/useSessionOrchestration", () => ({
   }),
 }))
 
-// ── Mock useClickOutside ────────────────────────────────────────────
-vi.mock("@/renderer/src/hooks/useClickOutside", () => ({
-  useClickOutside: vi.fn(),
-}))
-
 // ── Mock context-menu ────────────────────────────────────────────────
 vi.mock("@/renderer/src/components/layout/context-menu", () => ({
   useContextMenu: () => ({

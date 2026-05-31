@@ -4,6 +4,7 @@ import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import React from "react"
 import { NavBar } from "@/renderer/src/components/layout/NavBar"
+import { TooltipProvider } from "@/renderer/src/components/ui/tooltip"
 import { createMockIPC, setupMockIPC, clearMockIPC } from "../__utils__/test-utils"
 
 // ── Mock hooks ─────────────────────────────────────────────────────
@@ -55,18 +56,18 @@ describe("NavBar", () => {
   // ═══════════════════════════════════════════════════════════════════
 
   it("renders the NekoCode logo", () => {
-    render(<NavBar />)
+    render(<TooltipProvider><NavBar /></TooltipProvider>)
     expect(screen.getByText("Neko")).toBeInTheDocument()
     expect(screen.getByText("code")).toBeInTheDocument()
   })
 
   it("renders the Add Project button", () => {
-    render(<NavBar />)
+    render(<TooltipProvider><NavBar /></TooltipProvider>)
     expect(screen.getByTitle("Add Project")).toBeInTheDocument()
   })
 
   it("renders zoom controls with percentage", () => {
-    render(<NavBar />)
+    render(<TooltipProvider><NavBar /></TooltipProvider>)
     expect(screen.getByTitle("Zoom out (Ctrl+-)")).toBeInTheDocument()
     expect(screen.getByText("100%")).toBeInTheDocument()
     expect(screen.getByTitle("Zoom in (Ctrl+=)")).toBeInTheDocument()
@@ -74,7 +75,7 @@ describe("NavBar", () => {
   })
 
   it("renders window control buttons", () => {
-    render(<NavBar />)
+    render(<TooltipProvider><NavBar /></TooltipProvider>)
     expect(screen.getByRole("button", { name: /minimize/i })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /maximize/i })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /close/i })).toBeInTheDocument()
@@ -82,7 +83,7 @@ describe("NavBar", () => {
 
   it("updates zoom percentage display when zoom changes", () => {
     mockUseZoom.zoom = 1.5
-    render(<NavBar />)
+    render(<TooltipProvider><NavBar /></TooltipProvider>)
     expect(screen.getByText("150%")).toBeInTheDocument()
   })
 
@@ -92,34 +93,34 @@ describe("NavBar", () => {
 
   it("calls zoomIn when + button is clicked", async () => {
     const user = userEvent.setup()
-    render(<NavBar />)
+    render(<TooltipProvider><NavBar /></TooltipProvider>)
     await user.click(screen.getByTitle("Zoom in (Ctrl+=)"))
     expect(mockUseZoom.zoomIn).toHaveBeenCalled()
   })
 
   it("calls zoomOut when - button is clicked", async () => {
     const user = userEvent.setup()
-    render(<NavBar />)
+    render(<TooltipProvider><NavBar /></TooltipProvider>)
     await user.click(screen.getByTitle("Zoom out (Ctrl+-)"))
     expect(mockUseZoom.zoomOut).toHaveBeenCalled()
   })
 
   it("calls resetZoom when percentage button is clicked", async () => {
     const user = userEvent.setup()
-    render(<NavBar />)
+    render(<TooltipProvider><NavBar /></TooltipProvider>)
     await user.click(screen.getByTitle("Reset zoom (Ctrl+0)"))
     expect(mockUseZoom.resetZoom).toHaveBeenCalled()
   })
 
   it("disables zoom out at minimum zoom", () => {
     mockUseZoom.zoom = 0.5
-    render(<NavBar />)
+    render(<TooltipProvider><NavBar /></TooltipProvider>)
     expect(screen.getByTitle("Zoom out (Ctrl+-)")).toBeDisabled()
   })
 
   it("disables zoom in at maximum zoom", () => {
     mockUseZoom.zoom = 2
-    render(<NavBar />)
+    render(<TooltipProvider><NavBar /></TooltipProvider>)
     expect(screen.getByTitle("Zoom in (Ctrl+=)")).toBeDisabled()
   })
 
@@ -129,21 +130,21 @@ describe("NavBar", () => {
 
   it("calls window.minimize when minimize button is clicked", async () => {
     const user = userEvent.setup()
-    render(<NavBar />)
+    render(<TooltipProvider><NavBar /></TooltipProvider>)
     await user.click(screen.getByRole("button", { name: /minimize/i }))
     expect(mockIPC.window.minimize).toHaveBeenCalled()
   })
 
   it("calls window.maximize when maximize button is clicked", async () => {
     const user = userEvent.setup()
-    render(<NavBar />)
+    render(<TooltipProvider><NavBar /></TooltipProvider>)
     await user.click(screen.getByRole("button", { name: /maximize/i }))
     expect(mockIPC.window.maximize).toHaveBeenCalled()
   })
 
   it("calls window.close when close button is clicked", async () => {
     const user = userEvent.setup()
-    render(<NavBar />)
+    render(<TooltipProvider><NavBar /></TooltipProvider>)
     await user.click(screen.getByRole("button", { name: /close/i }))
     expect(mockIPC.window.close).toHaveBeenCalled()
   })
@@ -155,7 +156,7 @@ describe("NavBar", () => {
   it("opens folder dialog and adds project when folder is selected", async () => {
     const user = userEvent.setup()
     ;(mockIPC.dialog.openFolder as ReturnType<typeof vi.fn>).mockResolvedValue("/test/new-project")
-    render(<NavBar />)
+    render(<TooltipProvider><NavBar /></TooltipProvider>)
 
     await user.click(screen.getByTitle("Add Project"))
 
@@ -167,7 +168,7 @@ describe("NavBar", () => {
   it("does not add project when folder dialog is cancelled", async () => {
     const user = userEvent.setup()
     ;(mockIPC.dialog.openFolder as ReturnType<typeof vi.fn>).mockResolvedValue(null)
-    render(<NavBar />)
+    render(<TooltipProvider><NavBar /></TooltipProvider>)
 
     await user.click(screen.getByTitle("Add Project"))
 
@@ -182,7 +183,7 @@ describe("NavBar", () => {
 
   it("shows Restore label when window is maximized", async () => {
     (mockIPC.window.isMaximized as ReturnType<typeof vi.fn>).mockResolvedValue(true)
-    render(<NavBar />)
+    render(<TooltipProvider><NavBar /></TooltipProvider>)
 
     // Wait for the async isMaximized call to resolve
     await new Promise((r) => setTimeout(r, 10))

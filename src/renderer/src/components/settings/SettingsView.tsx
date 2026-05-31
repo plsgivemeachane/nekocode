@@ -1,7 +1,14 @@
 import React from 'react'
 import { useProjectStore } from '../../stores/project-store'
 import { NotificationSettingsContent } from '../ui/NotificationSettingsContent'
+import { Label } from '../ui/label'
 import { useZoom } from '../../hooks/useZoom'
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '../ui/tabs'
 
 export function SettingsView() {
   const { setActiveView } = useProjectStore()
@@ -24,24 +31,42 @@ export function SettingsView() {
         <h1 className="ml-3 text-sm font-medium text-surface-100">Settings</h1>
       </header>
 
-      {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-2xl mx-auto px-6 py-8 space-y-8">
+      {/* Tabbed settings content */}
+      <Tabs defaultValue="notifications" className="flex-1 flex flex-col min-h-0">
+        <TabsList className="w-full justify-start rounded-none border-b border-surface-800/50 bg-surface-950/50 px-6 h-9">
+          <TabsTrigger
+            value="notifications"
+            className="text-xs text-text-secondary data-[state=active]:text-accent-400 data-[state=active]:shadow-none data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-accent-400 rounded-none px-3 py-1.5"
+          >
+            Notifications
+          </TabsTrigger>
+          <TabsTrigger
+            value="appearance"
+            className="text-xs text-text-secondary data-[state=active]:text-accent-400 data-[state=active]:shadow-none data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-accent-400 rounded-none px-3 py-1.5"
+          >
+            Appearance
+          </TabsTrigger>
+          <TabsTrigger
+            value="about"
+            className="text-xs text-text-secondary data-[state=active]:text-accent-400 data-[state=active]:shadow-none data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-accent-400 rounded-none px-3 py-1.5"
+          >
+            About
+          </TabsTrigger>
+        </TabsList>
 
-          {/* --- Notifications Section --- */}
-          <section>
-            <h2 className="text-lg font-semibold text-surface-100 mb-4">Notifications</h2>
+        <TabsContent value="notifications" className="flex-1 overflow-y-auto mt-0">
+          <div className="max-w-2xl mx-auto px-6 py-8">
             <NotificationSettingsContent />
-          </section>
+          </div>
+        </TabsContent>
 
-          {/* --- Appearance Section --- */}
-          <section>
-            <h2 className="text-lg font-semibold text-surface-100 mb-4">Appearance</h2>
+        <TabsContent value="appearance" className="flex-1 overflow-y-auto mt-0">
+          <div className="max-w-2xl mx-auto px-6 py-8 space-y-6">
+            {/* Zoom */}
             <div className="bg-surface-900/60 rounded-lg border border-surface-800/50 p-4 space-y-4">
-              {/* Zoom */}
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-surface-200">Zoom</p>
+                  <Label className="text-sm text-surface-200">Zoom</Label>
                   <p className="text-xs text-surface-500">Adjust the interface scale ({Math.round(minZoom * 100)}% &ndash; {Math.round(maxZoom * 100)}%)</p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -71,29 +96,28 @@ export function SettingsView() {
                 </div>
               </div>
             </div>
-          </section>
+          </div>
+        </TabsContent>
 
-          {/* --- About Section --- */}
-          <section>
-            <h2 className="text-lg font-semibold text-surface-100 mb-4">About</h2>
+        <TabsContent value="about" className="flex-1 overflow-y-auto mt-0">
+          <div className="max-w-2xl mx-auto px-6 py-8">
             <div className="bg-surface-900/60 rounded-lg border border-surface-800/50 p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-surface-200">Application</p>
+                <Label className="text-sm text-surface-200">Application</Label>
                 <p className="text-sm text-surface-400">NekoCode</p>
               </div>
               <div className="flex items-center justify-between">
-                <p className="text-sm text-surface-200">Version</p>
+                <Label className="text-sm text-surface-200">Version</Label>
                 <p className="text-sm text-surface-400">0.2.x</p>
               </div>
               <div className="flex items-center justify-between">
-                <p className="text-sm text-surface-200">Engine</p>
+                <Label className="text-sm text-surface-200">Engine</Label>
                 <p className="text-sm text-surface-400">Pi SDK</p>
               </div>
             </div>
-          </section>
-
-        </div>
-      </div>
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

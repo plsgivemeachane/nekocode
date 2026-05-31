@@ -8,6 +8,7 @@
 
 import React, { useState, useCallback, useRef } from 'react'
 import { CheckIcon } from './GitIcons'
+import { Textarea } from '../ui/textarea'
 
 // ━━ Props ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -52,13 +53,13 @@ export function CommitInput({ hasStagedChanges, onCommit, isCommitting }: Commit
   return (
     <div className="flex flex-col gap-2 p-2">
       {/* Commit message textarea */}
-      <textarea
+      <Textarea
         ref={textareaRef}
         className="
-          w-full resize-none rounded-lg border border-surface-700/50 bg-surface-950
-          px-3 py-2 text-sm placeholder:text-text-tertiary
-          focus:outline-none focus:ring-1 focus:ring-accent/50
-          disabled:opacity-50 disabled:cursor-not-allowed
+          w-full resize-none rounded-lg border-surface-700/50 bg-surface-950
+          text-sm placeholder:text-text-tertiary
+          focus-visible:ring-accent/50 focus-visible:border-accent/50
+          disabled:opacity-50 disabled:cursor-not-allowed min-h-0 shadow-none
         "
         rows={3}
         placeholder={hasStagedChanges ? 'Commit message (Ctrl+Enter to commit)...' : 'No staged changes to commit'}

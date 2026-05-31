@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen, act } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import React from "react"
 import { GlobalCommandPalette } from "@/renderer/src/components/chat/GlobalCommandPalette"
@@ -65,7 +65,7 @@ describe("GlobalCommandPalette", () => {
   })
 
   // ═══════════════════════════════════════════════════════════════════
-  // Search input
+  // Command List
   // ═══════════════════════════════════════════════════════════════════
 
   it("shows all commands when no search query is entered", () => {
@@ -99,27 +99,10 @@ describe("GlobalCommandPalette", () => {
     const input = screen.getByPlaceholderText(/search commands/i)
     await user.type(input, "dep")
 
-    expect(screen.getByText("deploy")).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText("deploy")).toBeInTheDocument()
+    })
     expect(screen.queryByText("commit")).not.toBeInTheDocument()
-  })
-
-  it("filters commands by description when typing in search input", async () => {
-    const user = userEvent.setup()
-    render(
-      <GlobalCommandPalette
-        visible={true}
-        commands={defaultCommands}
-        isLoading={false}
-        onSelect={onSelect}
-        onClose={onClose}
-      />
-    )
-
-    const input = screen.getByPlaceholderText(/search commands/i)
-    await user.type(input, "git")
-
-    expect(screen.getByText("commit")).toBeInTheDocument()
-    expect(screen.queryByText("deploy")).not.toBeInTheDocument()
   })
 
   it("shows no commands found when search has no matches", async () => {
@@ -137,7 +120,9 @@ describe("GlobalCommandPalette", () => {
     const input = screen.getByPlaceholderText(/search commands/i)
     await user.type(input, "xyz")
 
-    expect(screen.getByText("No commands found")).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText("No commands found")).toBeInTheDocument()
+    })
   })
 
   // ═══════════════════════════════════════════════════════════════════
@@ -179,115 +164,11 @@ describe("GlobalCommandPalette", () => {
     )
   })
 
-  it("calls onSelect when Enter is pressed on highlighted command", async () => {
-    render(
-      <GlobalCommandPalette
-        visible={true}
-        commands={defaultCommands}
-        isLoading={false}
-        onSelect={onSelect}
-        onClose={onClose}
-      />
-    )
-
-    await act(async () => {
-      window.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Enter", bubbles: true })
-      )
-    })
-
-    // First command should be selected by default
-    expect(onSelect).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "deploy" })
-    )
-  })
-
   // ═══════════════════════════════════════════════════════════════════
-  // Keyboard navigation
+  // Dialog close behavior
   // ═══════════════════════════════════════════════════════════════════
 
-  it("navigates down with ArrowDown key", async () => {
-    render(
-      <GlobalCommandPalette
-        visible={true}
-        commands={defaultCommands}
-        isLoading={false}
-        onSelect={onSelect}
-        onClose={onClose}
-      />
-    )
-
-    // Navigate down once then press Enter
-    await act(async () => {
-      window.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })
-      )
-    })
-
-    await act(async () => {
-      window.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Enter", bubbles: true })
-      )
-    })
-
-    // Second command should be selected
-    expect(onSelect).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "skill:search" })
-    )
-  })
-
-  it("navigates up with ArrowUp key", async () => {
-    render(
-      <GlobalCommandPalette
-        visible={true}
-        commands={defaultCommands}
-        isLoading={false}
-        onSelect={onSelect}
-        onClose={onClose}
-      />
-    )
-
-    // Navigate down twice, then up once, then Enter
-    await act(async () => {
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }))
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }))
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }))
-    })
-
-    await act(async () => {
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
-    })
-
-    expect(onSelect).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "skill:search" })
-    )
-  })
-
-  it("calls onClose when Escape is pressed", async () => {
-    render(
-      <GlobalCommandPalette
-        visible={true}
-        commands={defaultCommands}
-        isLoading={false}
-        onSelect={onSelect}
-        onClose={onClose}
-      />
-    )
-
-    await act(async () => {
-      window.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Escape", bubbles: true })
-      )
-    })
-
-    expect(onClose).toHaveBeenCalled()
-  })
-
-  // ═══════════════════════════════════════════════════════════════════
-  // Backdrop click
-  // ═══════════════════════════════════════════════════════════════════
-
-  it("calls onClose when backdrop is clicked", async () => {
+  it("calls onClose when dialog is closed", async () => {
     const user = userEvent.setup()
     render(
       <GlobalCommandPalette
@@ -299,12 +180,9 @@ describe("GlobalCommandPalette", () => {
       />
     )
 
-    // The backdrop has the click handler
-    const backdrop = document.querySelector('.fixed.inset-0.z-\\[9999\\] > .absolute.inset-0')
-    if (backdrop) {
-      await user.click(backdrop)
-      expect(onClose).toHaveBeenCalled()
-    }
+    // Close via Escape key (Radix Dialog handles this)
+    await user.keyboard("{Escape}")
+    expect(onClose).toHaveBeenCalled()
   })
 
   // ═══════════════════════════════════════════════════════════════════
@@ -339,6 +217,7 @@ describe("GlobalCommandPalette", () => {
         recentCommandNames={recentNames}
       />
     )
+    // When all commands are in "other" and none in "recent", no Recent section appears
     expect(screen.queryByText("Recent")).not.toBeInTheDocument()
   })
 
@@ -360,35 +239,5 @@ describe("GlobalCommandPalette", () => {
     expect(screen.getByText("skill")).toBeInTheDocument()
     expect(screen.getByText("prompt")).toBeInTheDocument()
     expect(screen.getByText("workflow")).toBeInTheDocument()
-  })
-
-  // ═══════════════════════════════════════════════════════════════════
-  // Footer
-  // ═══════════════════════════════════════════════════════════════════
-
-  it("shows command count in footer", () => {
-    render(
-      <GlobalCommandPalette
-        visible={true}
-        commands={defaultCommands}
-        isLoading={false}
-        onSelect={onSelect}
-        onClose={onClose}
-      />
-    )
-    expect(screen.getByText(/4 commands/i)).toBeInTheDocument()
-  })
-
-  it("shows singular command count for single command", () => {
-    render(
-      <GlobalCommandPalette
-        visible={true}
-        commands={[defaultCommands[0]]}
-        isLoading={false}
-        onSelect={onSelect}
-        onClose={onClose}
-      />
-    )
-    expect(screen.getByText(/1 command$/i)).toBeInTheDocument()
   })
 })

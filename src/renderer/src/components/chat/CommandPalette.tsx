@@ -1,6 +1,15 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import type { CommandInfo } from '../../../../shared/ipc-types'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from '../ui/command'
 
 export interface CommandPaletteProps {
   /** Commands to display */
@@ -39,6 +48,11 @@ function getSourceBadge(source?: string) {
   )
 }
 
+/**
+ * CommandPalette — Inline slash-command palette anchored to the chat input.
+ * Uses the shadcn/ui Command (cmdk) for keyboard navigation and search.
+ * Positioned via portal to avoid clipping issues.
+ */
 export function CommandPalette({
   commands,
   query,
@@ -49,30 +63,14 @@ export function CommandPalette({
   isLoading = false,
   recentCommandNames,
 }: CommandPaletteProps) {
-  const paletteRef = useRef<HTMLDivElement>(null)
-  const [selectedIndex, setSelectedIndex] = useState(0)
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
-
-  // Filter commands based on query (text after /)
-  // When filtering, don't separate into recent/rest sections
-  const filteredCommands = useMemo(() => {
-    if (!query) return commands
-    const lower = query.toLowerCase()
-    return commands.filter(
-      (cmd) =>
-        cmd.name.toLowerCase().includes(lower) ||
-        cmd.description?.toLowerCase().includes(lower)
-    )
-  }, [commands, query])
-
-  // When no query, split into recent and rest sections
+  // Split into recent/other sections when no active filter query
   const { recentCommands, otherCommands, showRecentSection } = useMemo(() => {
     if (query || !recentCommandNames || recentCommandNames.size === 0) {
-      return { recentCommands: [], otherCommands: filteredCommands, showRecentSection: false }
+      return { recentCommands: [], otherCommands: commands, showRecentSection: false }
     }
     const recent: CommandInfo[] = []
     const other: CommandInfo[] = []
-    for (const cmd of filteredCommands) {
+    for (const cmd of commands) {
       if (recentCommandNames.has(cmd.name)) {
         recent.push(cmd)
       } else {
@@ -80,105 +78,27 @@ export function CommandPalette({
       }
     }
     return { recentCommands: recent, otherCommands: other, showRecentSection: recent.length > 0 && other.length > 0 }
-  }, [filteredCommands, query, recentCommandNames])
+  }, [commands, query, recentCommandNames])
 
-  // Flat list for index-based navigation (accounting for section separator)
-  const allItems = useMemo(() => {
-    if (!showRecentSection) return filteredCommands
-    // Insert a null separator between recent and other
-    return [...recentCommands, null as unknown as CommandInfo, ...otherCommands]
-  }, [showRecentSection, recentCommands, otherCommands, filteredCommands])
+  const handleSelect = React.useCallback((commandName: string) => {
+    // Find the command by name across both sections
+    const cmd = recentCommands.find(c => c.name === commandName) || otherCommands.find(c => c.name === commandName)
+    if (cmd) {
+      onSelect(cmd)
+    }
+  }, [recentCommands, otherCommands, onSelect])
 
-  // Reset selected index when filtered list changes
-  useEffect(() => {
-    setSelectedIndex(0)
-  }, [filteredCommands.length])
-
-  // Get the actual command at a navigation index (skipping separator)
-  const getCommandAtIndex = useCallback(
-    (index: number): CommandInfo | undefined => {
-      if (!showRecentSection) return filteredCommands[index]
-      // Skip the separator (null) in navigation
-      let actualIndex = 0
-      for (const item of allItems) {
-        if (item === null) continue  // separator
-        if (actualIndex === index) return item
-        actualIndex++
-      }
-      return undefined
-    },
-    [showRecentSection, filteredCommands, allItems]
-  )
-
-  // Total navigable commands (excluding separator)
-  const navigableCount = showRecentSection
-    ? recentCommands.length + otherCommands.length
-    : filteredCommands.length
-
-  // Keyboard navigation
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      if (!visible) return
-
-      switch (e.key) {
-        case 'ArrowDown':
-          e.preventDefault()
-          setSelectedIndex((prev) =>
-            prev < navigableCount - 1 ? prev + 1 : 0
-          )
-          break
-        case 'ArrowUp':
-          e.preventDefault()
-          setSelectedIndex((prev) =>
-            prev > 0 ? prev - 1 : navigableCount - 1
-          )
-          break
-        case 'Enter':
-          e.preventDefault()
-          {
-            const cmd = getCommandAtIndex(selectedIndex)
-            if (cmd) onSelect(cmd)
-          }
-          break
-        case 'Escape':
-          e.preventDefault()
-          onClose()
-          break
-        case 'Tab':
-          e.preventDefault()
-          {
-            const cmd = getCommandAtIndex(selectedIndex)
-            if (cmd) onSelect(cmd)
-          }
-          break
-      }
-    },
-    [visible, navigableCount, selectedIndex, onSelect, onClose, getCommandAtIndex]
-  )
-
-  // Register keyboard listener
+  // Close on Escape — cmdk handles ArrowUp/Down/Enter natively
   useEffect(() => {
     if (!visible) return
-    document.addEventListener('keydown', handleKeyDown, true)
-    return () => document.removeEventListener('keydown', handleKeyDown, true)
-  }, [visible, handleKeyDown])
-
-  // Close on click outside
-  useEffect(() => {
-    if (!visible) return
-    const handleClick = (e: MouseEvent) => {
-      if (paletteRef.current && !paletteRef.current.contains(e.target as Node)) {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
         onClose()
       }
     }
-    // Delay to avoid the triggering click closing it
-    const timer = setTimeout(() => {
-      document.addEventListener('mousedown', handleClick)
-    }, 0)
-    return () => {
-      clearTimeout(timer)
-      document.removeEventListener('mousedown', handleClick)
-    }
+    document.addEventListener('keydown', handler, true)
+    return () => document.removeEventListener('keydown', handler, true)
   }, [visible, onClose])
 
   if (!visible || !anchorRect) return null
@@ -187,7 +107,7 @@ export function CommandPalette({
   const style: React.CSSProperties = {
     position: 'fixed',
     left: anchorRect.left,
-    bottom: window.innerHeight - anchorRect.top + 4, // 4px gap above input
+    bottom: window.innerHeight - anchorRect.top + 4,
     width: Math.max(anchorRect.width, 320),
     maxHeight: '280px',
     zIndex: 50,
@@ -195,107 +115,97 @@ export function CommandPalette({
 
   return createPortal(
     <div
-      ref={paletteRef}
       style={style}
-      className="bg-surface-800 border border-surface-600 rounded-lg shadow-xl overflow-hidden flex flex-col"
+      className="rounded-lg overflow-hidden shadow-xl"
       role="listbox"
       aria-label="Slash commands"
     >
-      {/* Header */}
-      <div className="px-3 py-2 border-b border-surface-700 flex items-center justify-between">
-        <span className="text-xs text-surface-400 font-medium">Commands</span>
-        {isLoading && (
-          <span className="text-xs text-surface-500">Loading...</span>
-        )}
-        {!isLoading && (
-          <span className="text-xs text-surface-500">{filteredCommands.length} available</span>
-        )}
-      </div>
+      <Command
+        className="bg-surface-800 border border-surface-600 [&_[cmdk-group-heading]]:text-surface-500 [&_[cmdk-input-wrapper]]:border-surface-700 [&_[cmdk-input]]:text-surface-200 [&_[cmdk-input]]:placeholder:text-surface-500 [&_[cmdk-empty]]:text-surface-500 [&_[cmdk-item]]:text-surface-300 data-[selected=true]:bg-surface-600/50 data-[selected=true]:text-surface-100"
+        // Pass the query to cmdk so it filters by default
+        filter={(value, search) => {
+          // When we have an external query, cmdk handles filtering via the search prop
+          // If the value includes the search string, it matches
+          if (value.toLowerCase().includes(search.toLowerCase())) return 1
+          // Also check description match — we encode it in the value as "name|description"
+          return 0
+        }}
+      >
+        {/* Hidden input — we drive search from the external query */}
+        <CommandInput value={query} onValueChange={() => {}} className="hidden" />
 
-      {/* Command list */}
-      <div className="overflow-y-auto flex-1 py-1">
-        {navigableCount === 0 && !isLoading && (
-          <div className="px-3 py-4 text-center text-sm text-surface-500">
-            No commands found
-          </div>
-        )}
-        {showRecentSection && (
-          <div className="px-3 py-1 text-[10px] text-surface-500 font-medium uppercase tracking-wider">
-            Recent
-          </div>
-        )}
-        {recentCommands.map((cmd) => {
-          const navIndex = filteredCommands.indexOf(cmd)
-          const isHovered = hoveredIndex === navIndex
-          return (
-            <div
-              key={`recent-${cmd.source}-${cmd.name}`}
-              role="option"
-              aria-selected={navIndex === selectedIndex}
-              className={`flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors ${navIndex === selectedIndex ? 'bg-surface-600/50 text-surface-100' : 'text-surface-300 hover:bg-surface-700/50 hover:text-surface-100'}`}
-              onClick={() => onSelect(cmd)}
-              onMouseEnter={() => { setSelectedIndex(navIndex); setHoveredIndex(navIndex) }}
-              onMouseLeave={() => setHoveredIndex(null)}
-            >
-              <span className="text-surface-400 text-sm font-mono w-5 flex-shrink-0">/</span>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium truncate">{cmd.name}</span>
-                  {getSourceBadge(cmd.source)}
-                </div>
-                {cmd.description && (
-                  <p className={`text-xs mt-0.5 transition-all ${isHovered ? 'text-surface-300' : 'text-surface-500 truncate'}`}>{cmd.description}</p>
-                )}
-              </div>
-            </div>
-          )
-        })}
-        {showRecentSection && (
-          <div className="px-3 py-1 text-[10px] text-surface-500 font-medium uppercase tracking-wider border-t border-surface-700/50 mt-1 pt-1">
-            All Commands
-          </div>
-        )}
-        {otherCommands.map((cmd) => {
-          const navIndex = showRecentSection
-            ? recentCommands.length + otherCommands.indexOf(cmd)
-            : filteredCommands.indexOf(cmd)
-          const isHovered = hoveredIndex === navIndex
-          return (
-            <div
-              key={`other-${cmd.source}-${cmd.name}`}
-              role="option"
-              aria-selected={navIndex === selectedIndex}
-              className={`flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors ${navIndex === selectedIndex ? 'bg-surface-600/50 text-surface-100' : 'text-surface-300 hover:bg-surface-700/50 hover:text-surface-100'}`}
-              onClick={() => onSelect(cmd)}
-              onMouseEnter={() => { setSelectedIndex(navIndex); setHoveredIndex(navIndex) }}
-              onMouseLeave={() => setHoveredIndex(null)}
-            >
-              <span className="text-surface-400 text-sm font-mono w-5 flex-shrink-0">/</span>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium truncate">{cmd.name}</span>
-                  {getSourceBadge(cmd.source)}
-                </div>
-                {cmd.description && (
-                  <p className={`text-xs mt-0.5 transition-all ${isHovered ? 'text-surface-300' : 'text-surface-500 truncate'}`}>{cmd.description}</p>
-                )}
-              </div>
-            </div>
-          )
-        })}
-      </div>
+        {/* Header */}
+        <div className="px-3 py-2 border-b border-surface-700 flex items-center justify-between">
+          <span className="text-xs text-surface-400 font-medium">Commands</span>
+          {isLoading ? (
+            <span className="text-xs text-surface-500">Loading...</span>
+          ) : (
+            <span className="text-xs text-surface-500">{commands.length} available</span>
+          )}
+        </div>
 
-      {/* Footer */}
-      <div className="px-3 py-1.5 border-t border-surface-700 flex items-center gap-4 text-[10px] text-surface-500">
-        <span>↑↓ navigate
-        </span>
-        <span>↵ select
-        </span>
-        <span>Tab complete
-        </span>
-        <span>Esc close
-        </span>
-      </div>
+        <CommandList className="max-h-[200px]">
+          {isLoading ? (
+            <div className="px-3 py-4 text-center text-sm text-surface-500">Loading commands...</div>
+          ) : (
+            <>
+              <CommandEmpty>No commands found</CommandEmpty>
+              {showRecentSection && (
+                <CommandGroup heading="Recent">
+                  {recentCommands.map((cmd) => (
+                    <CommandItem
+                      key={`recent-${cmd.source}-${cmd.name}`}
+                      value={`${cmd.name}|${cmd.description || ''}`}
+                      onSelect={() => handleSelect(cmd.name)}
+                      className="flex items-center gap-3 text-sm cursor-pointer"
+                    >
+                      <span className="text-surface-400 text-sm font-mono w-5 flex-shrink-0">/</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium truncate">{cmd.name}</span>
+                          {getSourceBadge(cmd.source)}
+                        </div>
+                        {cmd.description && (
+                          <p className="text-xs text-surface-500 mt-0.5 truncate">{cmd.description}</p>
+                        )}
+                      </div>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              )}
+              {showRecentSection && <CommandSeparator />}
+              <CommandGroup heading={showRecentSection ? 'All Commands' : undefined}>
+                {otherCommands.map((cmd) => (
+                  <CommandItem
+                    key={`other-${cmd.source}-${cmd.name}`}
+                    value={`${cmd.name}|${cmd.description || ''}`}
+                    onSelect={() => handleSelect(cmd.name)}
+                    className="flex items-center gap-3 text-sm cursor-pointer"
+                  >
+                    <span className="text-surface-400 text-sm font-mono w-5 flex-shrink-0">/</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium truncate">{cmd.name}</span>
+                        {getSourceBadge(cmd.source)}
+                      </div>
+                      {cmd.description && (
+                        <p className="text-xs text-surface-500 mt-0.5 truncate">{cmd.description}</p>
+                      )}
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </>
+          )}
+        </CommandList>
+
+        {/* Footer */}
+        <div className="px-3 py-1.5 border-t border-surface-700 flex items-center gap-4 text-[10px] text-surface-500">
+          <span>↑↓ navigate</span>
+          <span>↵ select</span>
+          <span>Esc close</span>
+        </div>
+      </Command>
     </div>,
     document.body
   )

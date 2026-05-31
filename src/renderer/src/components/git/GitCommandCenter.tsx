@@ -23,6 +23,7 @@ import { CommitInput } from './CommitInput'
 import { DiffViewer } from './DiffViewer'
 import { StashIcon, GitCommitIcon, RefreshIcon } from './GitIcons'
 import { useProjectStore } from '../../stores/project-store'
+import { ScrollArea } from '../ui/scroll-area'
 
 // ━━ Component ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -175,7 +176,7 @@ export function GitCommandCenter() {
       {/* ── Main content: staging + diff ── */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left panel: staging + commit */}
-        <div className="w-72 flex flex-col border-r border-surface-800/50 overflow-y-auto shrink-0">
+        <ScrollArea className="w-72 flex flex-col border-r border-surface-800/50 shrink-0">
           <StagingArea
             staged={git.status.staged}
             unstaged={[...git.status.modified, ...git.status.untracked]}
@@ -196,7 +197,7 @@ export function GitCommandCenter() {
               isCommitting={isCommitting}
             />
           </div>
-        </div>
+        </ScrollArea>
 
         {/* Right panel: diff viewer */}
         <div className="flex-1 overflow-hidden">
@@ -209,7 +210,7 @@ export function GitCommandCenter() {
       </div>
 
       {/* ── Bottom: recent commits ── */}
-      <div className="border-t border-surface-800/50 max-h-48 overflow-y-auto">
+      <ScrollArea className="border-t border-surface-800/50 max-h-48">
         <div className="px-3 py-1.5 text-xs font-semibold text-text-tertiary bg-surface-900/60">
           Recent Commits
         </div>
@@ -237,7 +238,7 @@ export function GitCommandCenter() {
             </div>
           ))
         )}
-      </div>
+      </ScrollArea>
     </div>
   )
 }

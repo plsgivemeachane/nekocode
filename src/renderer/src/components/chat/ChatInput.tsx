@@ -1,7 +1,12 @@
 import React, { useRef, useState, useCallback, useImperativeHandle, forwardRef, useMemo } from 'react'
-import { useClickOutside } from '../../hooks/useClickOutside'
 import { useCommands } from '../../hooks/useCommands'
 import { CommandPalette } from './CommandPalette'
+import { Textarea } from '../ui/textarea'
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from '../ui/popover'
 import type { CommandInfo } from '../../../../shared/ipc-types'
 import { createLogger } from '../../utils/logger'
 
@@ -63,7 +68,6 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
   gitBranch,
 }, ref) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const modelDropdownRef = useRef<HTMLDivElement>(null)
   const inputContainerRef = useRef<HTMLDivElement>(null)
   const [showModelDropdown, setShowModelDropdown] = useState(false)
   const [showCommandPalette, setShowCommandPalette] = useState(false)
@@ -84,7 +88,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
     },
   }), [])
 
-  useClickOutside(modelDropdownRef, showModelDropdown, () => setShowModelDropdown(false))
+  // Click-outside for model dropdown handled by Radix Popover
 
   const resetHeight = useCallback(() => {
     if (textareaRef.current) {
@@ -185,7 +189,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
             onMouseDown={handleInputContainerMouseDown}
             className="relative rounded-[1.25rem] border border-surface-700 bg-surface-900 px-4 py-3 pr-12 shadow-[0_0_20px_rgba(0,0,0,0.2)] cursor-text"
           >
-            <textarea
+            <Textarea
               ref={textareaRef}
               value={input}
               onChange={handleInputChange}
@@ -193,41 +197,45 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
               placeholder={isAgentConnecting ? 'Agent starting, please wait...' : 'Ask anything, @tag files/folders, or type / for commands'}
               disabled={!sessionId || isStreaming || isAgentConnecting}
               rows={1}
-              className="w-full bg-transparent text-sm text-text-primary placeholder:text-text-tertiary/50 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed resize-none overflow-y-auto leading-relaxed"
+              className="w-full bg-transparent text-sm text-text-primary placeholder:text-text-tertiary/50 focus-visible:ring-0 focus-visible:border-transparent border-0 shadow-none min-h-0 p-0 disabled:opacity-40 disabled:cursor-not-allowed resize-none overflow-y-auto leading-relaxed field-sizing-none"
             />
             <div className="flex items-center pt-5">
               <div className="flex items-center gap-0 text-xs text-text-secondary">
-                <div ref={modelDropdownRef} className="relative">
-                  <button type="button" onClick={() => setShowModelDropdown(v => !v)} className="flex items-center gap-1.5 px-1.5 py-2 rounded-none transition-colors duration-150 border border-transparent hover:border-surface-600">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-accent-400">
-                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5"/>
-                      <path d="M8 12h8M12 8v8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                    </svg>
-                    <span>{activeModel ? activeModel.name : "Loading..."}</span>
-                    <svg width="10" height="10" viewBox="0 0 10 10" className="text-text-tertiary"><path d="M3 4l2 2 2-2" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </button>
-                  {showModelDropdown && (() => {
-                    const visibleModels = modelList.filter(m => !["anthropic", "google", "openai"].includes(m.provider))
-                    return visibleModels.length > 0 ? (
-                    <div className="absolute bottom-full left-0 mb-1 w-56 bg-surface-800 border border-surface-700 rounded-lg shadow-xl p-2 max-h-64 overflow-y-auto z-50">
-                      {visibleModels.map(m => (
-                        <button
-                          key={`${m.provider}:${m.id}`}
-                          type="button"
-                          onClick={() => { setModel(m.provider, m.id); setShowModelDropdown(false) }}
-                          className={`w-full text-left px-3.5 py-2 text-xs hover:bg-surface-700 transition-colors flex items-center justify-between rounded-md border border-transparent hover:border-surface-600 ${activeModel?.id === m.id && activeModel?.provider === m.provider ? "text-accent-400" : "text-text-secondary"}`}
-                        >
-                          <span>{m.name}</span>
-                          <span className="text-text-tertiary text-[10px] ml-2">{m.provider}</span>
-                        </button>
-                      ))}
-                    </div>
-                    ) : (
-                      <div className="absolute bottom-full left-0 mb-1 w-56 bg-surface-800 border border-surface-700 rounded-lg shadow-xl p-2 z-50">
-                        <div className="px-3 py-2 text-xs text-text-tertiary">No models configured</div>
-                      </div>
-                    )
-                  })()}
+                <div className="relative">
+                  <Popover open={showModelDropdown} onOpenChange={(open) => setShowModelDropdown(open)}>
+                    <PopoverTrigger asChild>
+                      <button type="button" className="flex items-center gap-1.5 px-1.5 py-2 rounded-none transition-colors duration-150 border border-transparent hover:border-surface-600">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-accent-400">
+                          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5"/>
+                          <path d="M8 12h8M12 8v8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                        </svg>
+                        <span>{activeModel ? activeModel.name : "Loading..."}</span>
+                        <svg width="10" height="10" viewBox="0 0 10 10" className="text-text-tertiary"><path d="M3 4l2 2 2-2" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      align="start"
+                      side="top"
+                      className="w-56 bg-surface-800 border-surface-700 rounded-lg shadow-xl p-2 max-h-64 overflow-y-auto"
+                    >
+                      {(() => {
+                        const visibleModels = modelList.filter(m => !["anthropic", "google", "openai"].includes(m.provider))
+                        return visibleModels.length > 0 ? visibleModels.map(m => (
+                          <button
+                            key={`${m.provider}:${m.id}`}
+                            type="button"
+                            onClick={() => { setModel(m.provider, m.id); setShowModelDropdown(false) }}
+                            className={`w-full text-left px-3.5 py-2 text-xs hover:bg-surface-700 transition-colors flex items-center justify-between rounded-md border border-transparent hover:border-surface-600 ${activeModel?.id === m.id && activeModel?.provider === m.provider ? "text-accent-400" : "text-text-secondary"}`}
+                          >
+                            <span>{m.name}</span>
+                            <span className="text-text-tertiary text-[10px] ml-2">{m.provider}</span>
+                          </button>
+                        )) : (
+                          <div className="px-3 py-2 text-xs text-text-tertiary">No models configured</div>
+                        )
+                      })()}
+                    </PopoverContent>
+                  </Popover>
                 </div>
               </div>
             </div>

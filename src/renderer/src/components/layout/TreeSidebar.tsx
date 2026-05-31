@@ -8,6 +8,7 @@ import {
   ContextMenuSeparator,
   ContextMenuShortcut,
 } from '../ui/context-menu'
+import { ScrollArea } from '../ui/scroll-area'
 import { VSCodeIcon } from '../icons/VSCodeIcon'
 // NotificationSettingsPanel is now in SettingsView
 import { createLogger } from '../../utils/logger'
@@ -324,7 +325,7 @@ export function TreeSidebar() {
       {/* Header moved to NavBar (same row as window controls) */}
 
       {/* Project list */}
-      <div className="flex-1 overflow-y-auto px-2">
+      <ScrollArea className="flex-1 px-2">
         {state.projects.length === 0 && (
           <p className="text-[11px] text-text-tertiary/80 px-3 py-10 text-center leading-relaxed">
             No projects yet.
@@ -389,7 +390,7 @@ export function TreeSidebar() {
             </div>
           )
         })}
-      </div>
+      </ScrollArea>
 
       {/* Settings button at sidebar bottom */}
       <div className="px-3 py-3 border-t border-surface-800/50">

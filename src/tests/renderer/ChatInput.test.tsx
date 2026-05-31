@@ -20,10 +20,6 @@ vi.mock("@/renderer/src/hooks/useCommands", () => ({
   useCommands: () => mockUseCommands,
 }))
 
-vi.mock("@/renderer/src/hooks/useClickOutside", () => ({
-  useClickOutside: vi.fn(),
-}))
-
 // ── Helpers ──────────────────────────────────────────────────────────
 
 const defaultProps = {

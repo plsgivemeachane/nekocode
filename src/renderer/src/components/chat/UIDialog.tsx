@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react'
 import type { UISelectOption } from '../../../../shared/ipc-types'
 import type { PendingUIRequest, UIDialogLocalState } from '../../hooks/useUIRequests'
+import { Input } from '../ui/input'
 
 /** Props shared by all dialog variants */
 interface UIDialogBaseProps {
@@ -176,13 +177,13 @@ function InputDialogContent({ pending, updateLocalState, onConfirm, onCancel }: 
       {pending.request.description && (
         <p className="text-sm text-text-secondary mb-3 leading-relaxed">{pending.request.description}</p>
       )}
-      <input
+      <Input
         ref={inputRef}
         type="text"
         value={inputValue}
         onChange={(e) => updateLocalState({ inputValue: e.target.value })}
         placeholder={pending.request.placeholder ?? ''}
-        className="w-full px-3 py-2 text-sm bg-surface-900/80 border border-surface-700/60 rounded-lg text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-400/50 focus:ring-1 focus:ring-accent-400/20 transition-colors"
+        className="w-full px-3 py-2 text-sm bg-surface-900/80 border-surface-700/60 text-text-primary placeholder:text-text-muted focus-visible:border-accent-400/50 focus-visible:ring-accent-400/20"
       />
       <div className="flex items-center justify-between mt-3">
         <span className="text-[11px] text-text-muted font-mono">Enter confirm &middot; Esc cancel</span>
