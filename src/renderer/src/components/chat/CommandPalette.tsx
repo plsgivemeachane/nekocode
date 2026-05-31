@@ -121,7 +121,7 @@ export function CommandPalette({
       aria-label="Slash commands"
     >
       <Command
-        className="bg-surface-800 border border-surface-600 [&_[cmdk-group-heading]]:text-surface-500 [&_[cmdk-input-wrapper]]:border-surface-700 [&_[cmdk-input]]:text-surface-200 [&_[cmdk-input]]:placeholder:text-surface-500 [&_[cmdk-empty]]:text-surface-500 [&_[cmdk-item]]:text-surface-300 data-[selected=true]:bg-surface-600/50 data-[selected=true]:text-surface-100"
+        className="bg-surface-800 border border-surface-600 [&_[cmdk-group-heading]]:text-surface-500 [&_[cmdk-input-wrapper]]:border-surface-700 [&_[cmdk-input]]:text-surface-200 [&_[cmdk-input]]:placeholder:text-surface-500 [&_[cmdk-empty]]:text-surface-500 [&_[cmdk-item]]:text-surface-300 [&_[cmdk-item][data-selected=true]]:bg-surface-600/50 [&_[cmdk-item][data-selected=true]]:text-surface-100"
         // Pass the query to cmdk so it filters by default
         filter={(value, search) => {
           // When we have an external query, cmdk handles filtering via the search prop

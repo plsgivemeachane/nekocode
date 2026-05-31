@@ -197,7 +197,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
               placeholder={isAgentConnecting ? 'Agent starting, please wait...' : 'Ask anything, @tag files/folders, or type / for commands'}
               disabled={!sessionId || isStreaming || isAgentConnecting}
               rows={1}
-              className="w-full bg-transparent text-sm text-text-primary placeholder:text-text-tertiary/50 focus-visible:ring-0 focus-visible:border-transparent border-0 shadow-none min-h-0 p-0 disabled:opacity-40 disabled:cursor-not-allowed resize-none overflow-y-auto leading-relaxed field-sizing-none"
+              className="w-full bg-transparent dark:bg-transparent text-sm text-text-primary placeholder:text-text-tertiary/50 focus-visible:ring-0 focus-visible:border-transparent border-0 shadow-none min-h-0 p-0 disabled:opacity-40 disabled:cursor-not-allowed resize-none overflow-y-auto leading-relaxed field-sizing-none"
             />
             <div className="flex items-center pt-5">
               <div className="flex items-center gap-0 text-xs text-text-secondary">

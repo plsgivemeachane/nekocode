@@ -49,7 +49,7 @@ function AppLayout() {
       <Dialog open={state.showGitOverlay} onOpenChange={(open) => { if (!open) setGitOverlay(false) }}>
         <DialogContent
           showCloseButton={false}
-          className="w-[calc(100vw-80px)] h-[calc(100vh-80px)] max-w-[1400px] rounded-2xl bg-surface-900 border border-surface-700/50 shadow-2xl shadow-surface-950/80 overflow-hidden flex flex-col p-0 gap-0"
+          className="w-[calc(100vw-80px)] h-[calc(100vh-80px)] max-w-[1400px] sm:max-w-[1400px] rounded-2xl bg-surface-900 border border-surface-700/50 shadow-2xl shadow-surface-950/80 overflow-hidden flex flex-col p-0 gap-0"
           overlayClassName="bg-surface-950/70 backdrop-blur-md"
         >
           {/* Modal header */}

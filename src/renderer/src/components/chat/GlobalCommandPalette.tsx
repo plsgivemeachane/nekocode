@@ -80,7 +80,7 @@ export function GlobalCommandPalette({ visible, commands, isLoading, onSelect, o
       onOpenChange={(open) => { if (!open) onClose() }}
       title="Command Palette"
       description="Search for a command to run..."
-      className="bg-surface-900/95 border-surface-700/70 backdrop-blur-md [&_[cmdk-group-heading]]:text-text-muted [&_[cmdk-input-wrapper]]:border-surface-800/60 [&_[cmdk-input]]:text-text-primary [&_[cmdk-input]]:placeholder:text-text-muted [&_[cmdk-empty]]:text-text-muted [&_[cmdk-item]]:text-text-secondary data-[selected=true]:bg-accent-400/10 data-[selected=true]:text-text-primary"
+      className="bg-surface-900/95 border-surface-700/70 backdrop-blur-md [&_[cmdk-group-heading]]:text-text-muted [&_[cmdk-input-wrapper]]:border-surface-800/60 [&_[cmdk-input]]:text-text-primary [&_[cmdk-input]]:placeholder:text-text-muted [&_[cmdk-empty]]:text-text-muted [&_[cmdk-item]]:text-text-secondary [&_[cmdk-item][data-selected=true]]:bg-accent-400/10 [&_[cmdk-item][data-selected=true]]:text-text-primary"
       showCloseButton={false}
     >
       <CommandInput placeholder="Search commands..." />

@@ -14,7 +14,7 @@
  * └─────────────────────────────────────────────────┘
  */
 
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { useGitOperations } from '../../hooks/useGitOperations'
 import { BranchSelector } from './BranchSelector'
 import { GitActions } from './GitActions'
@@ -39,6 +39,31 @@ export function GitCommandCenter() {
   const [isPushing, setIsPushing] = useState(false)
   const [isPulling, setIsPulling] = useState(false)
   const [isFetching, setIsFetching] = useState(false)
+
+  // ── Resizable panel state ──
+  // Left panel (staging + commit) width — default 288px (w-72)
+  const [leftPanelWidth, setLeftPanelWidth] = useState(288)
+  // Bottom panel (recent commits) height — default 180px (roughly max-h-48)
+  const [bottomPanelHeight, setBottomPanelHeight] = useState(180)
+
+  // Drag state refs for resize handles
+  const isDraggingLeftRef = useRef(false)
+  const dragStartX = useRef(0)
+  const dragStartLeftWidth = useRef(0)
+
+  const isDraggingBottomRef = useRef(false)
+  const dragStartY = useRef(0)
+  const dragStartBottomHeight = useRef(0)
+
+  // Store active resize handlers so they can be cleaned up on unmount mid-drag
+  const activeLeftResizeHandlers = useRef<{ mousemove: ((e: MouseEvent) => void) | null; mouseup: (() => void) | null }>({ mousemove: null, mouseup: null })
+  const activeBottomResizeHandlers = useRef<{ mousemove: ((e: MouseEvent) => void) | null; mouseup: (() => void) | null }>({ mousemove: null, mouseup: null })
+
+  // Hover state for resize handle visual feedback
+  const [isHoveringLeftResize, setIsHoveringLeftResize] = useState(false)
+  const [isHoveringBottomResize, setIsHoveringBottomResize] = useState(false)
+  const [isDraggingLeftState, setIsDraggingLeftState] = useState(false)
+  const [isDraggingBottomState, setIsDraggingBottomState] = useState(false)
 
   // ── Handlers ──
 
@@ -90,6 +115,98 @@ export function GitCommandCenter() {
   }, [git])
 
   const isRemoteLoading = isPushing || isPulling || isFetching
+
+  // ── Resize handle: left/right panel split ──
+  const handleLeftResizeMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault()
+      isDraggingLeftRef.current = true
+      setIsDraggingLeftState(true)
+      dragStartX.current = e.clientX
+      dragStartLeftWidth.current = leftPanelWidth
+
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        if (!isDraggingLeftRef.current) return
+        // Dragging right = wider left panel
+        const delta = moveEvent.clientX - dragStartX.current
+        const newWidth = Math.max(200, Math.min(600, dragStartLeftWidth.current + delta))
+        setLeftPanelWidth(newWidth)
+      }
+
+      const handleMouseUp = () => {
+        isDraggingLeftRef.current = false
+        setIsDraggingLeftState(false)
+        document.removeEventListener('mousemove', handleMouseMove)
+        document.removeEventListener('mouseup', handleMouseUp)
+        activeLeftResizeHandlers.current = { mousemove: null, mouseup: null }
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
+
+      activeLeftResizeHandlers.current = { mousemove: handleMouseMove, mouseup: handleMouseUp }
+      document.body.style.cursor = 'col-resize'
+      document.body.style.userSelect = 'none'
+      document.addEventListener('mousemove', handleMouseMove)
+      document.addEventListener('mouseup', handleMouseUp)
+    },
+    [leftPanelWidth],
+  )
+
+  // ── Resize handle: main/bottom panel split ──
+  const handleBottomResizeMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault()
+      isDraggingBottomRef.current = true
+      setIsDraggingBottomState(true)
+      dragStartY.current = e.clientY
+      dragStartBottomHeight.current = bottomPanelHeight
+
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        if (!isDraggingBottomRef.current) return
+        // Dragging up = taller bottom panel (delta is negative when moving up)
+        const delta = dragStartY.current - moveEvent.clientY
+        const newHeight = Math.max(60, Math.min(400, dragStartBottomHeight.current + delta))
+        setBottomPanelHeight(newHeight)
+      }
+
+      const handleMouseUp = () => {
+        isDraggingBottomRef.current = false
+        setIsDraggingBottomState(false)
+        document.removeEventListener('mousemove', handleMouseMove)
+        document.removeEventListener('mouseup', handleMouseUp)
+        activeBottomResizeHandlers.current = { mousemove: null, mouseup: null }
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
+
+      activeBottomResizeHandlers.current = { mousemove: handleMouseMove, mouseup: handleMouseUp }
+      document.body.style.cursor = 'row-resize'
+      document.body.style.userSelect = 'none'
+      document.addEventListener('mousemove', handleMouseMove)
+      document.addEventListener('mouseup', handleMouseUp)
+    },
+    [bottomPanelHeight],
+  )
+
+  // Cleanup resize listeners on unmount
+  useEffect(() => {
+    return () => {
+      if (activeLeftResizeHandlers.current.mousemove) {
+        document.removeEventListener('mousemove', activeLeftResizeHandlers.current.mousemove)
+      }
+      if (activeLeftResizeHandlers.current.mouseup) {
+        document.removeEventListener('mouseup', activeLeftResizeHandlers.current.mouseup)
+      }
+      if (activeBottomResizeHandlers.current.mousemove) {
+        document.removeEventListener('mousemove', activeBottomResizeHandlers.current.mousemove)
+      }
+      if (activeBottomResizeHandlers.current.mouseup) {
+        document.removeEventListener('mouseup', activeBottomResizeHandlers.current.mouseup)
+      }
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [])
 
   // ── No project open ──
 
@@ -173,10 +290,10 @@ export function GitCommandCenter() {
         </div>
       )}
 
-      {/* ── Main content: staging + diff ── */}
-      <div className="flex flex-1 overflow-hidden">
+      {/* ── Main content: staging + diff (resizable left/right) ── */}
+      <div className="flex flex-1 overflow-hidden relative">
         {/* Left panel: staging + commit */}
-        <ScrollArea className="w-72 flex flex-col border-r border-surface-800/50 shrink-0">
+        <ScrollArea className="flex flex-col border-r border-surface-800/50 shrink-0" style={{ width: leftPanelWidth }}>
           <StagingArea
             staged={git.status.staged}
             unstaged={[...git.status.modified, ...git.status.untracked]}
@@ -199,6 +316,24 @@ export function GitCommandCenter() {
           </div>
         </ScrollArea>
 
+        {/* ── Vertical resize handle (left/right split) ── */}
+        <div
+          className="absolute top-0 bottom-0 w-3 cursor-col-resize z-10 group/resize-lr"
+          style={{ left: leftPanelWidth - 6 }}
+          onMouseDown={handleLeftResizeMouseDown}
+          onMouseEnter={() => setIsHoveringLeftResize(true)}
+          onMouseLeave={() => setIsHoveringLeftResize(false)}
+        >
+          {/* Small floating stick indicator (like RightSidebar) */}
+          <div
+            className={`absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 w-0.75 rounded-full transition-all duration-200 ${
+              isHoveringLeftResize || isDraggingLeftState
+                ? 'h-12 bg-surface-400/70'
+                : 'h-8 bg-surface-600/60 group-hover/resize-lr:h-10 group-hover/resize-lr:bg-surface-500/80'
+            }`}
+          />
+        </div>
+
         {/* Right panel: diff viewer */}
         <div className="flex-1 overflow-hidden">
           <DiffViewer
@@ -209,8 +344,25 @@ export function GitCommandCenter() {
         </div>
       </div>
 
-      {/* ── Bottom: recent commits ── */}
-      <ScrollArea className="border-t border-surface-800/50 max-h-48">
+      {/* ── Horizontal resize handle (main/bottom split) ── */}
+      <div
+        className="h-3 cursor-row-resize z-10 relative group/resize-tb shrink-0"
+        onMouseDown={handleBottomResizeMouseDown}
+        onMouseEnter={() => setIsHoveringBottomResize(true)}
+        onMouseLeave={() => setIsHoveringBottomResize(false)}
+      >
+        {/* Horizontal stick indicator */}
+        <div
+          className={`absolute top-1/2 -translate-y-1/2 left-1/2 -translate-x-1/2 h-0.75 rounded-full transition-all duration-200 ${
+            isHoveringBottomResize || isDraggingBottomState
+              ? 'w-12 bg-surface-400/70'
+              : 'w-8 bg-surface-600/60 group-hover/resize-tb:w-10 group-hover/resize-tb:bg-surface-500/80'
+          }`}
+        />
+      </div>
+
+      {/* ── Bottom: recent commits (resizable height) ── */}
+      <ScrollArea className="border-t border-surface-800/50" style={{ height: bottomPanelHeight }}>
         <div className="px-3 py-1.5 text-xs font-semibold text-text-tertiary bg-surface-900/60">
           Recent Commits
         </div>

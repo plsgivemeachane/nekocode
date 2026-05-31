@@ -175,7 +175,7 @@ export function SessionDiffView({ entries, selectedId, onSelectEntry }: SessionD
           return (
             <div
               id={`diff-entry-${entry.id}`}
-              className={`border-b border-surface-800/40 ${isSelected ? 'ring-1 ring-accent-500/30' : ''}`}
+              className={`border-b border-surface-800/40 ${isSelected ? 'ring-1 ring-surface-500/30' : ''}`}
               onClick={() => onSelectEntry?.(entry.id)}
             >
               {/* The PatchDiff component renders its own file header from the patch content,

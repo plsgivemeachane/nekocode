@@ -193,6 +193,17 @@ export function RightSidebar() {
   const [isHoveringResize, setIsHoveringResize] = useState(false)
   const [isDraggingState, setIsDraggingState] = useState(false)
 
+  // Track the last active panel so that dragging the resize handle with no panel
+  // open will auto-open the most recent panel (or default to "diff").
+  const lastActivePanelRef = useRef<Exclude<RightSidebarPanel, null>>("diff")
+
+  // Keep lastActivePanelRef in sync whenever a panel is opened
+  useEffect(() => {
+    if (activePanel) {
+      lastActivePanelRef.current = activePanel
+    }
+  }, [activePanel])
+
   // Build diff entries from messages
   const diffEntries = useMemo(() => buildDiffEntries(messages), [messages])
   const diffCount = diffEntries.length
@@ -235,6 +246,13 @@ export function RightSidebar() {
   const handleResizeMouseDown = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault()
+
+      // Quirk: if no panel is currently active, auto-open the last used panel
+      // (or default to "diff") so the resize handle has something to resize.
+      if (!activePanel) {
+        setRightSidebarPanel(lastActivePanelRef.current)
+      }
+
       isDraggingRef.current = true
       setIsDraggingState(true)
       startX.current = e.clientX
@@ -266,7 +284,7 @@ export function RightSidebar() {
       document.addEventListener('mousemove', handleMouseMove)
       document.addEventListener('mouseup', handleMouseUp)
     },
-    [width, setRightSidebarWidth],
+    [width, activePanel, setRightSidebarPanel, setRightSidebarWidth],
   )
 
   // Cleanup: remove resize listeners and reset drag state on unmount
@@ -298,24 +316,24 @@ export function RightSidebar() {
 
   return (
     <div className="flex h-full shrink-0 relative">
-      {/* ═══════ Resize handle — on the left edge of the entire sidebar ═══════ */}
-      {activePanel && (
-        <div
+      {/* ═══════ Resize handle — on the left edge of the entire sidebar ═══════
+           Always visible so the user can drag to open even when no panel is active.
+           Dragging with no active panel auto-opens the last-used panel (or defaults to "diff"). */}
+      <div
 className='absolute top-0 bottom-0 -left-1.5 w-3 cursor-col-resize z-20 group/resize'
-          onMouseDown={handleResizeMouseDown}
-          onMouseEnter={() => setIsHoveringResize(true)}
-          onMouseLeave={() => setIsHoveringResize(false)}
-        >
-          {/* Small floating stick indicator (like a scrollbar thumb) */}
-          <div
-            className={`absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 w-0.75 rounded-full transition-all duration-200 ${
-              isHoveringResize || isDraggingState
-                ? 'h-12 bg-accent/70'
-                : 'h-8 bg-surface-600/60 group-hover/resize:h-10 group-hover/resize:bg-surface-500/80'
-            }`}
-          />
-        </div>
-      )}
+        onMouseDown={handleResizeMouseDown}
+        onMouseEnter={() => setIsHoveringResize(true)}
+        onMouseLeave={() => setIsHoveringResize(false)}
+      >
+        {/* Small floating stick indicator (like a scrollbar thumb) */}
+        <div
+          className={`absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 w-0.75 rounded-full transition-all duration-200 ${
+            isHoveringResize || isDraggingState
+              ? 'h-12 bg-surface-400/70'
+              : 'h-8 bg-surface-600/60 group-hover/resize:h-10 group-hover/resize:bg-surface-500/80'
+          }`}
+        />
+      </div>
 
       {/* ═══════ Icon Rail ═══════ */}
       <div className="w-12 bg-surface-900/90 flex flex-col items-center pt-2 shrink-0 border-l border-surface-800/60">
@@ -329,7 +347,7 @@ className='absolute top-0 bottom-0 -left-1.5 w-3 cursor-col-resize z-20 group/re
               className={`
                 relative w-9 h-9 flex items-center justify-center rounded-lg mb-1 transition-colors
                 ${isActive
-                  ? 'bg-accent/15 text-accent'
+                  ? 'bg-surface-700/50 text-text-primary'
                   : 'text-text-tertiary hover:text-text-secondary hover:bg-surface-800/60'
                 }
               `}
@@ -340,13 +358,13 @@ className='absolute top-0 bottom-0 -left-1.5 w-3 cursor-col-resize z-20 group/re
               {item.icon}
               {/* Badge count */}
               {badge !== undefined && badge > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 text-[9px] font-mono font-bold text-accent bg-accent/10 rounded-full min-w-4 h-4 flex items-center justify-center border border-accent/20 px-0.5">
+                <span className="absolute -top-0.5 -right-0.5 text-[9px] font-mono font-bold text-text-primary bg-surface-600/80 rounded-full min-w-4 h-4 flex items-center justify-center border border-surface-500/30 px-0.5">
                   {badge > 99 ? '99+' : badge}
                 </span>
               )}
               {/* Active indicator bar */}
               {isActive && (
-                <span className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-0.75 h-5 rounded-r-full bg-accent" />
+                <span className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-0.75 h-5 rounded-r-full bg-surface-400" />
               )}
             </button>
           )

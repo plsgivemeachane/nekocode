@@ -739,11 +739,43 @@ describe("RightSidebar — Contract Violations", () => {
       expect(handle).toBeTruthy()
     })
 
-    it("resize handle is NOT visible when no panel is active", () => {
+    it("resize handle IS visible even when no panel is active (quirk: always-show resize)", () => {
       mockStoreState.rightSidebarActivePanel = null
       render(<RightSidebar />)
       const handle = document.querySelector("[class*='cursor-col-resize']")
-      expect(handle).toBeNull()
+      // Quirk: the resize handle is always visible so the user can drag it to open a panel
+      expect(handle).not.toBeNull()
+    })
+
+    it("dragging resize handle with no active panel auto-opens the last-used panel or defaults to diff", () => {
+      mockStoreState.rightSidebarActivePanel = null
+      mockStoreState.rightSidebarWidth = 480
+      render(<RightSidebar />)
+
+      const handle = document.querySelector("[class*='cursor-col-resize']") as HTMLElement
+      expect(handle).toBeTruthy()
+
+      // Start drag — since no panel is active, it should auto-open the default (diff)
+      fireEvent.mouseDown(handle, { clientX: 500 })
+
+      // setRightSidebarPanel should have been called to open "diff" (the default)
+      expect(mockSetRightSidebarPanel).toHaveBeenCalledWith("diff")
+    })
+
+    it("dragging resize handle with no active panel re-opens the last active panel", () => {
+      // Simulate that "outline" was the last active panel by first opening it, then closing
+      mockStoreState.rightSidebarActivePanel = "outline"
+      const { rerender } = render(<RightSidebar />)
+
+      // Close the panel
+      mockStoreState.rightSidebarActivePanel = null
+      rerender(<RightSidebar />)
+
+      const handle = document.querySelector("[class*='cursor-col-resize']") as HTMLElement
+      fireEvent.mouseDown(handle, { clientX: 500 })
+
+      // Should re-open "outline" (the last active panel)
+      expect(mockSetRightSidebarPanel).toHaveBeenCalledWith("outline")
     })
 
     it("mousedown on resize handle calls setRightSidebarWidth on mouse move", () => {

@@ -80,29 +80,39 @@ interface FileRowProps {
 function FileRow({ file, statusCode, isSelected, onClick, actionIcon, onAction }: FileRowProps) {
   const { label, colorClass } = getStatusStyle(statusCode)
 
+  // Split path into directory and filename for better readability
+  // e.g. "src/components/git/StagingArea.tsx" → dir="src/components/git/", name="StagingArea.tsx"
+  const lastSlash = file.path.lastIndexOf('/')
+  const dirPart = lastSlash >= 0 ? file.path.slice(0, lastSlash + 1) : ''
+  const namePart = lastSlash >= 0 ? file.path.slice(lastSlash + 1) : file.path
+
   return (
     <div
       className={`
         flex items-center gap-2 px-2 py-1 text-xs cursor-pointer group
-        ${isSelected ? 'bg-accent/10 text-accent' : 'hover:bg-surface-800/40 text-text-secondary'}
+        ${isSelected ? 'bg-surface-700/50 text-text-primary' : 'hover:bg-surface-800/40 text-text-secondary'}
       `}
       onClick={onClick}
     >
-      {/* Status badge */}
-      <span className={`w-4 text-center font-mono font-bold ${colorClass}`} title={statusCode}>
+      {/* Status badge — fixed width, never shrinks */}
+      <span className={`w-4 shrink-0 text-center font-mono font-bold ${colorClass}`} title={statusCode}>
         {label}
       </span>
 
-      {/* File path */}
-      <span className="flex-1 truncate" title={file.path}>
-        {file.path}
+      {/* File path — min-w-0 required for truncate in flex; shows dir+name split */}
+      <span className="flex-1 min-w-0 truncate" title={file.path}>
+        {dirPart && (
+          <span className="text-text-tertiary">{dirPart}</span>
+        )}
+        <span className="text-text-primary">{namePart}</span>
       </span>
 
-      {/* Stage/Unstage button */}
+      {/* Stage/Unstage button — always visible, shrinks to never, compact */}
       <button
         className="
-          opacity-0 group-hover:opacity-100 transition-opacity
-          p-0.5 rounded-md hover:bg-surface-800/60
+          shrink-0 p-0.5 rounded-md hover:bg-surface-800/60
+          text-text-tertiary hover:text-text-primary
+          opacity-50 group-hover:opacity-100 transition-opacity
         "
         onClick={(e) => {
           e.stopPropagation()
