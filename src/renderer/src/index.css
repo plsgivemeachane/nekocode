@@ -57,6 +57,28 @@
   --animate-fade-in: fade-in 0.3s var(--ease-out-expo) forwards;
   --animate-slide-up: slide-up 0.25s var(--ease-out-expo) forwards;
   --animate-glow-pulse: glow-pulse 2s ease-in-out infinite;
+
+  /* ─── shadcn/ui Semantic Tokens (bridged from existing design tokens) ─── */
+  --color-background: var(--color-surface-950);
+  --color-foreground: var(--color-text-primary);
+  --color-card: var(--color-surface-900);
+  --color-card-foreground: var(--color-text-primary);
+  --color-popover: var(--color-surface-900);
+  --color-popover-foreground: var(--color-text-primary);
+  --color-primary: var(--color-accent-500);
+  --color-primary-foreground: var(--color-surface-50);
+  --color-secondary: var(--color-surface-800);
+  --color-secondary-foreground: var(--color-text-primary);
+  --color-muted: var(--color-surface-800);
+  --color-muted-foreground: var(--color-text-tertiary);
+  --color-accent: var(--color-accent-500);
+  --color-accent-foreground: var(--color-surface-50);
+  --color-destructive: var(--color-error);
+  --color-destructive-foreground: var(--color-surface-50);
+  --color-border: var(--color-surface-700);
+  --color-input: var(--color-surface-700);
+  --color-ring: var(--color-accent-400);
+  --radius: 0.5rem;
 }
 
 /* ─── Keyframes ─── */
@@ -83,6 +105,30 @@
 
 /* ─── Base Layer ─── */
 @layer base {
+  :root {
+    /* shadcn/ui CSS variables (dark-only, values reference existing tokens) */
+    --background: var(--color-background);
+    --foreground: var(--color-foreground);
+    --card: var(--color-card);
+    --card-foreground: var(--color-card-foreground);
+    --popover: var(--color-popover);
+    --popover-foreground: var(--color-popover-foreground);
+    --primary: var(--color-primary);
+    --primary-foreground: var(--color-primary-foreground);
+    --secondary: var(--color-secondary);
+    --secondary-foreground: var(--color-secondary-foreground);
+    --muted: var(--color-muted);
+    --muted-foreground: var(--color-muted-foreground);
+    --accent: var(--color-accent);
+    --accent-foreground: var(--color-accent-foreground);
+    --destructive: var(--color-destructive);
+    --destructive-foreground: var(--color-destructive-foreground);
+    --border: var(--color-border);
+    --input: var(--color-input);
+    --ring: var(--color-ring);
+    --radius: 0.5rem;
+  }
+
   html {
     font-family: var(--font-body);
     -webkit-font-smoothing: antialiased;
