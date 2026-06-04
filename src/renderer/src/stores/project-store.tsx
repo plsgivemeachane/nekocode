@@ -22,7 +22,7 @@ const logger = createLogger('project-store')
 // Types
 // ---------------------------------------------------------------------------
 
-export type SessionStatus = 'idle' | 'streaming' | 'error'
+export type SessionStatus = 'idle' | 'streaming' | 'error' | 'finished_unread'
 
 /** Which main view is currently shown in the content area */
 export type ActiveView = 'chat' | 'settings'
@@ -151,7 +151,13 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
         ),
       }
 
-    case 'SET_ACTIVE_SESSION':
+    case 'SET_ACTIVE_SESSION': {
+      // Clear the finished_unread (blue dot) status when the user selects a session,
+      // since they are now viewing it
+      const newStatuses = { ...state.sessionStatuses }
+      if (newStatuses[action.sessionId] === 'finished_unread') {
+        newStatuses[action.sessionId] = 'idle'
+      }
       return {
         ...state,
         activeSessionId: action.sessionId,
@@ -159,7 +165,9 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
         // Always switch to chat view when selecting a session
         activeView: 'chat',
         showGitOverlay: false,
+        sessionStatuses: newStatuses,
       }
+    }
 
     case 'RECONNECT_SESSION':
       // Guard: ignore stale reconnect if user already switched to a different session
@@ -344,6 +352,8 @@ const ProjectStoreContext = createContext<ProjectStoreAPI | null>(null)
 export function ProjectProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE)
   const initializedRef = useRef(false)
+  // Ref to track the active session ID without stale closures in the global event handler
+  const activeSessionIdRef = useRef<string | null>(null)
 
   // Delegate session orchestration (reconnect/create) to a dedicated hook
   const { reconnectSession, createSession, initReconnect, draftSessionsRef } =
@@ -352,6 +362,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       activeSessionId: state.activeSessionId,
       activeProjectPath: state.activeProjectPath,
     })
+
+  // Keep the ref in sync so the global event handler always sees the current active session
+  useEffect(() => {
+    activeSessionIdRef.current = state.activeSessionId
+  }, [state.activeSessionId])
 
   // Load persisted workspace on first mount
   useEffect(() => {
@@ -404,7 +419,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
         case 'done':
           logger.debug(`[global] done sessionId=${sessionId.slice(0, 8)}...`)
-          dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId, status: 'idle' })
+          // If the session is not currently active, mark it as finished_unread (blue dot)
+          // so the user knows the agent finished but hasn't viewed it yet.
+          // If it IS the active session, just go to idle (user is already watching).
+          dispatch({
+            type: 'UPDATE_SESSION_STATUS',
+            sessionId,
+            status: activeSessionIdRef.current === sessionId ? 'idle' : 'finished_unread',
+          })
           break
 
         case 'error':

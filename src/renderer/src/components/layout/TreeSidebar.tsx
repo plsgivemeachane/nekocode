@@ -28,8 +28,10 @@ function StatusDot({ status, errorMessage }: { status: SessionStatus; errorMessa
   const color =
     status === 'streaming'
       ? 'bg-accent-400 animate-glow-pulse'
-      : 'bg-error'
-  return <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${color}`} title={status === 'error' && errorMessage ? errorMessage : undefined} />
+      : status === 'finished_unread'
+        ? 'bg-blue-400'
+        : 'bg-error'
+  return <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${color}`} title={status === 'error' && errorMessage ? errorMessage : status === 'finished_unread' ? 'Agent finished — click to view' : undefined} />
 }
 
 const VISIBLE_SESSIONS = 6

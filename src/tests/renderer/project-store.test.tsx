@@ -3,7 +3,7 @@ import type { ProjectInfo, SessionInfoDisplay, ChatMessageIPC } from "@/shared/i
 
 // ── Types (match source exactly) ───────────────────────────────────
 
-type SessionStatus = "idle" | "streaming" | "error"
+type SessionStatus = "idle" | "streaming" | "error" | "finished_unread"
 
 interface ProjectState {
   projects: ProjectInfo[]
@@ -111,12 +111,18 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
         ),
       }
 
-    case "SET_ACTIVE_SESSION":
+    case "SET_ACTIVE_SESSION": {
+      const newStatuses = { ...state.sessionStatuses }
+      if (newStatuses[action.sessionId] === "finished_unread") {
+        newStatuses[action.sessionId] = "idle"
+      }
       return {
         ...state,
         activeSessionId: action.sessionId,
         activeProjectPath: action.projectPath,
+        sessionStatuses: newStatuses,
       }
+    }
 
     case "RECONNECT_SESSION":
       if (state.activeSessionId !== action.sessionId) {
