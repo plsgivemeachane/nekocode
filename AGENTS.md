@@ -136,6 +136,28 @@ For EVERY bug fix, you MUST write a full detailed description of the bug and how
 
 ---
 
+## Radix ScrollArea Overflow Clipping — Known Pitfall
+
+**This is a universal issue that affects EVERY component using `<ScrollArea>` in this project.**
+
+### The Problem
+Radix ScrollArea internally wraps children in `<div style="min-width: 100%; display: table">`. The `display: table` layout allows the inner wrapper to expand beyond the viewport width when content has inherent width. Since the viewport has `overflowX: hidden` (the default when no horizontal scrollbar is enabled), the right side of the content gets clipped — cutting off roughly ~5% of the width including rounded corners, borders, and UI elements.
+
+### The Fix (already applied globally)
+A CSS override in `src/renderer/src/index.css` forces `display: block` on the inner wrapper:
+```css
+[data-radix-scroll-area-viewport] > div {
+  display: block !important;
+}
+```
+
+### Rules for Using ScrollArea
+1. **NEVER add `flex flex-col` to the ScrollArea Root element.** The ScrollArea manages its own layout internally. Adding `flex flex-col` to the Root interferes with how the Radix Viewport resolves its `size-full` dimensions. Children are already in vertical flow within the scrollable content — `flex flex-col` is redundant and harmful.
+2. **If content appears clipped on the right side** inside a ScrollArea, verify the global CSS override is still in `index.css`. Do NOT work around it with padding, margin hacks, or overflow overrides — the root cause is the `display: table` on the inner wrapper.
+3. **When adding new ScrollArea components**, only add classes for border, background, sizing, and spacing. Never add flex layout classes to the Root.
+
+---
+
 ## Common Shorthand
 
 | User says | It means |

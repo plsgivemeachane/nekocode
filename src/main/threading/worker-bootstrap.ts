@@ -377,6 +377,8 @@ async function dispatchOperation(type: OperationType, input: unknown): Promise<u
       return handleSessionUIRespond(input as import('./types').SessionUIRespondInput)
 
     // Project operations
+    case 'project:add':
+      return handleProjectAdd(input as { path: string })
     case 'project:discover-sessions':
       return handleProjectDiscoverSessions(input as { path: string })
     case 'project:load-workspace':
@@ -823,6 +825,20 @@ async function handleProjectDiscoverSessions(input: { path: string }): Promise<{
   } catch (err) {
     logger.error(`Failed to discover sessions for ${input.path}:`, err)
     return { sessions: [] }
+  }
+}
+
+/**
+ * Add project - discover sessions and construct ProjectInfo.
+ * This is executed in the worker thread to offload session discovery.
+ */
+async function handleProjectAdd(input: { path: string }): Promise<import('./types').ProjectAddOutput> {
+  const { sessions } = await handleProjectDiscoverSessions(input)
+  return {
+    id: '', // Will be assigned by main thread core manager
+    name: input.path.split(/[/\\]/).pop() ?? input.path,
+    path: input.path,
+    sessions,
   }
 }
 

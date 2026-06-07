@@ -365,3 +365,17 @@
     color: var(--color-text-tertiary);
   }
 }
+
+/* ─── Radix ScrollArea Fix ─── */
+/* The Radix ScrollArea viewport wraps children in an internal div with
+   "display: table; min-width: 100%". This table layout can cause the inner
+   content to expand beyond the viewport width, and since the viewport has
+   overflowX: hidden (when no horizontal scrollbar is enabled), the right
+   side of the content gets clipped — cutting off rounded corners, borders,
+   and entire UI elements.
+   Changing to display: block prevents the width expansion while keeping
+   min-width: 100% behavior (content fills available space). */
+[data-radix-scroll-area-viewport] > div {
+  display: block !important;
+}
+

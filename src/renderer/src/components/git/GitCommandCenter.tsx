@@ -293,7 +293,7 @@ export function GitCommandCenter() {
       {/* ── Main content: staging + diff (resizable left/right) ── */}
       <div className="flex flex-1 overflow-hidden relative">
         {/* Left panel: staging + commit */}
-        <ScrollArea className="flex flex-col border-r border-surface-800/50 shrink-0" style={{ width: leftPanelWidth }}>
+        <ScrollArea className="border-r border-surface-800/50 shrink-0" style={{ width: leftPanelWidth }}>
           <StagingArea
             staged={git.status.staged}
             unstaged={[...git.status.modified, ...git.status.untracked]}

@@ -139,6 +139,29 @@ export class ProjectManager {
     return this.toProjectInfo(project)
   }
 
+  /**
+   * Add a project by its filesystem path with pre-discovered sessions.
+   * This is used by ThreadedProjectManager when offloading session discovery to a worker thread.
+   * If the same path (case-insensitive) is already tracked, returns the existing project.
+   */
+  async addProjectWithSessions(path: string, sessions: SessionInfoDisplay[]): Promise<ProjectInfo> {
+    const key = path.toLowerCase()
+    const existing = this.projects.get(key)
+    if (existing) {
+      logger.info(`Already tracked: ${existing.id} path=${path}`)
+      return this.toProjectInfo(existing)
+    }
+
+    const id = `project-${this.nextId++}`
+    const project: Project = { id, path, sessions }
+    this.projects.set(key, project)
+    logger.info(`Added ${id} (with pre-discovered sessions) path=${path} sessions=${sessions.length}`)
+
+    await this.saveWorkspace()
+    return this.toProjectInfo(project)
+  }
+
+
   /** Remove a project by ID. Returns true if found and removed. */
   async removeProject(id: string): Promise<boolean> {
     for (const [key, project] of this.projects) {

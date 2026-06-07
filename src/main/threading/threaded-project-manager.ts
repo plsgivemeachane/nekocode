@@ -62,10 +62,12 @@ export class ThreadedProjectManager implements IProjectManager {
    */
   async addProject(path: string): Promise<ProjectInfo> {
     logger.debug(`addProject: ${path} - offloading to operation queue`)
-    return this.operationQueue.execute<ProjectAddInput, ProjectAddOutput>(
+    const projectInfo = await this.operationQueue.execute<ProjectAddInput, ProjectAddOutput>(
       'project:add',
       { path }
     )
+    // Synchronize the added project with the main-thread ProjectManager's state
+    return this.projectManager.addProjectWithSessions(path, projectInfo.sessions)
   }
 
   /**
