@@ -778,7 +778,7 @@ describe("RightSidebar — Contract Violations", () => {
       expect(mockSetRightSidebarPanel).toHaveBeenCalledWith("outline")
     })
 
-    it("mousedown on resize handle calls setRightSidebarWidth on mouse move", () => {
+    it("resize handle uses local state during drag, syncs to store on mouseup", () => {
       mockStoreState.rightSidebarActivePanel = "diff"
       mockStoreState.rightSidebarWidth = 480
       render(<RightSidebar />)
@@ -789,14 +789,15 @@ describe("RightSidebar — Contract Violations", () => {
       // Start drag
       fireEvent.mouseDown(handle, { clientX: 500 })
 
-      // Move mouse left (increases sidebar width)
+      // Move mouse left (increases sidebar width) — should NOT sync to store yet
       fireEvent.mouseMove(document, { clientX: 400 })
+      expect(mockSetRightSidebarWidth).not.toHaveBeenCalled()
 
-      // Should have called setRightSidebarWidth
-      expect(mockSetRightSidebarWidth).toHaveBeenCalled()
-      const lastCall = mockSetRightSidebarWidth.mock.calls[mockSetRightSidebarWidth.mock.calls.length - 1]
+      // Release mouse — should sync final width to store
+      fireEvent.mouseUp(document)
+      expect(mockSetRightSidebarWidth).toHaveBeenCalledTimes(1)
       // Delta = 500 - 400 = 100, newWidth = 480 + 100 = 580
-      expect(lastCall[0]).toBe(580)
+      expect(mockSetRightSidebarWidth).toHaveBeenCalledWith(580)
     })
 
     it("resize handle listeners are cleaned up on unmount during drag", () => {

@@ -181,8 +181,18 @@ export function RightSidebar() {
   const { messages, registerToolCallClickHandler } = useSessionMessages()
 
   const activePanel = state.rightSidebarActivePanel
-  const width = state.rightSidebarWidth
+  // Use local state for smooth dragging (avoids store re-renders on every mousemove)
+  // Sync to store only on mouseup for persistence
+  const [sidebarWidth, setSidebarWidth] = useState(state.rightSidebarWidth)
+  const sidebarWidthRef = useRef(state.rightSidebarWidth)
+  const width = sidebarWidth
   const selectedToolCallId = state.rightSidebarSelectedToolCallId
+
+  // Sync from store if it changes externally
+  useEffect(() => {
+    setSidebarWidth(state.rightSidebarWidth)
+    sidebarWidthRef.current = state.rightSidebarWidth
+  }, [state.rightSidebarWidth])
 
   // Resize drag state
   const isDraggingRef = useRef(false)
@@ -256,14 +266,15 @@ export function RightSidebar() {
       isDraggingRef.current = true
       setIsDraggingState(true)
       startX.current = e.clientX
-      startWidth.current = width
+      startWidth.current = sidebarWidthRef.current
 
       const handleMouseMove = (moveEvent: MouseEvent) => {
         if (!isDraggingRef.current) return
         // Dragging left = wider sidebar (width increases as mouse moves left)
         const delta = startX.current - moveEvent.clientX
         const newWidth = Math.max(280, Math.min(900, startWidth.current + delta))
-        setRightSidebarWidth(newWidth)
+        sidebarWidthRef.current = newWidth
+        setSidebarWidth(newWidth)
       }
 
       const handleMouseUp = () => {
@@ -275,6 +286,8 @@ export function RightSidebar() {
         activeResizeHandlersRef.current = { mousemove: null, mouseup: null }
         document.body.style.cursor = ''
         document.body.style.userSelect = ''
+        // Sync final width to store for persistence
+        setRightSidebarWidth(sidebarWidthRef.current)
       }
 
       // Store handlers so they can be cleaned up on unmount mid-drag
@@ -284,7 +297,7 @@ export function RightSidebar() {
       document.addEventListener('mousemove', handleMouseMove)
       document.addEventListener('mouseup', handleMouseUp)
     },
-    [width, activePanel, setRightSidebarPanel, setRightSidebarWidth],
+    [activePanel, setRightSidebarPanel, setRightSidebarWidth],
   )
 
   // Cleanup: remove resize listeners and reset drag state on unmount
@@ -373,7 +386,9 @@ className='absolute top-0 bottom-0 -left-1.5 w-3 cursor-col-resize z-20 group/re
 
       {/* ═══════ Content Panel (always mounted, animated in/out) ═══════ */}
       <aside
-        className={`h-full flex flex-col shrink-0 bg-surface-950 relative transition-[width,opacity] duration-300 ease-out overflow-hidden ${
+        className={`h-full flex flex-col shrink-0 bg-surface-950 relative ${
+          isDraggingState ? '' : 'transition-[width,opacity] duration-300 ease-out'
+        } overflow-hidden ${
           activePanel ? 'opacity-100' : 'opacity-0 w-0!'
         }`}
         style={activePanel ? { width: `${width}px` } : undefined}

@@ -301,7 +301,7 @@ describe("CommandPalette", () => {
       />
     )
     expect(screen.getByText(/navigate/)).toBeTruthy()
-    expect(screen.getByText(/select/)).toBeTruthy()
+    expect(screen.getByText(/↵ select/)).toBeTruthy()
     expect(screen.getByText(/close/)).toBeTruthy()
   })
 

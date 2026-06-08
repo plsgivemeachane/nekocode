@@ -10,6 +10,7 @@ import {
 } from '../ui/context-menu'
 import { ScrollArea } from '../ui/scroll-area'
 import { VSCodeIcon } from '../icons/VSCodeIcon'
+import { AgentDoubleOrbit } from '../icons/AgentDoubleOrbit'
 // NotificationSettingsPanel is now in SettingsView
 import { createLogger } from '../../utils/logger'
 
@@ -46,7 +47,6 @@ function SessionList({
   onHoverSession,
   renderSessionMenu,
   onCreateSession,
-  onAddFolder,
 }: {
   sessions: { id: string; firstMessage?: string }[]
   activeSessionId: string | null
@@ -59,7 +59,6 @@ function SessionList({
   /** Render the context menu items for a session */
   renderSessionMenu: (sessionId: string) => React.ReactNode
   onCreateSession: () => void
-  onAddFolder: () => void
 }) {
   const [showAll, setShowAll] = useState(false)
   const hasMore = sessions.length > VISIBLE_SESSIONS
@@ -76,22 +75,11 @@ function SessionList({
   }
 
   return (
-    <div className="ml-3 mt-0.5 space-y-px">
-      {/* Add Folder — quick access at top of sessions list */}
-      <button
-        onClick={onAddFolder}
-        className="flex items-center gap-2 px-2.5 py-1.5 w-full text-left text-[12px] text-text-tertiary/80 hover:text-text-primary hover:bg-surface-800/70 rounded-lg border border-transparent hover:border-surface-600 transition-colors duration-150 pl-5"
-      >
-        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" className="shrink-0">
-          <path d="M2 3.5C2 2.67 2.67 2 3.5 2h3L8 3.5h4.5c.83 0 1.5.67 1.5 1.5v8c0 .83-.67 1.5-1.5 1.5h-9c-.83 0-1.5-.67-1.5-1.5v-9.5z" stroke="currentColor" strokeWidth="1" />
-        </svg>
-        Add Folder
-      </button>
-
+    <div className="ml-3 mt-0.5 space-y-1">
       {/* New Session — at the top */}
       <button
         onClick={onCreateSession}
-        className="flex items-center gap-2 px-2.5 py-1.5 w-full text-left text-[12px] text-text-tertiary/80 hover:text-text-primary hover:bg-surface-800/70 rounded-lg border border-transparent hover:border-surface-600 transition-colors duration-150 pl-5"
+        className="flex items-center gap-2 px-2.5 py-1.5 w-full text-left text-[12px] text-text-tertiary/80 hover:text-text-primary hover:bg-surface-800/70 rounded-lg transition-colors duration-150 pl-5"
       >
         <svg width="11" height="11" viewBox="0 0 12 12" fill="none" className="shrink-0">
           <path d="M6 2.5v7M2.5 6h7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
@@ -108,24 +96,30 @@ function SessionList({
           <ContextMenu key={session.id}>
             <ContextMenuTrigger asChild>
               <div
-                className={`flex items-center gap-2 px-2.5 py-1.5 cursor-pointer rounded-lg transition-colors duration-150 text-[13px] border ${
+                className={`flex items-center gap-2 px-2.5 py-1.5 cursor-pointer rounded-lg transition-colors duration-150 text-[13px] ${
                   isActiveSession
-                    ? 'bg-surface-800/80 text-text-primary border-surface-600'
-                    : 'text-text-secondary/80 border-transparent hover:bg-surface-800/60 hover:text-text-primary hover:border-surface-600'
+                    ? 'bg-surface-800/80 text-text-primary'
+                    : 'text-text-secondary/80 hover:bg-surface-800/60 hover:text-text-primary'
                 } ${isPending ? 'opacity-60 cursor-wait' : ''}`}
                 onClick={() => handleSessionClick(session.id)}
                 onMouseEnter={() => !isPending && onHoverSession(session.id)}
               >
+                {/* Busy state indicator — LEFT of text */}
+                {status === 'streaming' ? (
+                  <AgentDoubleOrbit />
+                ) : (isPending || (isActiveSession && isAgentConnecting)) ? (
+                  <svg className="animate-spin w-3 h-3 text-text-tertiary shrink-0" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                ) : null}
+
                 <span className={`truncate flex-1 ${isActiveSession ? '' : 'pl-3'}`}>
                   {session.firstMessage ? truncate(session.firstMessage, 26) : 'Untitled'}
                 </span>
 
-                {(isPending || (isActiveSession && isAgentConnecting)) ? (
-                  <svg className="animate-spin w-3 h-3 text-text-tertiary" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                ) : (
+                {/* Non-busy status indicator — RIGHT of text */}
+                {status !== 'streaming' && !(isPending || (isActiveSession && isAgentConnecting)) && (
                   <StatusDot status={status} errorMessage={sessionErrorMessages[session.id]} />
                 )}
               </div>
@@ -140,7 +134,7 @@ function SessionList({
       {hasMore && (
         <button
           onClick={() => setShowAll(prev => !prev)}
-          className="flex items-center gap-2 px-2.5 py-[6px] w-full text-left text-[12px] text-text-tertiary/80 hover:text-text-primary hover:bg-surface-800/60 rounded-lg border border-transparent hover:border-surface-600 transition-colors duration-150 pl-5"
+          className="flex items-center gap-2 px-2.5 py-[6px] w-full text-left text-[12px] text-text-tertiary/80 hover:text-text-primary hover:bg-surface-800/60 rounded-lg transition-colors duration-150 pl-5"
         >
           {showAll ? 'Show less' : `Show more (${sessions.length - VISIBLE_SESSIONS})`}
         </button>
@@ -150,9 +144,80 @@ function SessionList({
 }
 
 export function TreeSidebar() {
-  const { state, addProject, removeProject, reconnectSession, createSession, refreshSessions, refreshSessionMessages, preloadSession, setActiveSession, setActiveView } =
+  const { state, addProject, removeProject, reconnectSession, createSession, refreshSessions, refreshSessionMessages, preloadSession, setActiveSession, setActiveView, setLeftSidebarWidth } =
     useProjectStore()
   const activeSessionId = state.activeSessionId
+
+  // ── Resizable sidebar width ──
+  // Use local state for smooth dragging (avoids store re-renders on every mousemove)
+  // Sync to store only on mouseup for persistence
+  const [sidebarWidth, setSidebarWidth] = useState(state.leftSidebarWidth)
+  const sidebarWidthRef = useRef(state.leftSidebarWidth)
+  const isDraggingRef = useRef(false)
+  const dragStartX = useRef(0)
+  const dragStartWidth = useRef(0)
+  const [isDraggingState, setIsDraggingState] = useState(false)
+  const [isHoveringResize, setIsHoveringResize] = useState(false)
+  const activeResizeHandlers = useRef<{ mousemove: ((e: MouseEvent) => void) | null; mouseup: (() => void) | null }>({ mousemove: null, mouseup: null })
+
+  // ── Resize handle: right edge of left sidebar ──
+  const handleResizeMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault()
+      isDraggingRef.current = true
+      setIsDraggingState(true)
+      dragStartX.current = e.clientX
+      dragStartWidth.current = sidebarWidthRef.current
+
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        if (!isDraggingRef.current) return
+        // Dragging right = wider sidebar
+        const delta = moveEvent.clientX - dragStartX.current
+        const newWidth = Math.max(180, Math.min(500, dragStartWidth.current + delta))
+        sidebarWidthRef.current = newWidth
+        setSidebarWidth(newWidth)
+      }
+
+      const handleMouseUp = () => {
+        isDraggingRef.current = false
+        setIsDraggingState(false)
+        document.removeEventListener('mousemove', handleMouseMove)
+        document.removeEventListener('mouseup', handleMouseUp)
+        activeResizeHandlers.current = { mousemove: null, mouseup: null }
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+        // Sync final width to store for persistence
+        setLeftSidebarWidth(sidebarWidthRef.current)
+      }
+
+      activeResizeHandlers.current = { mousemove: handleMouseMove, mouseup: handleMouseUp }
+      document.body.style.cursor = 'col-resize'
+      document.body.style.userSelect = 'none'
+      document.addEventListener('mousemove', handleMouseMove)
+      document.addEventListener('mouseup', handleMouseUp)
+    },
+    [setLeftSidebarWidth],
+  )
+
+  // Cleanup resize listeners on unmount
+  useEffect(() => {
+    return () => {
+      if (activeResizeHandlers.current.mousemove) {
+        document.removeEventListener('mousemove', activeResizeHandlers.current.mousemove)
+      }
+      if (activeResizeHandlers.current.mouseup) {
+        document.removeEventListener('mouseup', activeResizeHandlers.current.mouseup)
+      }
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [])
+
+  // Sync from store if it changes externally
+  useEffect(() => {
+    setSidebarWidth(state.leftSidebarWidth)
+    sidebarWidthRef.current = state.leftSidebarWidth
+  }, [state.leftSidebarWidth])
 
   // Shell operation UX state: loading indicator, toast for failure feedback, debounce
   const [shellOpening, setShellOpening] = useState<string | null>(null) // 'vscode' | 'explorer' | null
@@ -343,7 +408,10 @@ export function TreeSidebar() {
   }, [activeSessionId, refreshSessions, setActiveSession, refreshSessionMessages, state.sessionStatuses, vscodeAvailable, shellOpening, handleShellOpen])
 
   return (
-    <aside className="w-60 bg-surface-900 h-full flex flex-col shrink-0 text-text-primary shadow-[inset_-1px_0_0_rgba(255,255,255,0.06)]">
+    <aside
+      className="bg-surface-900 h-full flex flex-col shrink-0 text-text-primary shadow-[inset_-1px_0_0_rgba(255,255,255,0.06)] relative"
+      style={{ width: sidebarWidth }}
+    >
       {/* Header moved to NavBar (same row as window controls) */}
 
       {/* Project list */}
@@ -351,7 +419,7 @@ export function TreeSidebar() {
         {/* Add Folder button at top of project list */}
         <button
           onClick={handleAddProject}
-          className="flex items-center gap-2 px-2.5 py-1.5 mx-1 mt-1 w-[calc(100%-8px)] text-left text-[12px] text-text-tertiary/80 hover:text-text-primary hover:bg-surface-800/70 rounded-lg border border-dashed border-surface-700/50 hover:border-surface-600 transition-colors duration-150"
+          className="flex items-center gap-2 px-2.5 py-1.5 mx-1 mt-1 mb-1 w-[calc(100%-8px)] text-left text-[12px] text-text-tertiary/80 hover:text-text-primary hover:bg-surface-800/70 rounded-lg border border-dashed border-surface-700/50 transition-colors duration-150"
         >
           <svg width="11" height="11" viewBox="0 0 16 16" fill="none" className="shrink-0">
             <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
@@ -363,7 +431,7 @@ export function TreeSidebar() {
           <p className="text-[11px] text-text-tertiary/80 px-3 py-10 text-center leading-relaxed">
             No projects yet.
             <br />
-            Click + to add one.
+            Click "Add Folder" above to add one.
           </p>
         )}
 
@@ -372,13 +440,13 @@ export function TreeSidebar() {
           const isActive = state.activeProjectPath === project.path
 
           return (
-            <div key={project.id} className="mb-0.5">
+            <div key={project.id} className="mb-1">
               {/* Project row */}
               <ContextMenu>
                 <ContextMenuTrigger asChild>
                   <div
-                    className={`group flex items-center gap-2 px-2.5 py-[7px] cursor-pointer rounded-lg transition-colors duration-150 border ${
-                      isActive ? 'bg-surface-800/80 border-surface-600' : 'border-transparent hover:bg-surface-800/60 hover:border-surface-600'
+                    className={`group flex items-center gap-2 px-2.5 py-[7px] cursor-pointer rounded-lg transition-colors duration-150 ${
+                      isActive ? 'bg-surface-800/80' : 'hover:bg-surface-800/60'
                     }`}
                     onClick={() => toggleExpand(project.id)}
                   >
@@ -417,7 +485,7 @@ export function TreeSidebar() {
                   onHoverSession={(sessionId) => preloadSession(sessionId, project.path)}
                   renderSessionMenu={(sessionId) => renderSessionMenu(sessionId, project.path, project.id)}
                   onCreateSession={() => createSession(project.path)}
-                  onAddFolder={handleAddProject}
+
                   isAgentConnecting={!state.agentReady && state.activeSessionId != null}
                 />
               )}
@@ -431,7 +499,7 @@ export function TreeSidebar() {
         {/* Settings button */}
         <button
           onClick={() => setActiveView('settings')}
-          className={`w-full flex items-center gap-2 px-2.5 py-[7px] ${state.activeView === 'settings' ? 'text-accent bg-accent/10 border-accent/20' : 'text-text-secondary hover:text-text-primary hover:bg-surface-800/80 border-transparent hover:border-surface-600'} rounded-lg border transition-colors duration-200`}
+          className={`w-full flex items-center gap-2 px-2.5 py-[7px] ${state.activeView === 'settings' ? 'text-accent bg-accent/10' : 'text-text-secondary hover:text-text-primary hover:bg-surface-800/80'} rounded-lg transition-colors duration-200`}
           title="Settings"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -454,6 +522,24 @@ export function TreeSidebar() {
       )}
 
       {/* NotificationSettingsPanel moved to central Settings page */}
+
+      {/* ── Vertical resize handle (right edge) ── */}
+      <div
+        className="absolute top-0 bottom-0 w-3 cursor-col-resize z-10 group/resize-ls"
+        style={{ right: -6 }}
+        onMouseDown={handleResizeMouseDown}
+        onMouseEnter={() => setIsHoveringResize(true)}
+        onMouseLeave={() => setIsHoveringResize(false)}
+      >
+        {/* Small floating stick indicator (smooth, like GitCommandCenter) */}
+        <div
+          className={`absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 w-0.75 rounded-full transition-all duration-200 ${
+            isHoveringResize || isDraggingState
+              ? 'h-12 bg-surface-400/70'
+              : 'h-8 bg-surface-600/60 group-hover/resize-ls:h-10 group-hover/resize-ls:bg-surface-500/80'
+          }`}
+        />
+      </div>
     </aside>
   )
 }

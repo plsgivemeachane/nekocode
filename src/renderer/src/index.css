@@ -379,3 +379,13 @@
   display: block !important;
 }
 
+/* Sidebar: suppress focus outlines and rings for a cleaner hover experience.
+   Background highlight is sufficient visual feedback. */
+aside button:focus-visible,
+aside a:focus-visible,
+aside [role="button"]:focus-visible,
+aside [data-radix-collection-item]:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+

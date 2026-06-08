@@ -135,17 +135,45 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      // If command palette is open, let CommandPalette handle navigation keys
-      if (showCommandPalette && ['ArrowUp', 'ArrowDown', 'Tab'].includes(e.key)) {
-        // CommandPalette handles these via document-level listener
-        return
+      // If command palette is open, handle navigation keys
+      if (showCommandPalette) {
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Enter') {
+          // Forward keyboard navigation to the cmdk root element.
+          // cmdk listens for keydown on its [cmdk-root] container, but since
+          // focus stays on this textarea, the events never reach cmdk.
+          // We dispatch a synthetic event so cmdk handles navigation natively.
+          // Prevent default to avoid cursor movement in textarea while navigating the palette.
+          e.preventDefault()
+          const cmdkRoot = document.querySelector('[cmdk-root]')
+          if (cmdkRoot) {
+            const syntheticEvent = new KeyboardEvent('keydown', {
+              key: e.key,
+              code: e.code,
+              bubbles: true,
+              cancelable: true,
+              ctrlKey: e.ctrlKey,
+              shiftKey: e.shiftKey,
+              altKey: e.altKey,
+              metaKey: e.metaKey,
+            })
+            cmdkRoot.dispatchEvent(syntheticEvent)
+          }
+          return
+        }
+        if (e.key === 'Tab') {
+          // Prevent browser default Tab behavior (focus shift to next element)
+          // and select the currently highlighted command from the palette.
+          // cmdk doesn't natively handle Tab, so we click the selected item directly.
+          e.preventDefault()
+          const selected = document.querySelector('[cmdk-root] [data-selected="true"]') as HTMLElement | null
+          if (selected) {
+            selected.click()
+          }
+          return
+        }
       }
 
       if (e.key === 'Enter' && !e.shiftKey) {
-        if (showCommandPalette) {
-          // Let CommandPalette handle Enter for selection
-          return
-        }
         e.preventDefault()
         trySend(input, isStreaming, isAgentConnecting, setInput, resetHeight, sendPrompt)
       }
@@ -197,7 +225,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
               placeholder={isAgentConnecting ? 'Agent starting, please wait...' : 'Ask anything, @tag files/folders, or type / for commands'}
               disabled={!sessionId || isStreaming || isAgentConnecting}
               rows={1}
-              className="w-full bg-transparent dark:bg-transparent text-sm text-text-primary placeholder:text-text-tertiary/50 focus-visible:ring-0 focus-visible:border-transparent border-0 shadow-none min-h-0 p-0 disabled:opacity-40 disabled:cursor-not-allowed resize-none overflow-y-auto leading-relaxed field-sizing-none"
+              className="w-full bg-transparent dark:bg-transparent text-sm text-text-primary placeholder:text-text-tertiary/50 focus-visible:ring-0 focus-visible:border-transparent border-0 shadow-none rounded-none min-h-0 p-0 disabled:opacity-40 disabled:cursor-not-allowed resize-none overflow-y-auto leading-relaxed field-sizing-none"
             />
             <div className="flex items-center pt-5">
               <div className="flex items-center gap-0 text-xs text-text-secondary">

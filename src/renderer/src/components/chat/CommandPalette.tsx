@@ -203,6 +203,7 @@ export function CommandPalette({
         <div className="px-3 py-1.5 border-t border-surface-700 flex items-center gap-4 text-[10px] text-surface-500">
           <span>↑↓ navigate</span>
           <span>↵ select</span>
+          <span>tab select</span>
           <span>Esc close</span>
         </div>
       </Command>

@@ -53,6 +53,8 @@ interface ProjectState {
   rightSidebarWidth: number
   /** Tool call ID selected in the right sidebar for scrolling */
   rightSidebarSelectedToolCallId: string | null
+  /** Width of the left sidebar in pixels */
+  leftSidebarWidth: number
 }
 
 export type ProjectAction =
@@ -76,6 +78,7 @@ export type ProjectAction =
   | { type: 'REFRESH_SESSION_MESSAGES'; sessionId: string }
   | { type: 'SET_RIGHT_SIDEBAR_PANEL'; panel: RightSidebarPanel; selectedToolCallId?: string | null }
   | { type: 'SET_RIGHT_SIDEBAR_WIDTH'; width: number }
+  | { type: 'SET_LEFT_SIDEBAR_WIDTH'; width: number }
 
 // ---------------------------------------------------------------------------
 // Reducer (pure)
@@ -95,6 +98,7 @@ const INITIAL_STATE: ProjectState = {
   rightSidebarActivePanel: null,
   rightSidebarWidth: 480,
   rightSidebarSelectedToolCallId: null,
+  leftSidebarWidth: 240,
 }
 
 function reducer(state: ProjectState, action: ProjectAction): ProjectState {
@@ -303,6 +307,15 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
       }
     }
 
+    case 'SET_LEFT_SIDEBAR_WIDTH': {
+      const safeWidth = Number.isFinite(action.width) ? action.width : 240
+      const clampedWidth = Math.max(180, Math.min(500, safeWidth))
+      return {
+        ...state,
+        leftSidebarWidth: clampedWidth,
+      }
+    }
+
     case 'REPLACE_PENDING_SESSION': {
       // Replace a pending session with the real one, and update active session ID
       const { projectPath, pendingId, realSession } = action
@@ -336,6 +349,7 @@ interface ProjectStoreAPI {
   setGitOverlay: (show: boolean) => void
   setRightSidebarPanel: (panel: RightSidebarPanel, selectedToolCallId?: string | null) => void
   setRightSidebarWidth: (width: number) => void
+  setLeftSidebarWidth: (width: number) => void
   reconnectSession: (sessionId: string, projectPath: string) => Promise<void>
   createSession: (projectPath: string) => Promise<void>
   refreshSessions: (projectId: string) => Promise<void>
@@ -557,6 +571,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     [],
   )
 
+  const setLeftSidebarWidth = useCallback(
+    (width: number) => {
+      dispatch({ type: 'SET_LEFT_SIDEBAR_WIDTH', width })
+    },
+    [],
+  )
+
   const api: ProjectStoreAPI = {
     state,
     addProject,
@@ -566,6 +587,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     setGitOverlay,
     setRightSidebarPanel,
     setRightSidebarWidth,
+    setLeftSidebarWidth,
     reconnectSession,
     createSession,
     refreshSessions,
