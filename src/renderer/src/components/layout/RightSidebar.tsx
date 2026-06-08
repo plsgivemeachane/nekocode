@@ -257,22 +257,25 @@ export function RightSidebar() {
     (e: React.MouseEvent) => {
       e.preventDefault()
 
-      // Quirk: if no panel is currently active, auto-open the last used panel
-      // (or default to "diff") so the resize handle has something to resize.
+      // If no panel is active, auto-open the last used panel so content renders,
+      // but start the width at 0 — the drag itself will size the sidebar naturally
+      // to wherever the mouse moves. No more "pop to 480px" mismatch.
       if (!activePanel) {
         setRightSidebarPanel(lastActivePanelRef.current)
+        sidebarWidthRef.current = 0
+        setSidebarWidth(0)
       }
+      startWidth.current = sidebarWidthRef.current
 
       isDraggingRef.current = true
       setIsDraggingState(true)
       startX.current = e.clientX
-      startWidth.current = sidebarWidthRef.current
 
       const handleMouseMove = (moveEvent: MouseEvent) => {
         if (!isDraggingRef.current) return
         // Dragging left = wider sidebar (width increases as mouse moves left)
         const delta = startX.current - moveEvent.clientX
-        const newWidth = Math.max(280, Math.min(900, startWidth.current + delta))
+        const newWidth = Math.max(0, Math.min(900, startWidth.current + delta))
         sidebarWidthRef.current = newWidth
         setSidebarWidth(newWidth)
       }
@@ -286,8 +289,18 @@ export function RightSidebar() {
         activeResizeHandlersRef.current = { mousemove: null, mouseup: null }
         document.body.style.cursor = ''
         document.body.style.userSelect = ''
-        // Sync final width to store for persistence
-        setRightSidebarWidth(sidebarWidthRef.current)
+        // If the user dragged the sidebar nearly closed, snap it fully closed.
+        // This makes drag-to-close feel natural — drag all the way right and it dismisses.
+        if (sidebarWidthRef.current <= 10) {
+          setRightSidebarPanel(null)
+          // Reset width to default so next open isn't stuck at 0
+          sidebarWidthRef.current = 480
+          setSidebarWidth(480)
+          setRightSidebarWidth(480)
+        } else {
+          // Sync final width to store for persistence
+          setRightSidebarWidth(sidebarWidthRef.current)
+        }
       }
 
       // Store handlers so they can be cleaned up on unmount mid-drag
