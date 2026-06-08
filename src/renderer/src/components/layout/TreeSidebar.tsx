@@ -46,6 +46,7 @@ function SessionList({
   onHoverSession,
   renderSessionMenu,
   onCreateSession,
+  onAddFolder,
 }: {
   sessions: { id: string; firstMessage?: string }[]
   activeSessionId: string | null
@@ -58,6 +59,7 @@ function SessionList({
   /** Render the context menu items for a session */
   renderSessionMenu: (sessionId: string) => React.ReactNode
   onCreateSession: () => void
+  onAddFolder: () => void
 }) {
   const [showAll, setShowAll] = useState(false)
   const hasMore = sessions.length > VISIBLE_SESSIONS
@@ -75,6 +77,17 @@ function SessionList({
 
   return (
     <div className="ml-3 mt-0.5 space-y-px">
+      {/* Add Folder — quick access at top of sessions list */}
+      <button
+        onClick={onAddFolder}
+        className="flex items-center gap-2 px-2.5 py-1.5 w-full text-left text-[12px] text-text-tertiary/80 hover:text-text-primary hover:bg-surface-800/70 rounded-lg border border-transparent hover:border-surface-600 transition-colors duration-150 pl-5"
+      >
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" className="shrink-0">
+          <path d="M2 3.5C2 2.67 2.67 2 3.5 2h3L8 3.5h4.5c.83 0 1.5.67 1.5 1.5v8c0 .83-.67 1.5-1.5 1.5h-9c-.83 0-1.5-.67-1.5-1.5v-9.5z" stroke="currentColor" strokeWidth="1" />
+        </svg>
+        Add Folder
+      </button>
+
       {/* New Session — at the top */}
       <button
         onClick={onCreateSession}
@@ -137,7 +150,7 @@ function SessionList({
 }
 
 export function TreeSidebar() {
-  const { state, removeProject, reconnectSession, createSession, refreshSessions, refreshSessionMessages, preloadSession, setActiveSession, setActiveView } =
+  const { state, addProject, removeProject, reconnectSession, createSession, refreshSessions, refreshSessionMessages, preloadSession, setActiveSession, setActiveView } =
     useProjectStore()
   const activeSessionId = state.activeSessionId
 
@@ -210,6 +223,13 @@ export function TreeSidebar() {
     prevIds.clear()
     currentIds.forEach(id => prevIds.add(id))
   }, [state.projects, prevIds])
+
+  const handleAddProject = useCallback(async () => {
+    const folder = await window.nekocode.dialog.openFolder()
+    if (folder) {
+      await addProject(folder)
+    }
+  }, [addProject])
 
   const toggleExpand = (projectId: string) => {
     setExpanded(prev => {
@@ -327,7 +347,18 @@ export function TreeSidebar() {
       {/* Header moved to NavBar (same row as window controls) */}
 
       {/* Project list */}
-      <ScrollArea className="flex-1 px-2">
+      <ScrollArea className="flex-1 min-h-0 px-2">
+        {/* Add Folder button at top of project list */}
+        <button
+          onClick={handleAddProject}
+          className="flex items-center gap-2 px-2.5 py-1.5 mx-1 mt-1 w-[calc(100%-8px)] text-left text-[12px] text-text-tertiary/80 hover:text-text-primary hover:bg-surface-800/70 rounded-lg border border-dashed border-surface-700/50 hover:border-surface-600 transition-colors duration-150"
+        >
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" className="shrink-0">
+            <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          </svg>
+          <span>Add Folder</span>
+        </button>
+
         {state.projects.length === 0 && (
           <p className="text-[11px] text-text-tertiary/80 px-3 py-10 text-center leading-relaxed">
             No projects yet.
@@ -386,6 +417,7 @@ export function TreeSidebar() {
                   onHoverSession={(sessionId) => preloadSession(sessionId, project.path)}
                   renderSessionMenu={(sessionId) => renderSessionMenu(sessionId, project.path, project.id)}
                   onCreateSession={() => createSession(project.path)}
+                  onAddFolder={handleAddProject}
                   isAgentConnecting={!state.agentReady && state.activeSessionId != null}
                 />
               )}

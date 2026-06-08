@@ -52,6 +52,11 @@ vi.mock("@/renderer/src/stores/project-store", () => ({
     refreshSessions: mockRefreshSessions,
     preloadSession: mockPreloadSession,
     setActiveSession: mockSetActiveSession,
+    setActiveView: vi.fn(),
+    setGitOverlay: vi.fn(),
+    setRightSidebarPanel: vi.fn(),
+    setRightSidebarWidth: vi.fn(),
+    refreshSessionMessages: vi.fn(),
   })),
 }))
 
@@ -129,6 +134,11 @@ describe("TreeSidebar", () => {
       openInVscode: vi.fn().mockResolvedValue(true),
       openInExplorer: vi.fn().mockResolvedValue(true),
       checkVscodeAvailable: vi.fn().mockResolvedValue({ available: true, command: "code", method: "cli" }),
+    }
+    // Mock dialog for add-folder button
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(window as any).nekocode.dialog = {
+      openFolder: vi.fn().mockResolvedValue(null),
     }
   })
 
