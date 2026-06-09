@@ -274,6 +274,7 @@ export function TreeSidebar() {
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
+  // Track previously-seen project IDs so we can auto-expand newly-added projects
   const prevIds = useState(new Set<string>())[0]
   useEffect(() => {
     const currentIds = new Set(state.projects.map(p => p.id))
@@ -288,6 +289,33 @@ export function TreeSidebar() {
     prevIds.clear()
     currentIds.forEach(id => prevIds.add(id))
   }, [state.projects, prevIds])
+
+  // Auto-collapse: when the active session changes, expand only the project
+  // that contains it and collapse all others. This ensures the sidebar only
+  // shows sessions for the last-opened (active) project.
+  // We use a ref to only react to actual activeSessionId changes, not project
+  // list changes (which happen frequently during session refreshes).
+  const prevActiveSessionIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    // Only react when activeSessionId actually changes
+    if (prevActiveSessionIdRef.current === state.activeSessionId) {
+      return
+    }
+    prevActiveSessionIdRef.current = state.activeSessionId
+
+    if (!state.activeSessionId) {
+      // No active session — leave expanded state as-is so user can still
+      // manually browse projects
+      return
+    }
+    // Find which project contains the active session
+    const activeProject = state.projects.find(p =>
+      p.sessions.some(s => s.id === state.activeSessionId)
+    )
+    if (activeProject) {
+      setExpanded(new Set([activeProject.id]))
+    }
+  }, [state.activeSessionId, state.projects])
 
   const handleAddProject = useCallback(async () => {
     const folder = await window.nekocode.dialog.openFolder()
@@ -414,9 +442,8 @@ export function TreeSidebar() {
     >
       {/* Header moved to NavBar (same row as window controls) */}
 
-      {/* Project list */}
-      <ScrollArea className="flex-1 min-h-0 px-2">
-        {/* Add Folder button at top of project list */}
+      {/* Top: Add Folder button (fixed, does not scroll) */}
+      <div className="px-2 pt-2 pb-1 border-b border-surface-800/50">
         <button
           onClick={handleAddProject}
           className="flex items-center gap-2 px-2.5 py-1.5 mx-1 mt-1 mb-1 w-[calc(100%-8px)] text-left text-[12px] text-text-tertiary/80 hover:text-text-primary hover:bg-surface-800/70 rounded-lg border border-dashed border-surface-700/50 transition-colors duration-150"
@@ -426,7 +453,10 @@ export function TreeSidebar() {
           </svg>
           <span>Add Folder</span>
         </button>
+      </div>
 
+      {/* Middle: Scrollable project/session list */}
+      <ScrollArea className="flex-1 min-h-0 px-2">
         {state.projects.length === 0 && (
           <p className="text-[11px] text-text-tertiary/80 px-3 py-10 text-center leading-relaxed">
             No projects yet.
