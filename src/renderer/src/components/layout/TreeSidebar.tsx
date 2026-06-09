@@ -461,7 +461,7 @@ export function TreeSidebar() {
           <p className="text-[11px] text-text-tertiary/80 px-3 py-10 text-center leading-relaxed">
             No projects yet.
             <br />
-            Click "Add Folder" above to add one.
+            Click &ldquo;Add Folder&rdquo; above to add one.
           </p>
         )}
 
