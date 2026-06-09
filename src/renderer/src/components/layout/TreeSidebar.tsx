@@ -290,9 +290,11 @@ export function TreeSidebar() {
     currentIds.forEach(id => prevIds.add(id))
   }, [state.projects, prevIds])
 
-  // Auto-collapse: when the active session changes, expand only the project
-  // that contains it and collapse all others. This ensures the sidebar only
-  // shows sessions for the last-opened (active) project.
+  // Auto-expand: when the active session changes, expand the project that
+  // contains it. We do NOT collapse other projects — users should be able to
+  // browse multiple project folders simultaneously. Switching sessions only
+  // ensures the target folder is visible (expanded), without disrupting any
+  // other folders the user has manually expanded.
   // We use a ref to only react to actual activeSessionId changes, not project
   // list changes (which happen frequently during session refreshes).
   const prevActiveSessionIdRef = useRef<string | null>(null)
@@ -313,7 +315,13 @@ export function TreeSidebar() {
       p.sessions.some(s => s.id === state.activeSessionId)
     )
     if (activeProject) {
-      setExpanded(new Set([activeProject.id]))
+      // Add the active project to the expanded set without collapsing others
+      setExpanded(prev => {
+        if (prev.has(activeProject.id)) return prev
+        const next = new Set(prev)
+        next.add(activeProject.id)
+        return next
+      })
     }
   }, [state.activeSessionId, state.projects])
 

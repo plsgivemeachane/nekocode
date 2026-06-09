@@ -26,7 +26,10 @@ import type {
   ModelInfo,
   UpdateAvailableInfo,
   NotificationSettings,
+  SearchFilesRequest,
+  SearchFilesResult,
 } from '../shared/ipc-types'
+import { searchFiles } from './search-files'
 import type { ISessionManager, IProjectManager } from './manager-types'
 import type { NotificationService } from './notification-service'
 import { createLogger } from './logger'
@@ -509,6 +512,20 @@ export function registerIpcHandlers(
       return notificationService.updateSettings(partial)
     })
   }
+
+  // --- Search handlers ---
+
+  ipcMain.handle(IPC_CHANNELS.SEARCH_FILES, async (_event, request: SearchFilesRequest): Promise<SearchFilesResult> => {
+    validateIpcSender(_event)
+    logger.debug(`SEARCH_FILES projectPath=${request.projectPath} query=${request.query}`)
+    try {
+      const files = await searchFiles(request)
+      return { files }
+    } catch (err) {
+      logger.error('SEARCH_FILES failed', err)
+      throw err
+    }
+  })
 
 }
 

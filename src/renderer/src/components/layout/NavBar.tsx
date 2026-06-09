@@ -81,8 +81,34 @@ export function NavBar() {
         </span>
       </div>
 
-      {/* ─── Center/Right: project actions + zoom controls + window controls ─── */}
-      <div className="flex-1 flex items-center justify-end px-2">
+      {/* ─── Center: YouTube-style search bar ─── */}
+      <div
+        className="flex-1 flex justify-center px-4"
+        style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+      >
+        <div
+          className="group flex items-center w-full max-w-[480px] h-8 rounded-full border border-surface-700/60 bg-surface-950/60 hover:bg-surface-900/80 hover:border-surface-600/80 focus-within:border-accent-400/50 focus-within:bg-surface-900/80 transition-colors cursor-text"
+          onClick={() => window.dispatchEvent(new CustomEvent('nekocode:open-search', { detail: { mode: 'all' } }))}
+          title="Search commands, files, sessions… (Ctrl+P for files, Ctrl+Shift+P for commands)"
+        >
+          {/* Search icon */}
+          <div className="flex items-center justify-center w-10 shrink-0 text-surface-400 group-focus-within:text-accent-400/70 transition-colors">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </div>
+          {/* Placeholder text */}
+          <span className="flex-1 text-[12px] text-surface-500 select-none truncate">Search</span>
+          {/* Keyboard shortcut hint */}
+          <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 mr-2 text-[10px] font-mono text-surface-500 bg-surface-800/50 rounded border border-surface-700/40">
+            Ctrl P
+          </kbd>
+        </div>
+      </div>
+
+      {/* ─── Right: project actions + zoom controls + window controls ─── */}
+      <div className="flex items-center justify-end px-2">
         {/* Project action buttons (add project + open in vscode) */}
         <div
           className="flex items-center mr-2"

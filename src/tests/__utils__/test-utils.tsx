@@ -162,6 +162,9 @@ export function createMockIPC(): NekoCodeIPC {
       openInExplorer: vi.fn().mockResolvedValue(true),
       checkVscodeAvailable: vi.fn().mockResolvedValue({ available: true, command: 'code' }),
     },
+    search: {
+      files: vi.fn().mockResolvedValue({ files: [] }),
+    },
   }
 }
 

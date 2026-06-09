@@ -8,7 +8,7 @@ import { ToolCallGroup } from './ToolCallSection'
 import { ThinkingBlock } from './ThinkingBlock'
 import { UIDialog } from './UIDialog'
 import { WorkflowStepProgress } from './WorkflowStepProgress'
-import { GlobalCommandPalette } from './GlobalCommandPalette'
+import { SearchPalette } from './SearchPalette'
 import { useCommands } from '../../hooks/useCommands'
 import { MessagesTimeline, type MessagesTimelineHandle } from './MessagesTimeline'
 import { StatusIndicator } from '../layout/StatusIndicator'
@@ -65,16 +65,38 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
   } = useCommands({ sessionId })
   const [showGlobalPalette, setShowGlobalPalette] = useState(false)
 
-  // Global keyboard shortcut: Ctrl+Shift+P to open command palette
+  // Track the initial mode for the search palette
+  const [searchPaletteInitialMode, setSearchPaletteInitialMode] = useState<import('../../hooks/useSearchMode').SearchMode>('all')
+
+  // Global keyboard shortcuts
+  // Ctrl+Shift+P → Open search palette in command mode
+  // Ctrl+P       → Open search palette in files mode
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
+    const keyHandler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'P') {
         e.preventDefault()
-        setShowGlobalPalette(prev => !prev)
+        setSearchPaletteInitialMode('commands')
+        setShowGlobalPalette(true)
+      } else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'p') {
+        e.preventDefault()
+        setSearchPaletteInitialMode('files')
+        setShowGlobalPalette(true)
       }
     }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
+
+    // Listen for the NavBar search button event
+    const customHandler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { mode?: import('../../hooks/useSearchMode').SearchMode } | undefined
+      setSearchPaletteInitialMode(detail?.mode ?? 'all')
+      setShowGlobalPalette(true)
+    }
+
+    window.addEventListener('keydown', keyHandler)
+    window.addEventListener('nekocode:open-search', customHandler)
+    return () => {
+      window.removeEventListener('keydown', keyHandler)
+      window.removeEventListener('nekocode:open-search', customHandler)
+    }
   }, [])
 
   // Handle command selection from global palette
@@ -445,12 +467,24 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
         gitBranch={gitBranch}
       />
 
-      {/* Global command palette (Ctrl+Shift+P) */}
-      <GlobalCommandPalette
+      {/* Search palette (Ctrl+Shift+P / Ctrl+P) */}
+      <SearchPalette
         visible={showGlobalPalette}
+        initialMode={searchPaletteInitialMode}
         commands={allCommands}
-        isLoading={isCommandsLoading}
-        onSelect={handleGlobalCommandSelect}
+        isCommandsLoading={isCommandsLoading}
+        projectPath={projectState.activeProjectPath ?? null}
+        onCommandSelect={handleGlobalCommandSelect}
+        onFileSelect={(file) => {
+          logger.info(`File selected: ${file.relativePath}`)
+          // Insert file reference into the chat input
+          setInput(file.relativePath)
+        }}
+        onSessionSelect={(sessionId, cwd) => {
+          logger.info(`Session selected: ${sessionId} in ${cwd}`)
+          // Dispatch session selection event
+          window.dispatchEvent(new CustomEvent(SESSION_SELECTED_EVENT, { detail: { sessionId, cwd } }))
+        }}
         onClose={() => setShowGlobalPalette(false)}
         recentCommandNames={getRecentCommandNames()}
       />

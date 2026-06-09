@@ -187,7 +187,7 @@ describe("Preload Security Boundary", () => {
     // All channels should follow "namespace:action" format
     const expectedNamespaces = [
       "session", "project", "workspace", "git", "dialog",
-      "window", "zoom", "update", "notification", "shell",
+      "window", "zoom", "update", "notification", "shell", "search",
     ]
     const values = Object.values(IPC_CHANNELS)
     for (const channel of values) {
