@@ -21,17 +21,38 @@ if (process.platform === 'win32') {
 // Notification service for OS notifications and sound triggers
 const notificationService = new NotificationService()
 
+// Pending notification timeout — delays the "done" sound by 15 seconds so that
+// retries (agent_start after done) cancel the sound instead of playing it prematurely.
+let pendingDoneNotification: ReturnType<typeof setTimeout> | null = null
+const DONE_NOTIFICATION_DELAY_MS = 15_000
+
+const clearPendingDoneNotification = (): void => {
+  if (pendingDoneNotification !== null) {
+    clearTimeout(pendingDoneNotification)
+    pendingDoneNotification = null
+  }
+}
+
 // Event callback for session events from worker threads
 const onSessionEvent = (sessionId: string, event: SessionStreamEvent): void => {
   sendEventToRenderer(sessionId, event)
 
-  // Trigger notification when AI response completes
   if (event.type === 'done') {
-    notificationService.notify({
-      title: 'AI Response Ready',
-      body: `Session: ${sessionId.slice(0, 8)}`,
-      soundKey: 'task-complete',
-    })
+    // Delay the notification so retries can cancel it
+    clearPendingDoneNotification()
+    pendingDoneNotification = setTimeout(() => {
+      pendingDoneNotification = null
+      notificationService.notify({
+        title: 'AI Response Ready',
+        body: `Session: ${sessionId.slice(0, 8)}`,
+        soundKey: 'task-complete',
+      })
+    }, DONE_NOTIFICATION_DELAY_MS)
+  }
+
+  // Agent started (or restarted after retry) — cancel any pending done notification
+  if (event.type === 'agent_start') {
+    clearPendingDoneNotification()
   }
 }
 
@@ -172,6 +193,9 @@ function createWindow(): BrowserWindow {
 async function performShutdown(): Promise<void> {
   if (isQuitting) return
   isQuitting = true
+
+  // Cancel any pending done notification so it doesn't fire after quit
+  clearPendingDoneNotification()
 
   const count = sessionManager.sessionCount
   logger.info(`Shutting down, disposing ${count} session(s)`)
