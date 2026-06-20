@@ -31,7 +31,7 @@
     "prepackage": "bun run test && bun run lint && bun run type-check"
   },
   "dependencies": {
-    "@earendil-works/pi-coding-agent": "0.75.3",
+    "@earendil-works/pi-coding-agent": "0.79.0",
     "@pierre/diffs": "^1.2.4",
     "@tanstack/react-virtual": "^3.13.23",
     "diff": "^9.0.0",
