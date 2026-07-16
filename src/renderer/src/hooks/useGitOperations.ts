@@ -9,6 +9,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useProjectStore } from '../stores/project-store'
 import { createLogger } from '../utils/logger'
+import { usePolling } from './usePolling'
 import type {
   GitStatusResult,
   GitLogResult,
@@ -24,12 +25,6 @@ const logger = createLogger('useGitOperations')
 
 /** Default polling interval for git status (ms) */
 const STATUS_POLL_INTERVAL = 5000
-
-/** Minimum polling interval allowed (ms) */
-const MIN_POLL_INTERVAL = 1000
-
-/** Maximum polling interval for backoff (ms) */
-const MAX_POLL_INTERVAL = 30000
 
 // ━━ Empty / default states ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -181,20 +176,14 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
 
   // Track the active project path so we can reset state when it changes
   const prevProjectPathRef = useRef<string | null>(null)
-  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // ── Operation locking ──
   // Prevents concurrent mutations (stage/unstage/commit) that could race
   const pendingOperationsRef = useRef<Map<string, Promise<void>>>(new Map())
 
-  // ── Polling backoff ──
-  // Increases polling interval after consecutive failures
-  const consecutiveErrorsRef = useRef(0)
-  const effectivePollInterval = useRef(pollInterval)
-
   // ── Visibility tracking ──
   // Pause polling when the window is hidden to save battery
-  const isWindowVisibleRef = useRef(true)
+  // (now handled by usePolling hook)
 
   // ── Git repo detection ref ──
   // Mirrors the isGitRepo state so the polling interval can read the latest value
@@ -242,26 +231,21 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
       setIsStatusLoading(true)
       const result = await window.nekocode.git.getStatus(activeProjectPath)
       setStatus(result)
-      // Clear error on success AND reset backoff
+      // Clear error on success
       setError(null)
-      consecutiveErrorsRef.current = 0
-      effectivePollInterval.current = Math.max(pollInterval, MIN_POLL_INTERVAL)
       // Mark initial load as complete
       setIsInitialLoad(false)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       logger.error('refreshStatus failed', msg)
       setError(msg)
-      // Apply backoff: double the interval on each consecutive error
-      consecutiveErrorsRef.current++
-      effectivePollInterval.current = Math.min(
-        effectivePollInterval.current * 2,
-        MAX_POLL_INTERVAL
-      )
+      // Re-throw so that usePolling's backoff mechanism engages.
+      // Callers that need to handle this already have their own try/catch.
+      throw err
     } finally {
       setIsStatusLoading(false)
     }
-  }, [activeProjectPath, isGitRepo, pollInterval])
+  }, [activeProjectPath, isGitRepo])
 
   const refreshLog = useCallback(async () => {
     if (!activeProjectPath) return
@@ -315,6 +299,8 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
   const stageFile = useCallback(async (filePath: string) => {
     if (!activeProjectPath) return
     if (isGitRepo === false) return
+    // Guard: empty string filePath is invalid — the IPC call would receive '' as the path
+    if (!filePath.trim()) return
     await withLock('stage', async () => {
       try {
         await window.nekocode.git.stage(activeProjectPath, filePath)
@@ -375,6 +361,8 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
   const commit = useCallback(async (message: string): Promise<GitCommitResult> => {
     if (!activeProjectPath) throw new Error('No active project')
     if (isGitRepo === false) throw new Error('Not a git repository')
+    // Guard: empty commit message is invalid
+    if (!message.trim()) throw new Error('Commit message cannot be empty')
     return withLock<GitCommitResult>('commit', async () => {
       const result = await window.nekocode.git.commit(activeProjectPath, message)
       await Promise.allSettled([refreshStatus(), refreshLog()])
@@ -517,20 +505,8 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
       setError(null)
       setIsInitialLoad(true)
       setIsGitRepo(null) // Reset git repo detection
-      consecutiveErrorsRef.current = 0
-      effectivePollInterval.current = pollInterval
       prevProjectPathRef.current = activeProjectPath
     }
-
-    // ── Visibility-based polling pause ──
-    const handleVisibilityChange = () => {
-      isWindowVisibleRef.current = !document.hidden
-      // When becoming visible again, immediately refresh and restart polling
-      if (!document.hidden && activeProjectPath && isGitRepo !== false) {
-        refreshStatus()
-      }
-    }
-    document.addEventListener('visibilitychange', handleVisibilityChange)
 
     // Initial load — check if this is a git repo first, then load data
     if (activeProjectPath) {
@@ -552,30 +528,23 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
         setIsInitialLoad(false)
       })
     }
+  }, [activeProjectPath, refreshAll, isGitRepo])
 
-    // Set up polling with backoff — only poll when window is visible AND it's a git repo
-    if (pollTimerRef.current) {
-      clearInterval(pollTimerRef.current)
-    }
-
-    if (activeProjectPath && isGitRepo !== false) {
-      pollTimerRef.current = setInterval(() => {
-        // Skip polling if window is hidden
-        if (!isWindowVisibleRef.current) return
-        // Skip polling if not a git repo (read from ref for latest value)
-        if (isGitRepoRef.current === false) return
-        refreshStatus()
-      }, effectivePollInterval.current)
-    }
-
-    return () => {
-      if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current)
-        pollTimerRef.current = null
-      }
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-    }
-  }, [activeProjectPath, refreshAll, refreshStatus, pollInterval, isGitRepo])
+  // ── Polling via usePolling hook ──
+  // Replaces the manual setInterval + visibility + backoff logic.
+  // refreshStatus re-throws errors after handling them, so usePolling's
+  // standard backoff mechanism engages automatically on failure.
+  usePolling({
+    interval: pollInterval,
+    enabled: !!activeProjectPath && isGitRepo !== false,
+    pauseWhenHidden: true,
+    onPoll: refreshStatus,
+    onSuccess: () => { setError(null) },
+    onError: (err) => {
+      const msg = err instanceof Error ? err.message : String(err)
+      setError(msg)
+    },
+  })
 
   return {
     status,

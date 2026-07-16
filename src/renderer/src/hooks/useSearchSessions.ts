@@ -48,19 +48,42 @@ export function useSearchSessions(query: string): SessionSearchResult[] {
   const { state: projectState } = useProjectStore()
 
   return useMemo(() => {
-    if (!query.trim()) return []
-
     const results: SessionSearchResult[] = []
+    // Guard: projectState.projects may be undefined (e.g., before initial load)
+    // Also guard each project's sessions array since it may be undefined
+    const projects = projectState.projects ?? []
 
-    for (const project of projectState.projects) {
-      // Match against project path (directory name)
-      const projectScore = matchScore(project.path, query)
+    // When query is empty, return all sessions (up to limit) with a
+    // neutral score so they appear as suggestions immediately.
+    // An empty query is treated as "show everything", not "search nothing".
+    if (!query.trim()) {
+      for (const project of projects) {
+        const sessions = project.sessions ?? []
+        for (const session of sessions) {
+          const name = session.firstMessage
+            ? session.firstMessage.slice(0, 40)
+            : session.id.slice(0, 8)
+          results.push({
+            sessionId: session.id,
+            name,
+            cwd: project.path,
+            score: 0.5,
+          })
+        }
+      }
+      return results.slice(0, 20)
+    }
 
-      for (const session of project.sessions) {
+    for (const project of projects) {
+      const sessions = project.sessions ?? []
+      for (const session of sessions) {
         // Use session firstMessage or id prefix as the display name
         const name = session.firstMessage
           ? session.firstMessage.slice(0, 40)
           : session.id.slice(0, 8)
+
+        // Match against project path (directory name)
+        const projectScore = matchScore(project.path, query)
         const idScore = matchScore(session.id, query)
         const nameScore = matchScore(name, query)
 

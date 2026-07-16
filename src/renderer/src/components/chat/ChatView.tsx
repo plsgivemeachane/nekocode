@@ -17,6 +17,7 @@ import { ChatInput, type ChatInputHandle } from './ChatInput'
 import { useProjectStore } from '../../stores/project-store'
 import { useSessionMessages } from '../../contexts/session-messages-context'
 import { createLogger } from '../../utils/logger'
+import { groupMessages, type MessageGroup } from '../../utils/message-grouping'
 
 const logger = createLogger('ChatView')
 import type { ChatMessage } from '../../types/chat'
@@ -175,43 +176,8 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
   // --- Message grouping ---
   const lastMessageId = messages.length > 0 ? messages[messages.length - 1].id : null
 
-  type ToolCallMsg = Extract<ChatMessage, { role: 'assistant'; type: 'tool_call' }>
-  type ThinkingMsg = Extract<ChatMessage, { role: 'assistant'; type: 'thinking' }>
-  type MessageGroup =
-    | { key: string; type: 'single'; msg: ChatMessage }
-    | { key: string; type: 'tool-group'; msgs: ToolCallMsg[] }
-    | { key: string; type: 'thinking-group'; msgs: ThinkingMsg[] }
-    | { key: string; type: 'ui-dialog' }
-    | { key: string; type: 'workflow-step'; workflowId: string }
-  const isToolCall = (msg: ChatMessage): msg is ToolCallMsg => msg.role === 'assistant' && msg.type === 'tool_call'
-  const isThinking = (msg: ChatMessage): msg is ThinkingMsg => msg.role === 'assistant' && msg.type === 'thinking'
-  const messageGroups: MessageGroup[] = []
-  let i = 0
-  while (i < messages.length) {
-    const msg = messages[i]
-    if (isToolCall(msg)) {
-      const toolMsgs: ToolCallMsg[] = []
-      let current = messages[i]
-      while (i < messages.length && isToolCall(current)) {
-        toolMsgs.push(current)
-        i++
-        current = messages[i]
-      }
-      messageGroups.push({ key: `tg-${toolMsgs[0].id}`, type: 'tool-group', msgs: toolMsgs })
-    } else if (isThinking(msg)) {
-      const thinkingMsgs: ThinkingMsg[] = []
-      let current = messages[i]
-      while (i < messages.length && isThinking(current)) {
-        thinkingMsgs.push(current)
-        i++
-        current = messages[i]
-      }
-      messageGroups.push({ key: `th-${thinkingMsgs[0].id}`, type: 'thinking-group', msgs: thinkingMsgs })
-    } else {
-      messageGroups.push({ key: msg.id, type: 'single', msg })
-      i++
-    }
-  }
+  // Use extracted grouping utility instead of inline logic
+  const messageGroups: MessageGroup[] = groupMessages(messages)
   logger.debug(`messageGroups: ${messageGroups.length} groups (${messageGroups.filter(g => g.type === 'tool-group').length} tool-groups, ${messageGroups.filter(g => g.type === 'thinking-group').length} thinking-groups), total messages: ${messages.length}`)
 
   // Append active workflow steps to the timeline (show all active workflows)

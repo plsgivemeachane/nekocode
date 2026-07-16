@@ -18,6 +18,10 @@ import { useSessionOrchestration } from '../hooks/useSessionOrchestration'
 
 const logger = createLogger('project-store')
 
+// NOTE: The types, initial state, and reducer in this file could be
+// extracted into a separate `project-store-types.ts` for testability and
+// reusability. See: docs/abstraction-oop-audit.md Priority 5.
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------

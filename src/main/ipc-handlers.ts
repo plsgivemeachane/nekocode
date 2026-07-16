@@ -3,6 +3,13 @@ import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { gitOperationsManager } from './git-operations-manager'
 import { IPC_CHANNELS } from '../shared/ipc-channels'
+// IpcRouter provides type-safe handler registration (router.handle/handleVoid),
+// replacing the manual ipcMain.handle + validateIpcSender + try/catch boilerplate.
+// sendToAllRenderers() replaces the raw BrowserWindow.getAllWindows() broadcast
+// loop in sendEventToRenderer with a type-safe equivalent. New handlers should
+// prefer the router; existing handlers are being migrated incrementally.
+// See: docs/abstraction-oop-audit.md Priority 3
+import { IpcRouter, sendToAllRenderers } from './ipc-router'
 import { validateIpcSender, validatePathWithinProject } from './security-utils'
 import type {
   SessionCreatePayload,
@@ -25,9 +32,6 @@ import type {
   CommandInfo,
   ModelInfo,
   UpdateAvailableInfo,
-  NotificationSettings,
-  SearchFilesRequest,
-  SearchFilesResult,
 } from '../shared/ipc-types'
 import { searchFiles } from './search-files'
 import type { ISessionManager, IProjectManager } from './manager-types'
@@ -47,6 +51,14 @@ export function registerIpcHandlers(
   projectManager: IProjectManager,
   notificationService?: NotificationService,
 ): void {
+  // Type-safe IPC router. Handlers registered through `router.handle()` /
+  // `router.handleVoid()` get automatic sender validation and a standardized
+  // error boundary (errors are logged then re-thrown to the renderer) plus
+  // compile-time payload/result type checking against IpcChannelMap.
+  // Session/project/git handlers still use the manual ipcMain.handle pattern
+  // and are migrated incrementally.
+  const router = new IpcRouter()
+
   // --- Session handlers ---
 
   ipcMain.handle(IPC_CHANNELS.SESSION_CREATE, async (_event, payload: SessionCreatePayload): Promise<SessionCreateResult> => {
@@ -357,8 +369,10 @@ export function registerIpcHandlers(
   })
 
   // --- Zoom handlers ---
+  // Migrated to IpcRouter: payloads/results are type-checked against
+  // IpcChannelMap (ZOOM_GET -> ZoomInfo, ZOOM_SET -> { factor }).
 
-  ipcMain.handle(IPC_CHANNELS.ZOOM_GET, async (): Promise<{ factor: number }> => {
+  router.handleVoid(IPC_CHANNELS.ZOOM_GET, async () => {
     const win = BrowserWindow.getFocusedWindow()
     if (win && !win.isDestroyed()) {
       const factor = win.webContents.getZoomFactor()
@@ -367,14 +381,14 @@ export function registerIpcHandlers(
     return { factor: 1.0 }
   })
 
-  ipcMain.handle(IPC_CHANNELS.ZOOM_SET, async (_event, payload: { factor: number }): Promise<void> => {
+  router.handle(IPC_CHANNELS.ZOOM_SET, async ({ factor }) => {
     const win = BrowserWindow.getFocusedWindow()
     if (win && !win.isDestroyed()) {
-      win.webContents.setZoomFactor(payload.factor)
+      win.webContents.setZoomFactor(factor)
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.ZOOM_RESET, async (): Promise<void> => {
+  router.handleVoid(IPC_CHANNELS.ZOOM_RESET, async () => {
     const win = BrowserWindow.getFocusedWindow()
     if (win && !win.isDestroyed()) {
       win.webContents.setZoomFactor(1.0)
@@ -382,15 +396,16 @@ export function registerIpcHandlers(
   })
 
   // --- Window control handlers ---
+  // Migrated to IpcRouter (void-payload request/response channels).
 
-  ipcMain.handle(IPC_CHANNELS.WINDOW_MINIMIZE, async (): Promise<void> => {
+  router.handleVoid(IPC_CHANNELS.WINDOW_MINIMIZE, async () => {
     const win = BrowserWindow.getFocusedWindow()
     if (win && !win.isDestroyed()) {
       win.minimize()
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.WINDOW_MAXIMIZE, async (): Promise<void> => {
+  router.handleVoid(IPC_CHANNELS.WINDOW_MAXIMIZE, async () => {
     const win = BrowserWindow.getFocusedWindow()
     if (win && !win.isDestroyed()) {
       if (win.isMaximized()) {
@@ -401,14 +416,14 @@ export function registerIpcHandlers(
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.WINDOW_CLOSE, async (): Promise<void> => {
+  router.handleVoid(IPC_CHANNELS.WINDOW_CLOSE, async () => {
     const win = BrowserWindow.getFocusedWindow()
     if (win && !win.isDestroyed()) {
       win.close()
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.WINDOW_IS_MAXIMIZED, async (): Promise<boolean> => {
+  router.handleVoid(IPC_CHANNELS.WINDOW_IS_MAXIMIZED, async () => {
     const win = BrowserWindow.getFocusedWindow()
     if (win && !win.isDestroyed()) {
       return win.isMaximized()
@@ -417,10 +432,11 @@ export function registerIpcHandlers(
   })
 
   // --- Shell handlers ---
+  // Migrated to IpcRouter. validateIpcSender() is now applied centrally by
+  // router.handle(), so the handler bodies no longer call it manually.
 
   /** Open a path in VS Code. Uses URI scheme first (instant), then CLI fallback. */
-  ipcMain.handle(IPC_CHANNELS.SHELL_OPEN_IN_VSCODE, async (_event, { path: targetPath }: { path: string }): Promise<boolean> => {
-    validateIpcSender(_event)
+  router.handle(IPC_CHANNELS.SHELL_OPEN_IN_VSCODE, async ({ path: targetPath }) => {
     logger.debug(`SHELL_OPEN_IN_VSCODE path=${targetPath}`)
 
     // Normalize Windows backslashes to forward slashes for URI compatibility.
@@ -460,8 +476,7 @@ export function registerIpcHandlers(
   })
 
   /** Open a folder in the system file explorer (Explorer on Windows, Finder on macOS). */
-  ipcMain.handle(IPC_CHANNELS.SHELL_OPEN_IN_EXPLORER, async (_event, { path: targetPath }: { path: string }): Promise<boolean> => {
-    validateIpcSender(_event)
+  router.handle(IPC_CHANNELS.SHELL_OPEN_IN_EXPLORER, async ({ path: targetPath }) => {
     logger.debug(`SHELL_OPEN_IN_EXPLORER path=${targetPath}`)
     try {
       // shell.openPath() returns an empty string on success, or an error message on failure.
@@ -479,7 +494,7 @@ export function registerIpcHandlers(
   })
 
   /** Check if VS Code is available on the system (via CLI or URI scheme). */
-  ipcMain.handle(IPC_CHANNELS.SHELL_CHECK_VSCODE_AVAILABLE, async (): Promise<{ available: boolean; command: string | null; method: 'cli' | 'uri' | null }> => {
+  router.handleVoid(IPC_CHANNELS.SHELL_CHECK_VSCODE_AVAILABLE, async () => {
     logger.debug('SHELL_CHECK_VSCODE_AVAILABLE')
     const commands = ['code', 'code-insiders']
     for (const cmd of commands) {
@@ -492,7 +507,7 @@ export function registerIpcHandlers(
       }
     }
     // Even without the CLI, VS Code may be installed and registered as a
-    // vscode:// URI handler. This is the common case on Windows where `code`
+    // vscode:// URI scheme handler. This is the common case on Windows where `code`
     // is not in PATH. We report URI availability so the button is not
     // incorrectly grayed out.
     logger.info('VS Code CLI not found, but URI scheme may still be available')
@@ -500,31 +515,29 @@ export function registerIpcHandlers(
   })
 
   // --- Notification handlers ---
+  // Migrated to IpcRouter. The `if (notificationService)` guard is preserved
+  // so the channels simply aren't registered when no service is wired up.
 
   if (notificationService) {
-    ipcMain.handle(IPC_CHANNELS.NOTIFICATION_SETTINGS_GET, async (): Promise<NotificationSettings> => {
+    router.handleVoid(IPC_CHANNELS.NOTIFICATION_SETTINGS_GET, async () => {
       logger.debug('NOTIFICATION_SETTINGS_GET')
       return notificationService.getSettings()
     })
 
-    ipcMain.handle(IPC_CHANNELS.NOTIFICATION_SETTINGS_SET, async (_event, partial: Partial<NotificationSettings>): Promise<NotificationSettings> => {
+    router.handle(IPC_CHANNELS.NOTIFICATION_SETTINGS_SET, async (partial) => {
       logger.debug('NOTIFICATION_SETTINGS_SET')
       return notificationService.updateSettings(partial)
     })
   }
 
   // --- Search handlers ---
+  // Migrated to IpcRouter. The router's error boundary logs and re-throws,
+  // so the manual try/catch is no longer needed here.
 
-  ipcMain.handle(IPC_CHANNELS.SEARCH_FILES, async (_event, request: SearchFilesRequest): Promise<SearchFilesResult> => {
-    validateIpcSender(_event)
+  router.handle(IPC_CHANNELS.SEARCH_FILES, async (request) => {
     logger.debug(`SEARCH_FILES projectPath=${request.projectPath} query=${request.query}`)
-    try {
-      const files = await searchFiles(request)
-      return { files }
-    } catch (err) {
-      logger.error('SEARCH_FILES failed', err)
-      throw err
-    }
+    const files = await searchFiles(request)
+    return { files }
   })
 
 }
@@ -542,9 +555,9 @@ export function sendEventToRenderer(sessionId: string, event: SessionStreamEvent
       `sendEventToRenderer: forwarding ui_request for session ${sessionId} to renderer`
     )
   }
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
-      win.webContents.send(IPC_CHANNELS.SESSION_EVENTS, { sessionId, event })
-    }
-  }
+  // Broadcast the session event to every live renderer window. This used to
+  // be a manual BrowserWindow.getAllWindows() loop; it now routes through the
+  // type-safe sendToAllRenderers() helper from ipc-router, which validates the
+  // payload shape against RendererChannelMap and skips destroyed windows.
+  sendToAllRenderers(IPC_CHANNELS.SESSION_EVENTS, { sessionId, event })
 }

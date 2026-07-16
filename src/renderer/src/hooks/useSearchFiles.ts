@@ -85,10 +85,21 @@ export function useSearchFiles(
       clearTimeout(timerRef.current)
     }
 
-    // If no project or empty query, clear results immediately
-    if (!projectPath || !query.trim()) {
+    // If no project, clear results immediately
+    if (!projectPath) {
       setResults([])
       setIsLoading(false)
+      return
+    }
+
+    // Empty query is allowed — the backend returns all files (up to limit)
+    // when query is empty, which gives users immediate file suggestions.
+    if (!query.trim()) {
+      // Still search with empty query to get initial file list
+      setIsLoading(true)
+      timerRef.current = setTimeout(() => {
+        search(query)
+      }, debounceMs)
       return
     }
 

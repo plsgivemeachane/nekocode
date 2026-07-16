@@ -268,6 +268,14 @@ export function SearchPalette({
       description="Search commands, files, and sessions..."
       className="bg-surface-900/95 border-surface-700/70 backdrop-blur-md [&_[cmdk-group-heading]]:text-text-muted [&_[cmdk-input-wrapper]]:border-surface-800/60 [&_[cmdk-input]]:text-text-primary [&_[cmdk-input]]:placeholder:text-text-muted [&_[cmdk-empty]]:text-text-muted [&_[cmdk-item]]:text-text-secondary [&_[cmdk-item][data-selected=true]]:bg-accent-400/10 [&_[cmdk-item][data-selected=true]]:text-text-primary"
       showCloseButton={false}
+      // Disable cmdk's built-in search filtering entirely — we handle all
+      // filtering ourselves via useSearchMode, useSearchFiles, useSearchSessions,
+      // and filteredCommands. Without this, cmdk would try to match the raw input
+      // (including prefix characters like >, @, :) against item values, hiding all
+      // file and session results. Using shouldFilter={false} instead of filter={() => 1}
+      // is safer because it prevents cmdk from sorting/moving DOM nodes, which can
+      // conflict with React's reconciliation and cause items to disappear.
+      shouldFilter={false}
     >
       {/* Mode tabs */}
       <div className="flex items-center gap-1 px-3 py-2 border-b border-surface-800/60">

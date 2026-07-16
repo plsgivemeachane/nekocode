@@ -2,7 +2,8 @@ import { parentPort } from 'worker_threads'
 import type { WorkerMessage, WorkerResponse, OperationType, WorkerEventMessage } from './types'
 import type { AgentSessionEvent, AgentSession, SessionMessageEntry } from '@earendil-works/pi-coding-agent'
 import { createLogger } from '../logger'
-import type { SessionStreamEvent, ChatMessageIPC, CommandInfo, ExtensionLoadError, UsageData } from '../../shared/ipc-types'
+import type { SessionStreamEvent, ChatMessageIPC, CommandInfo, ExtensionLoadError } from '../../shared/ipc-types'
+import { AgentEventProcessor, ManagedSession as BaseManagedSession } from '../agent-event-processor'
 
 // Create logger for worker thread
 const logger = createLogger('worker')
@@ -72,23 +73,11 @@ async function importSdk(): Promise<typeof import('@earendil-works/pi-coding-age
 // ============================================================================
 
 /**
- * Internal representation of a managed session in the worker
+ * Internal representation of a managed session in the worker.
+ * Extends the shared ManagedSession from agent-event-processor.
  */
-interface ManagedSession {
+interface ManagedSession extends BaseManagedSession {
   session: AgentSession
-  unsubscribe: () => void
-  extensionErrors: ExtensionLoadError[]
-  extensionsDisabled: boolean
-  messages: ChatMessageIPC[]
-  currentAssistantId: string | null
-  currentAssistantContent: string
-  /** Tracks the current thinking content being streamed */
-  currentThinkingId: string | null
-  currentThinkingContent: string
-  currentToolCallId: string | null
-  usageTotals: { input: number; output: number; totalCost: number }
-  /** Electron-specific UI context for forwarding extension UI requests to renderer */
-  uiContext: import('../electron-ui-context').ElectronUIContext
 }
 
 // Active sessions in this worker
@@ -111,233 +100,27 @@ function emitEvent(sessionId: string, event: SessionStreamEvent): void {
 }
 
 /**
- * Handle an agent session event and translate it to IPC format
- * This mirrors the handleAgentEvent in session-manager.ts
+ * Shared agent event processor for the worker thread.
+ * Configured with worker-specific options:
+ * - emitUserMessage: true (worker emits user_message on message_start)
+ * - No StreamBatcher (worker sends events directly)
+ * - No previousFileContent capture (no filesystem access in worker)
+ */
+const agentEventProcessor = new AgentEventProcessor(
+  emitEvent,
+  { emitUserMessage: true },
+)
+
+/**
+ * Handle an agent session event.
+ * Delegates to the shared AgentEventProcessor to eliminate duplication
+ * with session-manager.ts.
  */
 function handleAgentEvent(sessionId: string, event: AgentSessionEvent, managed: ManagedSession): void {
-  logger.debug(`handleAgentEvent: type=${event.type}`)
-
-  switch (event.type) {
-    case 'message_update': {
-      const sub = event.assistantMessageEvent
-      if (sub.type === 'text_delta') {
-        if (!managed.currentAssistantId) {
-          managed.currentAssistantId = crypto.randomUUID()
-          managed.currentAssistantContent = ''
-        }
-        managed.currentAssistantContent += sub.delta
-        emitEvent(sessionId, { type: 'text_delta', delta: sub.delta })
-      } else if (sub.type === 'thinking_start') {
-        if (!managed.currentThinkingId) {
-          managed.currentThinkingId = crypto.randomUUID()
-          managed.currentThinkingContent = ''
-        }
-        emitEvent(sessionId, { type: 'thinking_start' })
-      } else if (sub.type === 'thinking_delta') {
-        if (!managed.currentThinkingId) {
-          managed.currentThinkingId = crypto.randomUUID()
-          managed.currentThinkingContent = ''
-        }
-        managed.currentThinkingContent += sub.delta
-        emitEvent(sessionId, { type: 'thinking_delta', delta: sub.delta })
-      } else if (sub.type === 'thinking_end') {
-        emitEvent(sessionId, { type: 'thinking_end' })
-        if (managed.currentThinkingId) {
-          managed.messages.push({
-            id: managed.currentThinkingId,
-            role: 'assistant',
-            content: managed.currentThinkingContent,
-            timestamp: Date.now(),
-            thinking: true,
-          })
-          managed.currentThinkingId = null
-          managed.currentThinkingContent = ''
-        }
-      }
-      break
-    }
-    case 'message_start': {
-      logger.debug(`message_start: role=${event.message?.role ?? 'unknown'}`)
-      if (event.message?.role === 'user') {
-        finalizeThinkingMessage(managed)
-        finalizeAssistantMessage(managed)
-        
-        let content = ''
-        if (typeof event.message.content === 'string') {
-          content = event.message.content
-        } else if (Array.isArray(event.message.content)) {
-          content = event.message.content
-            .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
-            .map(block => block.text)
-            .join('')
-        }
-        
-        managed.messages.push({
-          id: crypto.randomUUID(),
-          role: 'user',
-          content,
-          timestamp: Date.now(),
-        })
-        emitEvent(sessionId, { type: 'user_message', text: content })
-      }
-      break
-    }
-    case 'message_end': {
-      logger.debug(`message_end: role=${event.message?.role ?? 'unknown'}`)
-      if (managed.currentAssistantId) {
-        finalizeAssistantMessage(managed)
-      }
-      if (event.message?.role === 'assistant' && 'usage' in event.message && event.message.usage) {
-        const usage = event.message.usage as { input: number; output: number; cost: { total: number } }
-        managed.usageTotals.input += usage.input
-        managed.usageTotals.output += usage.output
-        managed.usageTotals.totalCost += usage.cost.total
-        
-        // Store per-message usage in the last assistant message
-        const lastMsg = managed.messages[managed.messages.length - 1]
-        if (lastMsg && lastMsg.role === 'assistant') {
-          lastMsg.usage = {
-            inputTokens: usage.input,
-            outputTokens: usage.output,
-            totalCost: usage.cost.total,
-          }
-        }
-        
-        const ctxUsage = managed.session.getContextUsage()
-        const usageData: UsageData = {
-          inputTokens: managed.usageTotals.input,
-          outputTokens: managed.usageTotals.output,
-          totalCost: managed.usageTotals.totalCost,
-          contextPercent: ctxUsage?.percent ?? 0,
-          contextWindow: ctxUsage?.contextWindow ?? 0,
-        }
-        emitEvent(sessionId, { type: 'usage_update', usage: usageData })
-      }
-      break
-    }
-    case 'tool_execution_start': {
-      logger.debug(`tool_execution_start: name=${event.toolName}`)
-      emitEvent(sessionId, {
-        type: 'tool_call',
-        toolCallId: event.toolCallId ?? managed.currentToolCallId ?? crypto.randomUUID(),
-        toolName: event.toolName,
-        args: event.args,
-      })
-      
-      finalizeThinkingMessage(managed)
-      finalizeAssistantMessage(managed)
-      managed.currentToolCallId = event.toolCallId ?? crypto.randomUUID()
-      
-      const lastMsg = managed.messages[managed.messages.length - 1]
-      if (lastMsg && lastMsg.role === 'assistant') {
-        if (!lastMsg.toolCalls) lastMsg.toolCalls = []
-        lastMsg.toolCalls.push({
-          id: managed.currentToolCallId,
-          name: event.toolName,
-          args: event.args,
-        })
-      } else {
-        managed.messages.push({
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: '',
-          toolCalls: [{
-            id: managed.currentToolCallId,
-            name: event.toolName,
-            args: event.args,
-          }],
-          timestamp: Date.now(),
-        })
-      }
-      break
-    }
-    case 'tool_execution_end': {
-      logger.debug(`tool_execution_end: name=${event.toolName}`)
-      emitEvent(sessionId, {
-        type: 'tool_result',
-        toolCallId: event.toolCallId ?? managed.currentToolCallId ?? '',
-        toolName: event.toolName,
-        result: event.result,
-        isError: event.isError,
-      })
-      
-      if (managed.currentToolCallId) {
-        const lastMsg = managed.messages[managed.messages.length - 1]
-        if (lastMsg?.toolCalls) {
-          const tc = lastMsg.toolCalls.find(t => t.id === managed.currentToolCallId)
-          if (tc) {
-            tc.result = event.result
-            tc.isError = event.isError
-          }
-        }
-        managed.currentToolCallId = null
-      }
-      break
-    }
-    case 'agent_start': {
-      logger.debug(`agent_start: emitting agent_start to renderer`)
-      emitEvent(sessionId, { type: 'agent_start' })
-      break
-    }
-    case 'agent_end': {
-      finalizeThinkingMessage(managed)
-      finalizeAssistantMessage(managed)
-      logger.debug(`agent_end: total messages=${managed.messages.length}`)
-      emitEvent(sessionId, { type: 'done' })
-      break
-    }
-    case 'turn_start': {
-      // A new turn is starting (e.g. after tool execution completed).
-      // Emit agent_start so the renderer knows the agent is still working.
-      logger.debug(`turn_start: emitting agent_start for continued work`)
-      emitEvent(sessionId, { type: 'agent_start' })
-      break
-    }
-    case 'turn_end': {
-      // Turn completed (agent may start another turn or finish)
-      logger.debug(`turn_end`)
-      break
-    }
-    default: {
-      // Handle other event types if needed
-      logger.debug(`Unhandled event type: ${(event as { type: string }).type}`)
-    }
-  }
+  agentEventProcessor.handleAgentEvent(sessionId, event, managed)
 }
 
-/**
- * Finalize the current assistant message being streamed
- */
-function finalizeAssistantMessage(managed: ManagedSession): void {
-  if (managed.currentAssistantId && managed.currentAssistantContent) {
-    const assistantMsg: ChatMessageIPC = {
-      id: managed.currentAssistantId,
-      role: 'assistant',
-      content: managed.currentAssistantContent,
-      timestamp: Date.now(),
-    }
-    managed.messages.push(assistantMsg)
-    managed.currentAssistantId = null
-    managed.currentAssistantContent = ''
-  }
-}
 
-/**
- * Finalize the current thinking message being streamed
- */
-function finalizeThinkingMessage(managed: ManagedSession): void {
-  if (managed.currentThinkingId && managed.currentThinkingContent) {
-    managed.messages.push({
-      id: managed.currentThinkingId,
-      role: 'assistant',
-      content: managed.currentThinkingContent,
-      timestamp: Date.now(),
-      thinking: true,
-    })
-    managed.currentThinkingId = null
-    managed.currentThinkingContent = ''
-  }
-}
 
 // ============================================================================
 // Operation Handlers

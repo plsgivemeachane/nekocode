@@ -1,6 +1,5 @@
 import { SessionManager as SdkSessionManager } from '@earendil-works/pi-coding-agent'
 import type { AgentSession, AgentSessionEvent } from '@earendil-works/pi-coding-agent'
-import type { TextContent } from '@earendil-works/pi-ai'
 import { unlinkSync, readFileSync, existsSync } from 'fs'
 import { StreamBatcher } from './stream-batcher'
 import type { SessionStreamEvent, ChatMessageIPC, CommandInfo, ModelInfo, ExtensionLoadError, UsageData, UIResponse } from '../shared/ipc-types'
@@ -9,34 +8,19 @@ import { createSecureAuthStorage } from './secure-key-store'
 import { loadWithFallback } from './extension-loader'
 import { ElectronUIContext, MainThreadUITransport } from './electron-ui-context'
 import { extractHistoryFromSdkMessages, loadHistoryFromDisk as loadHistoryFromDiskImpl } from './message-store'
+import { AgentEventProcessor, ManagedSession as BaseManagedSession } from './agent-event-processor'
 
 const logger = createLogger('session-manager')
 
-/** Internal representation of a managed session */
-interface ManagedSession {
+/** Internal representation of a managed session.
+ * Extends the shared ManagedSession with main-thread-specific fields. */
+interface ManagedSession extends BaseManagedSession {
   session: AgentSession
-  unsubscribe: () => void
   batcher: StreamBatcher
-  extensionErrors: ExtensionLoadError[]
-  extensionsDisabled: boolean
-  /** Accumulated message history for fast IPC retrieval */
-  messages: ChatMessageIPC[]
-  /** Tracks the current assistant message being streamed */
-  currentAssistantId: string | null
-  currentAssistantContent: string
-  /** Tracks the current thinking content being streamed */
-  currentThinkingId: string | null
-  currentThinkingContent: string
   /** Whether the user has sent at least one prompt in this session */
   hasPrompted: boolean
-  /** Tracks cumulative token usage across all assistant messages */
-  usageTotals: { input: number; output: number; totalCost: number }
-  /** Tracks the current tool call being executed */
-  currentToolCallId: string | null
   /** Previous file content before write/edit tool execution (toolCallId -> previousContent) */
   previousFileContent: Map<string, string>
-  /** Electron-specific UI context for forwarding extension UI requests to renderer */
-  uiContext: ElectronUIContext
 }
 
 /** Callback type for emitting events to the renderer */
@@ -57,10 +41,27 @@ export class PiSessionManager {
   private sessions = new Map<string, ManagedSession>()
   private allowExtensionFallback: boolean
   private onEvent: SessionEventCallback
+  /** Shared agent event processor — eliminates duplication with worker-bootstrap */
+  private agentEventProcessor: AgentEventProcessor
 
   constructor(onEvent: SessionEventCallback) {
     this.onEvent = onEvent
     this.allowExtensionFallback = process.env.NEKOCODE_ALLOW_EXTENSION_FALLBACK === '1'
+
+    // Create the shared event processor with main-thread-specific options:
+    // - onBatchableEvent: push text_delta/thinking events into StreamBatcher for batching
+    // - onFlush: flush the StreamBatcher before tool events and agent_end
+    // - capturePreviousFileContent: read file content before write/edit tools for diff display
+    this.agentEventProcessor = new AgentEventProcessor(
+      (sessionId, event) => this.onEvent(sessionId, event),
+      {
+        capturePreviousFileContent: true,
+        readFileContent: (filePath) => {
+          try { return readFileSync(filePath, 'utf-8') } catch { return null }
+        },
+        fileExists: (filePath) => existsSync(filePath),
+      },
+    )
   }
 
   /**
@@ -467,7 +468,7 @@ export class PiSessionManager {
 
   /**
    * Translate AgentSessionEvent into simplified SessionStreamEvent for the renderer.
-   * Also accumulates messages into the managed session's history.
+   * Delegates to the shared AgentEventProcessor to avoid duplicating event-handling logic.
    */
   private handleAgentEvent(
     sessionId: string,
@@ -475,262 +476,35 @@ export class PiSessionManager {
     batcher: StreamBatcher,
     managed: ManagedSession,
   ): void {
-    logger.debug(`handleAgentEvent: type=${event.type}`)
-    const emit = (streamEvent: SessionStreamEvent) => {
-      logger.debug(`emit: ${streamEvent.type}`)
-      this.onEvent(sessionId, streamEvent)
-    }
-
-    switch (event.type) {
-      case 'message_update': {
-        const sub = event.assistantMessageEvent
-        if (sub.type === 'text_delta') {
-          if (!managed.currentAssistantId) {
-            managed.currentAssistantId = crypto.randomUUID()
-            managed.currentAssistantContent = ''
-          }
-          managed.currentAssistantContent += sub.delta
-          batcher.push({ type: 'text_delta', delta: sub.delta })
-        } else if (sub.type === 'thinking_start') {
-          if (!managed.currentThinkingId) {
-            managed.currentThinkingId = crypto.randomUUID()
-            managed.currentThinkingContent = ''
-          }
-          batcher.push({ type: 'thinking_start' })
-        } else if (sub.type === 'thinking_delta') {
-          if (!managed.currentThinkingId) {
-            managed.currentThinkingId = crypto.randomUUID()
-            managed.currentThinkingContent = ''
-          }
-          managed.currentThinkingContent += sub.delta
-          batcher.push({ type: 'thinking_delta', delta: sub.delta })
-        } else if (sub.type === 'thinking_end') {
-          batcher.push({ type: 'thinking_end' })
-          if (managed.currentThinkingId) {
-            managed.messages.push({
-              id: managed.currentThinkingId,
-              role: 'assistant',
-              content: managed.currentThinkingContent,
-              timestamp: Date.now(),
-              thinking: true,
-            })
-            managed.currentThinkingId = null
-            managed.currentThinkingContent = ''
-          }
-        }
-        break
-      }
-      case 'message_start': {
-        logger.debug(`message_start: role=${event.message?.role ?? 'unknown'}`)
-        if (event.message?.role === 'user') {
-          this.finalizeThinkingMessage(managed)
-          this.finalizeAssistantMessage(managed)
-          let content = ''
-          if (typeof event.message.content === 'string') {
-            content = event.message.content
-          } else if (Array.isArray(event.message.content)) {
-            content = event.message.content
-              .filter((block): block is TextContent => block.type === 'text')
-              .map(block => block.text)
-              .join('')
-          }
-          managed.messages.push({
-            id: crypto.randomUUID(),
-            role: 'user',
-            content,
-            timestamp: Date.now(),
-          })
-          logger.debug(`message_start: recorded user message, content=${content.length} chars, total=${managed.messages.length}`)
-        }
-        break
-      }
-      case 'message_end': {
-        logger.debug(`message_end: role=${event.message?.role ?? 'unknown'}`)
-        if (managed.currentAssistantId) {
-          this.finalizeAssistantMessage(managed)
-        }
-        if (event.message?.role === 'assistant' && 'usage' in event.message && event.message.usage) {
-          const usage = event.message.usage as { input: number; output: number; cost: { total: number } }
-          managed.usageTotals.input += usage.input
-          managed.usageTotals.output += usage.output
-          managed.usageTotals.totalCost += usage.cost.total
-          // Store per-message usage in the last assistant message
-          const lastMsg = managed.messages[managed.messages.length - 1]
-          if (lastMsg && lastMsg.role === 'assistant') {
-            lastMsg.usage = {
-              inputTokens: usage.input,
-              outputTokens: usage.output,
-              totalCost: usage.cost.total,
-            }
-          }
-          const ctxUsage = managed.session.getContextUsage()
-          const usageData: UsageData = {
-            inputTokens: managed.usageTotals.input,
-            outputTokens: managed.usageTotals.output,
-            totalCost: managed.usageTotals.totalCost,
-            contextPercent: ctxUsage?.percent ?? 0,
-            contextWindow: ctxUsage?.contextWindow ?? 0,
-          }
-          emit({ type: 'usage_update', usage: usageData })
-        }
-        break
-      }
-      case 'tool_execution_start': {
-        batcher.flush()
-        logger.debug(`tool_execution_start: name=${event.toolName}, id=${event.toolCallId}, args=${JSON.stringify(event.args)?.slice(0, 200)}`)
-        emit({ type: 'tool_call', toolCallId: event.toolCallId ?? managed.currentToolCallId ?? crypto.randomUUID(), toolName: event.toolName, args: event.args })
-        this.finalizeThinkingMessage(managed)
-        this.finalizeAssistantMessage(managed)
-        managed.currentToolCallId = event.toolCallId ?? crypto.randomUUID()
-
-        // Capture previous file content for write/edit tools so the renderer
-        // can show diffs. We read the file BEFORE the tool modifies it.
-        const shortToolName = event.toolName.replace(/^toolcall_/, '')
-        if ((shortToolName === 'write' || shortToolName === 'edit') && event.args) {
-          try {
-            const args = event.args as Record<string, unknown>
-            const filePath = typeof args.path === 'string' ? args.path : null
-            if (filePath && existsSync(filePath)) {
-              const prevContent = readFileSync(filePath, 'utf-8')
-              managed.previousFileContent.set(managed.currentToolCallId, prevContent)
-              logger.debug(`Captured previous content for ${filePath} (${prevContent.length} chars) before ${shortToolName}`)
-            } else if (filePath) {
-              // File doesn't exist yet — it's a new file creation
-              managed.previousFileContent.set(managed.currentToolCallId, '')
-              logger.debug(`No previous content for ${filePath} (new file) before ${shortToolName}`)
-            }
-          } catch (err) {
-            logger.warn(`Failed to capture previous content for ${event.toolName}:`, err)
-          }
-        }
-        const lastMsg = managed.messages[managed.messages.length - 1]
-        if (lastMsg && lastMsg.role === 'assistant') {
-          if (!lastMsg.toolCalls) lastMsg.toolCalls = []
-          lastMsg.toolCalls.push({
-            id: managed.currentToolCallId,
-            name: event.toolName,
-            args: event.args,
-          })
-        } else {
-          managed.messages.push({
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            content: '',
-            toolCalls: [{
-              id: managed.currentToolCallId,
-              name: event.toolName,
-              args: event.args,
-            }],
-            timestamp: Date.now(),
-          })
-        }
-        break
-      }
-      case 'tool_execution_end': {
-        batcher.flush()
-        logger.debug(`tool_execution_end: name=${event.toolName}, id=${event.toolCallId}, isError=${event.isError}, result=${JSON.stringify(event.result)?.slice(0, 200)}`)
-
-        // Inject previousContent into tool result for write/edit tools so the
-        // renderer can display diffs between old and new file content.
-        let enrichedResult = event.result
-        const toolCallId = event.toolCallId ?? managed.currentToolCallId ?? ''
-        if (managed.previousFileContent.has(toolCallId)) {
-          const previousContent = managed.previousFileContent.get(toolCallId)!
-          managed.previousFileContent.delete(toolCallId)
-          // Preserve the existing result structure but add previousContent
-          if (typeof enrichedResult === 'object' && enrichedResult !== null) {
-            enrichedResult = { ...enrichedResult as Record<string, unknown>, previousContent }
-          } else {
-            // If result is a simple string (e.g. "File written successfully"),
-            // wrap it in an object with both the message and previousContent
-            enrichedResult = { message: String(enrichedResult), previousContent }
-          }
-          logger.debug(`Injected previousContent (${previousContent.length} chars) into tool result for ${event.toolName}`)
-        }
-
-        emit({
-          type: 'tool_result',
-          toolCallId: toolCallId,
-          toolName: event.toolName,
-          result: enrichedResult,
-          isError: event.isError,
-        })
-        if (managed.currentToolCallId) {
-          const lastMsg = managed.messages[managed.messages.length - 1]
-          if (lastMsg?.toolCalls) {
-            const tc = lastMsg.toolCalls.find(
-              t => t.id === managed.currentToolCallId,
-            )
-            if (tc) {
-              tc.result = event.result
-              tc.isError = event.isError
-            }
-          }
-          managed.currentToolCallId = null
-        }
-        break
-      }
-      case 'agent_end':
-        batcher.flush()
-        this.finalizeThinkingMessage(managed)
-        this.finalizeAssistantMessage(managed)
-        logger.debug(`agent_end: total accumulated messages=${managed.messages.length}`)
-        emit({ type: 'done' })
-        break
-      case 'turn_start': {
-        // A new turn is starting (e.g. after tool execution).
-        // Emit agent_start so the renderer updates status to "Working".
-        logger.debug(`turn_start: emitting agent_start for continued work`)
-        emit({ type: 'agent_start' })
-        break
-      }
-      case 'turn_end':
-        break
-      case 'agent_start':
-        batcher.flush()
-        logger.debug(`agent_start: flushing batcher, emitting agent_start`)
-        emit({ type: 'agent_start' })
-        break
-      default:
-        logger.debug(`unhandled event type: ${(event as { type: string }).type}`)
-        break
-    }
+    // Delegate to shared processor with batcher-aware callbacks
+    const processor = new AgentEventProcessor(
+      (sid, streamEvent) => this.onEvent(sid, streamEvent),
+      {
+        onBatchableEvent: (streamEvent) => batcher.push(streamEvent),
+        onFlush: () => batcher.flush(),
+        capturePreviousFileContent: true,
+        readFileContent: (filePath) => {
+          try { return readFileSync(filePath, 'utf-8') } catch { return null }
+        },
+        fileExists: (filePath) => existsSync(filePath),
+      },
+    )
+    processor.handleAgentEvent(sessionId, event, managed)
   }
 
   /**
    * Finalize the current in-progress assistant message.
-   * Called on message_end, agent_end, or before a new user message.
+   * Delegates to the shared AgentEventProcessor.
    */
   private finalizeAssistantMessage(managed: ManagedSession): void {
-    if (!managed.currentAssistantId) return
-    logger.debug(`finalizeAssistantMessage: id=${managed.currentAssistantId} content=${managed.currentAssistantContent.length} chars`)
-    managed.messages.push({
-      id: managed.currentAssistantId,
-      role: 'assistant',
-      content: managed.currentAssistantContent,
-      timestamp: Date.now(),
-    })
-    logger.debug(`finalizeAssistantMessage: total messages now ${managed.messages.length}`)
-    managed.currentAssistantId = null
-    managed.currentAssistantContent = ''
+    this.agentEventProcessor.finalizeAssistantMessage(managed)
   }
 
   /**
    * Finalize the current in-progress thinking message.
-   * Called on tool_execution_start, agent_end, or before a new user message.
+   * Delegates to the shared AgentEventProcessor.
    */
   private finalizeThinkingMessage(managed: ManagedSession): void {
-    if (!managed.currentThinkingId) return
-    logger.debug(`finalizeThinkingMessage: id=${managed.currentThinkingId} content=${managed.currentThinkingContent.length} chars`)
-    managed.messages.push({
-      id: managed.currentThinkingId,
-      role: 'assistant',
-      content: managed.currentThinkingContent,
-      timestamp: Date.now(),
-      thinking: true,
-    })
-    logger.debug(`finalizeThinkingMessage: total messages now ${managed.messages.length}`)
-    managed.currentThinkingId = null
-    managed.currentThinkingContent = ''
+    this.agentEventProcessor.finalizeThinkingMessage(managed)
   }
 }

@@ -1,6 +1,14 @@
 /**
  * Shared IPC types for session and project management.
  * These types are used by both main and renderer processes.
+ *
+ * Future refactor: This file could be split by domain into:
+ * - ipc-session-types.ts (SessionCreatePayload, SessionStreamEvent, etc.)
+ * - ipc-project-types.ts (ProjectInfo, ProjectAddPayload, etc.)
+ * - ipc-git-types.ts (GitStatusResult, GitLogResult, etc.)
+ * - ipc-ui-types.ts (UIResponse, NotificationSettings, etc.)
+ * With a barrel re-export from ipc-types.ts for backward compatibility.
+ * See: docs/abstraction-oop-audit.md Priority 10
  */
 
 /** Payload for creating a new session */

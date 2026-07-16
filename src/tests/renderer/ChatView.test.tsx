@@ -70,6 +70,7 @@ vi.mock("@/renderer/src/hooks/useCommands", () => ({
 const mockProjectState = {
   activeProjectPath: "/test/project",
   agentReady: true,
+  projects: [] as Array<{ path: string; sessions: Array<{ id: string; firstMessage?: string }> }>,
 }
 
 vi.mock("@/renderer/src/stores/project-store", () => ({
@@ -278,10 +279,10 @@ describe("ChatView", () => {
       )
     })
 
-    // The GlobalCommandPalette should be visible after the shortcut
+    // The SearchPalette should be visible after the shortcut
     // Since it is portaled, we look for the search input
     await waitFor(() => {
-      expect(screen.queryByPlaceholderText(/search commands/i)).toBeInTheDocument()
+      expect(screen.queryByPlaceholderText(/search/i)).toBeInTheDocument()
     })
   })
 
@@ -489,7 +490,8 @@ describe("ChatView", () => {
     })
 
     await waitFor(() => {
-      expect(screen.queryByPlaceholderText(/search commands/i)).toBeInTheDocument()
+      // SearchPalette uses "Search..." as placeholder
+      expect(screen.queryByPlaceholderText(/search/i)).toBeInTheDocument()
     })
 
     // Toggle it closed
