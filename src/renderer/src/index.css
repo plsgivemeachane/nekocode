@@ -15,17 +15,18 @@
   --color-accent-800: oklch(0.46 0.08 195);
   --color-accent-900: oklch(0.37 0.06 195);
 
-  /* Surface: neutral grays (no blue tint) */
-  --color-surface-950: #0a0a0a;
-  --color-surface-900: #171717;
-  --color-surface-850: #1f1f1f;
-  --color-surface-800: #262626;
-  --color-surface-700: #333333;
-  --color-surface-600: #4a4a4a;
-  --color-surface-500: #6b6b6b;
-  --color-surface-400: #8c8c8c;
-  --color-surface-300: #a3a3a3;
-  --color-surface-200: #d4d4d4;
+  /* Surface: neutral grays (no blue tint). Pitch-black base so the whole
+     app reads as one solid black terminal pane (OpenCode TUI aesthetic). */
+  --color-surface-950: #000000;
+  --color-surface-900: #0a0a0a;
+  --color-surface-850: #121212;
+  --color-surface-800: #1a1a1a;
+  --color-surface-700: #262626;
+  --color-surface-600: #3a3a3a;
+  --color-surface-500: #5a5a5a;
+  --color-surface-400: #7a7a7a;
+  --color-surface-300: #9a9a9a;
+  --color-surface-200: #cccccc;
   --color-surface-100: #e5e5e5;
   --color-surface-50: #f5f5f5;
 
@@ -39,6 +40,36 @@
   --color-success: oklch(0.72 0.18 145);
   --color-error: oklch(0.65 0.20 25);
   --color-error-surface: oklch(0.20 0.04 25);
+
+  /* ─── OpenCode TUI role colors ───
+     Terminal-style role coding via the left accent bar on message panels.
+     - user message      → blue bar
+     - assistant message → orange bar
+     Values tuned for deep-black backgrounds; bright enough to read at 3px width. */
+  --color-role-user-300: oklch(0.78 0.16 250);
+  --color-role-user-400: oklch(0.70 0.18 250);
+  --color-role-user-500: oklch(0.62 0.20 250);
+  --color-role-user-600: oklch(0.54 0.19 250);
+  --color-role-user-700: oklch(0.46 0.16 250);
+  --color-role-assistant-300: oklch(0.80 0.16 65);
+  --color-role-assistant-400: oklch(0.73 0.18 65);
+  --color-role-assistant-500: oklch(0.66 0.19 65);
+  --color-role-assistant-600: oklch(0.58 0.18 65);
+  --color-role-assistant-700: oklch(0.50 0.15 65);
+
+  /* Deep-black terminal surface — flatter than surface-950 for true TUI feel.
+     Used by the chat main area + input so the whole column reads as one
+     solid terminal pane, like OpenCode's background. */
+  --color-terminal-bg: #000000;
+  --color-terminal-panel: #080808;
+  --color-terminal-border: #1a1a1a;
+  /* Brighter terminal border for hover/active/selected states — gives the
+     sharp rectangles a visible "lit edge" on interaction without breaking
+     the flat deep-black TUI aesthetic. */
+  --color-terminal-border-bright: #2a2a2a;
+  /* Rail surface — a hair darker than terminal-panel so icon rails read as
+     an inset gutter alongside the terminal-bg chrome. */
+  --color-terminal-rail: #050505;
 
   /* Fonts */
   --font-display: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
@@ -57,6 +88,8 @@
   --animate-fade-in: fade-in 0.3s var(--ease-out-expo) forwards;
   --animate-slide-up: slide-up 0.25s var(--ease-out-expo) forwards;
   --animate-glow-pulse: glow-pulse 2s ease-in-out infinite;
+  /* Blocky terminal cursor blink — matches OpenCode TUI hardware-cursor feel */
+  --animate-block-blink: block-blink 1.1s steps(1, end) infinite;
 
   /* ─── shadcn/ui Semantic Tokens (bridged from existing design tokens) ─── */
   --color-background: var(--color-surface-950);
@@ -103,6 +136,13 @@
   50% { opacity: 1; }
 }
 
+/* Blocky terminal cursor — a solid filled rectangle that blinks in place,
+   like a hardware text-mode cursor (OpenCode TUI style). */
+@keyframes block-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
 /* ─── Base Layer ─── */
 @layer base {
   :root {
@@ -136,40 +176,42 @@
   }
 
   body {
-    background-color: var(--color-surface-950);
-    background-image: radial-gradient(ellipse 80% 60% at 50% 0%, oklch(0.18 0 0 / 0.5), transparent 70%);
+    /* Flat deep-black terminal background — matches OpenCode's TUI chrome.
+       The old radial-gradient top glow broke the flat terminal aesthetic. */
+    background-color: var(--color-terminal-bg);
     color: var(--color-text-primary);
   }
 
-  /* Subtle grain texture overlay */
+  /* Subtle grain texture overlay — dimmed further for the flat OpenCode
+     terminal aesthetic (was 0.025). Keeps a hint of texture without a glow. */
   body::before {
     content: "";
     position: fixed;
     inset: 0;
     pointer-events: none;
     z-index: 9999;
-    opacity: 0.025;
+    opacity: 0.015;
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
     background-size: 128px 128px;
   }
 
-  /* Scrollbar styling */
+  /* Scrollbar styling — sharp rectangles to match the OpenCode TUI look */
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 8px;
+    height: 8px;
   }
 
   ::-webkit-scrollbar-track {
-    background: transparent;
+    background: var(--color-terminal-bg);
   }
 
   ::-webkit-scrollbar-thumb {
-    background: var(--color-surface-700);
-    border-radius: 3px;
+    background: var(--color-surface-800);
+    border-radius: 0;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: var(--color-surface-600);
+    background: var(--color-surface-700);
   }
 
   /* Selection */
@@ -387,5 +429,15 @@ aside [role="button"]:focus-visible,
 aside [data-radix-collection-item]:focus-visible {
   outline: none;
   box-shadow: none;
+}
+
+/* OpenCode TUI sidebar: force sharp corners on all sidebar chrome so the
+   flat terminal aesthetic isn't broken by stray rounded corners on nested
+   buttons/divs. Individual components still control their own backgrounds
+   and borders. */
+aside button,
+aside [role="button"],
+aside [data-radix-collection-item] {
+  border-radius: 0;
 }
 

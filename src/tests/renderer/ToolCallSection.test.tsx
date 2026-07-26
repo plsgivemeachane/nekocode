@@ -105,8 +105,13 @@ describe("ToolCallGroup — Contract Violations", () => {
     it("non-file-modifying tool has no button role", () => {
       mockExtractDiffStats.mockReturnValue(null)
       const { container } = render(<ToolCallGroup toolCalls={[baseToolCall]} />)
-      const row = container.querySelector("[class*='px-3']")
-      expect(row?.getAttribute("role")).toBeNull()
+      const row = container.querySelector("[data-tool-row]")
+      // ─── OpenCode TUI revamp ───────────────────────────────────────
+      // Non-file-modifying rows carry role="listitem" (NOT "button"). The
+      // contract is "no button role" — so we assert it is not a button,
+      // and is explicitly a list item (the flat-log semantics).
+      expect(row?.getAttribute("role")).toBe("listitem")
+      expect(row?.getAttribute("role")).not.toBe("button")
     })
 
     it("file-modifying tool has button role", () => {
@@ -204,40 +209,44 @@ describe("ToolCallGroup — Contract Violations", () => {
       expect(redText).toBeNull()
     })
 
-    it("stats with added > 0 shows green badge in both header and row", () => {
+    it("stats with added > 0 shows green badge in the row (no header aggregate)", () => {
       mockExtractDiffStats.mockReturnValue({ added: 5, removed: 0 })
       render(
         <ToolCallGroup
           toolCalls={[{ ...baseToolCall, toolName: "write" }]}
         />
       )
-      // +5 appears twice: once in header aggregate, once in row badge
+      // ─── OpenCode TUI revamp ───────────────────────────────────────
+      // Flat layout: there is NO aggregate header. The +5 badge appears
+      // exactly ONCE, on the row itself.
       const badges = screen.getAllByText("+5")
-      expect(badges.length).toBe(2)
+      expect(badges.length).toBe(1)
     })
 
-    it("stats with removed > 0 shows red badge in both header and row", () => {
+    it("stats with removed > 0 shows red badge in the row (no header aggregate)", () => {
       mockExtractDiffStats.mockReturnValue({ added: 0, removed: 3 })
       render(
         <ToolCallGroup
           toolCalls={[{ ...baseToolCall, toolName: "write" }]}
         />
       )
+      // Flat layout: -3 appears exactly ONCE, on the row itself.
       const badges = screen.getAllByText("-3")
-      expect(badges.length).toBe(2)
+      expect(badges.length).toBe(1)
     })
 
-    it("stats with both shows both badges in header and row", () => {
+    it("stats with both shows both badges in the row (no header aggregate)", () => {
       mockExtractDiffStats.mockReturnValue({ added: 4, removed: 2 })
       render(
         <ToolCallGroup
           toolCalls={[{ ...baseToolCall, toolName: "write" }]}
         />
       )
+      // Flat layout: +4 and -2 each appear exactly ONCE, on the row itself.
       const greenBadges = screen.getAllByText("+4")
       const redBadges = screen.getAllByText("-2")
-      expect(greenBadges.length).toBe(2) // header + row
-      expect(redBadges.length).toBe(2) // header + row
+      expect(greenBadges.length).toBe(1)
+      expect(redBadges.length).toBe(1)
     })
   })
 
@@ -245,8 +254,8 @@ describe("ToolCallGroup — Contract Violations", () => {
   // CATEGORY 4: Header stats — aggregate diff display
   // ═══════════════════════════════════════════════════════════════════════
 
-  describe("Header: aggregate diff stats display", () => {
-    it("shows aggregate stats in header when all tools are done", () => {
+  describe("Flat layout: aggregate diff stats (per-row only, no header)", () => {
+    it("shows per-row diff badges when tools are done (no aggregate header)", () => {
       mockExtractDiffStats.mockReturnValue({ added: 3, removed: 1 })
       render(
         <ToolCallGroup
@@ -256,12 +265,16 @@ describe("ToolCallGroup — Contract Violations", () => {
           ]}
         />
       )
-      // Total: 6 added, 2 removed
-      expect(screen.getByText("+6")).toBeTruthy()
-      expect(screen.getByText("-2")).toBeTruthy()
+      // OpenCode flat layout: each row shows its own +3 -1 badge. There is no
+      // aggregate header anymore, so we expect TWO +3 badges (one per row),
+      // not a single +6 aggregate.
+      expect(screen.getAllByText("+3").length).toBe(2)
+      expect(screen.getAllByText("-1").length).toBe(2)
+      expect(screen.queryByText("+6")).toBeNull()
+      expect(screen.queryByText("-2")).toBeNull()
     })
 
-    it("row badge still shows when tool is running — only header hides aggregate", () => {
+    it("row badge shows when tool is running (no header to hide)", () => {
       mockExtractDiffStats.mockReturnValue({ added: 3, removed: 1 })
       const { container } = render(
         <ToolCallGroup
@@ -273,17 +286,16 @@ describe("ToolCallGroup — Contract Violations", () => {
       // Row badge still shows +3 -1
       expect(screen.getAllByText("+3").length).toBe(1)
       expect(screen.getAllByText("-1").length).toBe(1)
-      // Header aggregate is NOT shown (no ml-auto span)
+      // No header exists at all → no ml-auto aggregate span.
       const mlAuto = container.querySelector(".ml-auto")
       expect(mlAuto).toBeNull()
     })
 
-    it("does not show aggregate stats when no diffs exist", () => {
+    it("does not render any badge when no diffs exist", () => {
       mockExtractDiffStats.mockReturnValue(null)
       const { container } = render(
         <ToolCallGroup toolCalls={[baseToolCall]} />
       )
-      // No diff stats → no aggregate badge in header
       const mlAuto = container.querySelector(".ml-auto")
       expect(mlAuto).toBeNull()
     })
@@ -293,8 +305,8 @@ describe("ToolCallGroup — Contract Violations", () => {
   // CATEGORY 5: Rendering basics — smoke tests that should still work
   // ═══════════════════════════════════════════════════════════════════════
 
-  describe("Rendering basics", () => {
-    it("renders tool call count in header", () => {
+  describe("Rendering basics — flat layout (no header)", () => {
+    it("renders NO header count (flat layout, OpenCode style)", () => {
       render(
         <ToolCallGroup
           toolCalls={[
@@ -304,16 +316,17 @@ describe("ToolCallGroup — Contract Violations", () => {
           ]}
         />
       )
-      expect(screen.getByText("3 tool calls")).toBeTruthy()
+      // OpenCode flat layout: there is no "N tool calls" header.
+      expect(screen.queryByText("3 tool calls")).toBeNull()
     })
 
-    it("renders singular for single tool call", () => {
+    it("renders NO header count for a single tool call", () => {
       render(<ToolCallGroup toolCalls={[baseToolCall]} />)
-      expect(screen.getByText("1 tool call")).toBeTruthy()
+      expect(screen.queryByText("1 tool call")).toBeNull()
     })
 
-    it("shows running count when tools are running", () => {
-      render(
+    it("running status is shown via the row's pinging dot, not a header count", () => {
+      const { container } = render(
         <ToolCallGroup
           toolCalls={[
             { ...baseToolCall, id: "tc-1", status: "running" },
@@ -321,19 +334,10 @@ describe("ToolCallGroup — Contract Violations", () => {
           ]}
         />
       )
-      expect(screen.getByText("1 running")).toBeTruthy()
-    })
-
-    it("shows done count when no tools are running", () => {
-      render(
-        <ToolCallGroup
-          toolCalls={[
-            { ...baseToolCall, id: "tc-1", status: "done" },
-            { ...baseToolCall, id: "tc-2", status: "done" },
-          ]}
-        />
-      )
-      expect(screen.getByText("2 done")).toBeTruthy()
+      // No "N running" header text anymore.
+      expect(screen.queryByText("1 running")).toBeNull()
+      // The running row carries the pinging dot.
+      expect(container.querySelector(".animate-ping")).toBeTruthy()
     })
 
     it("renders tool names stripped of toolcall_ prefix", () => {
@@ -342,7 +346,9 @@ describe("ToolCallGroup — Contract Violations", () => {
           toolCalls={[{ ...baseToolCall, toolName: "toolcall_read" }]}
         />
       )
-      expect(screen.getByText("read")).toBeTruthy()
+      // OpenCode TUI revamp: the tool name is shown as a capitalized label
+      // ("Read") alongside its prefix glyph, not the raw lowercase short name.
+      expect(screen.getByText("Read")).toBeTruthy()
     })
 
     it("renders tool summary via extractToolSummary", () => {
@@ -354,9 +360,12 @@ describe("ToolCallGroup — Contract Violations", () => {
       expect(screen.getByText("summary-bash")).toBeTruthy()
     })
 
-    it("handles empty toolCalls array", () => {
-      render(<ToolCallGroup toolCalls={[]} />)
-      expect(screen.getByText("0 tool calls")).toBeTruthy()
+    it("renders nothing visible for an empty toolCalls array (no header)", () => {
+      const { container } = render(<ToolCallGroup toolCalls={[]} />)
+      // No "0 tool calls" header in the flat layout.
+      expect(screen.queryByText("0 tool calls")).toBeNull()
+      // No rows rendered.
+      expect(container.querySelector("[data-tool-row]")).toBeNull()
     })
   })
 
@@ -372,25 +381,36 @@ describe("ToolCallGroup — Contract Violations", () => {
       expect(container.querySelector(".animate-ping")).toBeTruthy()
     })
 
-    it("error tools show bg-error dot", () => {
+    // ─── OpenCode TUI revamp: status indicator contract ─────────────────
+    // The only visual indicator is a pinging dot WHILE RUNNING. Successful
+    // tools show NOTHING (a clean log line, no redundant checkmark). Failed
+    // tools color the whole row text red (text-error) instead of a dot.
+    it("error tools render the row text in red (text-error)", () => {
       const { container } = render(
         <ToolCallGroup toolCalls={[{ ...baseToolCall, status: "done", isError: true }]} />
       )
-      expect(container.querySelector(".bg-error")).toBeTruthy()
+      expect(container.querySelector(".text-error")).toBeTruthy()
+      // No error dot anymore.
+      expect(container.querySelector(".bg-error")).toBeNull()
     })
 
-    it("successful tools show bg-success dot", () => {
+    it("successful tools show NO status indicator (clean line)", () => {
       const { container } = render(
         <ToolCallGroup toolCalls={[{ ...baseToolCall, status: "done", isError: false }]} />
       )
-      expect(container.querySelector(".bg-success")).toBeTruthy()
+      // No ping (not running), no success dot (removed by design).
+      expect(container.querySelector(".animate-ping")).toBeNull()
+      expect(container.querySelector(".bg-success")).toBeNull()
     })
 
-    it("done with isError undefined defaults to success dot", () => {
+    it("done with isError undefined defaults to clean (no indicator)", () => {
       const { container } = render(
         <ToolCallGroup toolCalls={[{ ...baseToolCall, status: "done" }]} />
       )
-      expect(container.querySelector(".bg-success")).toBeTruthy()
+      expect(container.querySelector(".animate-ping")).toBeNull()
+      expect(container.querySelector(".bg-success")).toBeNull()
+      // Not an error, so no red text either.
+      expect(container.querySelector(".text-error")).toBeNull()
     })
   })
 
@@ -400,22 +420,24 @@ describe("ToolCallGroup — Contract Violations", () => {
 
   describe("Edge cases the contract doesn't specify", () => {
     it("tool call with undefined args — extractDiffStats handles it", () => {
-      render(
+      const { container } = render(
         <ToolCallGroup
           toolCalls={[{ ...baseToolCall, args: undefined }]}
         />
       )
-      // Should not crash
-      expect(screen.getByText("1 tool call")).toBeTruthy()
+      // ─── OpenCode TUI revamp ───────────────────────────────────────
+      // No "N tool calls" header anymore (flat layout). The no-crash signal
+      // is that the row itself renders with its prefix label.
+      expect(container.querySelector("[data-tool-row]")).toBeTruthy()
     })
 
     it("tool call with null args — extractDiffStats handles it", () => {
-      render(
+      const { container } = render(
         <ToolCallGroup
           toolCalls={[{ ...baseToolCall, args: null }]}
         />
       )
-      expect(screen.getByText("1 tool call")).toBeTruthy()
+      expect(container.querySelector("[data-tool-row]")).toBeTruthy()
     })
 
     it("tool call with empty string toolName — renders without crash", () => {

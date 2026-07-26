@@ -216,7 +216,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
   const contentOverflow = messages.length > 0 ? 'overflow-hidden' : 'overflow-y-auto'
 
   return (
-    <div className={`bg-surface-950 text-text-primary flex flex-col h-full ${className ?? ""}`}>
+    <div className={`bg-terminal-bg text-text-primary flex flex-col h-full ${className ?? ""}`}>
       {/* NavBar removed — custom TitleBar now handles window controls at the App level */}
 
       <main
@@ -227,7 +227,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
             <div className="flex flex-col items-center justify-center min-h-full select-none pt-16">
               {/* Logo */}
               <div className="relative mb-6">
-                <div className="w-14 h-14 rounded-xl bg-surface-900/80 border border-surface-700/50 flex items-center justify-center overflow-hidden">
+                <div className="w-14 h-14 rounded-none border-l-[3px] border-accent-500 bg-terminal-panel flex items-center justify-center overflow-hidden">
                   <img
                     src="./favicon.png"
                     alt="nekocode"
@@ -246,7 +246,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
 
               {/* Action chips */}
               <div className="grid grid-cols-2 gap-2.5 max-w-md w-full px-4">
-                <div className="group flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-surface-900/80 border border-surface-800 text-left">
+                <div className="group flex items-center gap-2.5 px-3.5 py-2.5 rounded-none bg-terminal-panel border-l-[3px] border-role-user-600 text-left">
                   <span className="text-[#9CA3AF] shrink-0">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
@@ -254,7 +254,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
                   </span>
                   <span className="text-[#B0B8C4] text-sm">Resume a session</span>
                 </div>
-                <div className="group flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-surface-900/80 border border-surface-800 text-left">
+                <div className="group flex items-center gap-2.5 px-3.5 py-2.5 rounded-none bg-terminal-panel border-l-[3px] border-role-assistant-600 text-left">
                   <span className="text-[#9CA3AF] shrink-0">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
@@ -268,16 +268,16 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
               <div className="flex items-center gap-5 text-[#9CA3AF] mt-12">
                 <div className="flex items-center gap-2">
                   <div className="flex items-center gap-1">
-                    <kbd className="inline-flex items-center justify-center min-w-[1.75rem] h-7 px-2 text-[11px] leading-none font-mono text-[#C9CED6] bg-surface-800/80 border border-surface-600/50 rounded-md">Ctrl</kbd>
-                    <kbd className="inline-flex items-center justify-center min-w-[1.75rem] h-7 px-2 text-[11px] leading-none font-mono text-[#C9CED6] bg-surface-800/80 border border-surface-600/50 rounded-md">K</kbd>
+                    <kbd className="inline-flex items-center justify-center min-w-[1.75rem] h-7 px-2 text-[11px] leading-none font-mono text-[#C9CED6] bg-terminal-panel border border-terminal-border rounded-none">Ctrl</kbd>
+                    <kbd className="inline-flex items-center justify-center min-w-[1.75rem] h-7 px-2 text-[11px] leading-none font-mono text-[#C9CED6] bg-terminal-panel border border-terminal-border rounded-none">K</kbd>
                   </div>
                   <span className="text-xs">New session</span>
                 </div>
                 <span className="text-[#3B3F48] mx-1.5">|</span>
                 <div className="flex items-center gap-2">
                   <div className="flex items-center gap-1">
-                    <kbd className="inline-flex items-center justify-center min-w-[1.75rem] h-7 px-2 text-[11px] leading-none font-mono text-[#C9CED6] bg-surface-800/80 border border-surface-600/50 rounded-md">&uarr;</kbd>
-                    <kbd className="inline-flex items-center justify-center min-w-[1.75rem] h-7 px-2 text-[11px] leading-none font-mono text-[#C9CED6] bg-surface-800/80 border border-surface-600/50 rounded-md">&darr;</kbd>
+                    <kbd className="inline-flex items-center justify-center min-w-[1.75rem] h-7 px-2 text-[11px] leading-none font-mono text-[#C9CED6] bg-terminal-panel border border-terminal-border rounded-none">&uarr;</kbd>
+                    <kbd className="inline-flex items-center justify-center min-w-[1.75rem] h-7 px-2 text-[11px] leading-none font-mono text-[#C9CED6] bg-terminal-panel border border-terminal-border rounded-none">&darr;</kbd>
                   </div>
                   <span className="text-xs">Navigate</span>
                 </div>
@@ -285,7 +285,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
             </div>
           ) : isHistoryLoading && messages.length === 0 ? (
             <div className="max-w-3xl mx-auto pt-8">
-              <div className="rounded-xl border border-surface-700/70 bg-surface-900/60 px-4 py-3 text-sm text-text-secondary flex items-center gap-2.5">
+              <div className="rounded-none border-l-[3px] border-accent-500 bg-terminal-panel px-4 py-3 text-sm text-text-secondary flex items-center gap-2.5">
                 <svg className="w-4 h-4 shrink-0 animate-spin text-text-tertiary" viewBox="0 0 24 24" fill="none">
                   <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2.5" strokeDasharray="31.4 31.4" strokeLinecap="round" />
                 </svg>
@@ -360,7 +360,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
               {/* Stale-messages overlay centered on top of blurred content */}
               {isMessagesStale && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-surface-900/90 border border-surface-700/60 shadow-lg shadow-black/20 backdrop-blur-sm">
+                  <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-none bg-terminal-panel border-l-[3px] border-accent-500 shadow-lg shadow-black/20 backdrop-blur-sm">
                     <svg className="w-4 h-4 shrink-0 animate-spin text-accent-400" viewBox="0 0 24 24" fill="none">
                       <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2.5" strokeDasharray="31.4 31.4" strokeLinecap="round" />
                     </svg>
@@ -376,7 +376,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
         {showScrollBtn && (
           <button
             onClick={() => handleScrollToBottom(true)}
-            className="absolute bottom-24 right-4 w-9 h-9 flex items-center justify-center bg-surface-800 hover:bg-surface-700 text-text-secondary rounded-full shadow-lg shadow-surface-950/50 border border-surface-700 transition-all duration-200 opacity-0 translate-y-2 animate-slide-up z-20"
+            className="absolute bottom-24 right-4 w-9 h-9 flex items-center justify-center bg-terminal-panel hover:bg-surface-800 text-text-secondary rounded-none border border-terminal-border transition-all duration-200 opacity-0 translate-y-2 animate-slide-up z-20"
             aria-label="Scroll to bottom"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">

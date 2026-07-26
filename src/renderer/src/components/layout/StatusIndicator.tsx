@@ -120,7 +120,10 @@ export function StatusIndicator({ isStreaming, isAgentConnecting, modelName, usa
           <span className="text-text-tertiary ml-1">Working</span>
         </span>
       ) : (
-        <span className="text-success">Ready</span>
+        // ─── OpenCode TUI idle state ──────────────────────────────
+        // Quiet "Ready" — dim tertiary text, no green dot. The terminal is
+        // idle and waiting for input.
+        <span className="text-text-tertiary">Ready</span>
       )}
     </div>
   )

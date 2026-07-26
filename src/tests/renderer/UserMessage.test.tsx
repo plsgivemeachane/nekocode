@@ -32,17 +32,19 @@ describe("UserMessage", () => {
     expect(screen.getByText("Hello, world!")).toBeInTheDocument()
   })
 
-  it("renders content in a bubble with rounded corners", () => {
+  it("renders content in a sharp rectangle with no border radius (OpenCode TUI style)", () => {
     const { container } = render(<UserMessage content="Hi" />)
-    const bubble = container.querySelector(".rounded-2xl")
-    expect(bubble).toBeInTheDocument()
-    expect(bubble?.textContent).toBe("Hi")
+    // OpenCode TUI revamp: messages are sharp rectangles (rounded-none), not bubbles.
+    // The role panel is the element carrying the content with rounded-none.
+    const panel = container.querySelector(".rounded-none")
+    expect(panel).toBeInTheDocument()
+    expect(panel?.textContent).toContain("Hi")
   })
 
   it("preserves whitespace with whitespace-pre-wrap", () => {
     const { container } = render(<UserMessage content="line1\nline2" />)
-    const bubble = container.querySelector(".whitespace-pre-wrap")
-    expect(bubble).toBeInTheDocument()
+    const panel = container.querySelector(".whitespace-pre-wrap")
+    expect(panel).toBeInTheDocument()
   })
 
   // ======================================================================
@@ -90,15 +92,16 @@ describe("UserMessage", () => {
   // Layout & alignment
   // ======================================================================
 
-  it("aligns the message to the right (items-end)", () => {
+  it("aligns the message to the left (items-start, OpenCode TUI style)", () => {
     const { container } = render(<UserMessage content="Hi" />)
     const wrapper = container.firstElementChild
-    expect(wrapper?.className).toContain("items-end")
+    // OpenCode TUI revamp: user messages are left-aligned, not right bubbles.
+    expect(wrapper?.className).toContain("items-start")
   })
 
-  it("constrains bubble width to 80% max", () => {
+  it("constrains panel width to 80% max", () => {
     const { container } = render(<UserMessage content="Hi" />)
-    const bubble = container.querySelector(".max-w-\\[80\\%\\]")
-    expect(bubble).toBeInTheDocument()
+    const panel = container.querySelector(".max-w-\\[80\\%\\]")
+    expect(panel).toBeInTheDocument()
   })
 })

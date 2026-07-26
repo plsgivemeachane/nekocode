@@ -14,14 +14,19 @@ export function UserMessage({ content }: UserMessageProps) {
     })
   }, [content])
 
+  // ─── OpenCode TUI styling ───────────────────────────────────────────
+  // User messages are a bright-gray box with a thick LEFT border (blue, the
+  // OpenCode role color for user input), LEFT-aligned (not a right bubble).
+  // Sharp rectangle, 0 border-radius, monospace. No role tag — the blue bar
+  // already signals "user".
   return (
-    <div className="flex flex-col items-end">
-      <div className="max-w-[80%] bg-surface-900 border border-surface-700/80 text-text-primary rounded-2xl rounded-br-md px-4 py-2.5 text-sm whitespace-pre-wrap break-words shadow-[0_1px_0_rgba(255,255,255,0.03),0_8px_24px_rgba(0,0,0,0.22)]">
+    <div className="flex flex-col items-start">
+      <div className="max-w-[80%] w-full border-l-[3px] border-role-user-500 bg-surface-800 text-text-primary font-mono text-sm pl-3 pr-3 py-2 rounded-none whitespace-pre-wrap break-words leading-relaxed">
         {content}
       </div>
       <button
         onClick={handleCopy}
-        className="mt-1 flex items-center gap-1 text-xs text-text-tertiary hover:text-text-primary transition-colors cursor-pointer"
+        className="mt-1 flex items-center gap-1 text-[11px] text-text-tertiary hover:text-text-primary transition-colors cursor-pointer"
         aria-label={copied ? 'Copied' : 'Copy message'}
       >
         {copied ? (

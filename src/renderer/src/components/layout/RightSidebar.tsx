@@ -163,7 +163,7 @@ function DiffPanel({ diffEntries, selectedId }: { diffEntries: DiffEntry[]; sele
 
 function OutlinePanel() {
   return (
-    <div className="flex flex-col items-center justify-center h-full text-text-tertiary text-sm p-4">
+    <div className="flex flex-col items-center justify-center h-full text-text-tertiary text-sm p-4 font-mono">
       <svg width="24" height="24" viewBox="0 0 16 16" fill="none" className="mb-3 opacity-40">
         <path d="M2 3h8M2 6h12M2 9h6M2 12h10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
       </svg>
@@ -351,18 +351,19 @@ className='absolute top-0 bottom-0 -left-1.5 w-3 cursor-col-resize z-20 group/re
         onMouseEnter={() => setIsHoveringResize(true)}
         onMouseLeave={() => setIsHoveringResize(false)}
       >
-        {/* Small floating stick indicator (like a scrollbar thumb) */}
-        <div
-          className={`absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 w-0.75 rounded-full transition-all duration-200 ${
-            isHoveringResize || isDraggingState
-              ? 'h-12 bg-surface-400/70'
-              : 'h-8 bg-surface-600/60 group-hover/resize:h-10 group-hover/resize:bg-surface-500/80'
-          }`}
-        />
+      {/* Small floating stick indicator (sharp rectangle to match the
+          OpenCode blocky aesthetic). */}
+      <div
+        className={`absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 w-0.75 rounded-none transition-all duration-200 ${
+          isHoveringResize || isDraggingState
+            ? 'h-12 bg-surface-400/70'
+            : 'h-8 bg-surface-600/60 group-hover/resize:h-10 group-hover/resize:bg-surface-500/80'
+        }`}
+      />
       </div>
 
-      {/* ═══════ Icon Rail ═══════ */}
-      <div className="w-12 bg-surface-900/90 flex flex-col items-center pt-2 shrink-0 border-l border-surface-800/60">
+      {/* ═══════ Icon Rail ═══════ — pitch-black gutter with sharp buttons */}
+      <div className="w-12 bg-terminal-rail flex flex-col items-center pt-2 shrink-0 border-l border-terminal-border">
         {RAIL_ITEMS.map((item) => {
           const isActive = activePanel === item.id
           const badge = badgeCounts[item.id]
@@ -371,10 +372,10 @@ className='absolute top-0 bottom-0 -left-1.5 w-3 cursor-col-resize z-20 group/re
               key={item.id}
               onClick={() => handleIconClick(item.id)}
               className={`
-                relative w-9 h-9 flex items-center justify-center rounded-lg mb-1 transition-colors
+                relative w-9 h-9 flex items-center justify-center rounded-none mb-1 transition-colors font-mono
                 ${isActive
-                  ? 'bg-surface-700/50 text-text-primary'
-                  : 'text-text-tertiary hover:text-text-secondary hover:bg-surface-800/60'
+                  ? 'bg-terminal-panel text-text-primary border-l-[3px] border-l-accent-500 -ml-[3px]'
+                  : 'text-text-tertiary hover:text-text-secondary hover:bg-terminal-panel'
                 }
               `}
               title={item.label}
@@ -382,24 +383,25 @@ className='absolute top-0 bottom-0 -left-1.5 w-3 cursor-col-resize z-20 group/re
               aria-pressed={isActive}
             >
               {item.icon}
-              {/* Badge count */}
+              {/* Badge count — sharp rectangle */}
               {badge !== undefined && badge > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 text-[9px] font-mono font-bold text-text-primary bg-surface-600/80 rounded-full min-w-4 h-4 flex items-center justify-center border border-surface-500/30 px-0.5">
+                <span className="absolute -top-0.5 -right-0.5 text-[9px] font-mono font-bold text-text-primary bg-surface-700 rounded-none min-w-4 h-4 flex items-center justify-center border border-terminal-border px-0.5">
                   {badge > 99 ? '99+' : badge}
                 </span>
               )}
-              {/* Active indicator bar */}
+              {/* Active indicator bar — sharp rectangle on the left edge */}
               {isActive && (
-                <span className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-0.75 h-5 rounded-r-full bg-surface-400" />
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.75 h-5 rounded-none bg-accent-400" />
               )}
             </button>
           )
         })}
       </div>
 
-      {/* ═══════ Content Panel (always mounted, animated in/out) ═══════ */}
+      {/* ═══════ Content Panel (always mounted, animated in/out) ═══════
+          Pitch-black panel, sharp corners. */}
       <aside
-        className={`h-full flex flex-col shrink-0 bg-surface-950 relative ${
+        className={`h-full flex flex-col shrink-0 bg-terminal-bg relative ${
           isDraggingState ? '' : 'transition-[width,opacity] duration-300 ease-out'
         } overflow-hidden ${
           activePanel ? 'opacity-100' : 'opacity-0 w-0!'
@@ -408,8 +410,8 @@ className='absolute top-0 bottom-0 -left-1.5 w-3 cursor-col-resize z-20 group/re
         role="complementary"
         aria-label={activePanel ? `${activePanel} panel` : 'sidebar panel'}
       >
-        {/* Panel header */}
-        <div className="flex items-center justify-between px-3 py-2 border-b border-surface-800/60 bg-surface-900/70 shrink-0 min-w-0">
+        {/* Panel header — terminal panel bg, terminal-border divider, mono */}
+        <div className="flex items-center justify-between px-3 py-2 border-b border-terminal-border bg-terminal-panel shrink-0 min-w-0">
           <div className="flex items-center gap-2 min-w-0">
             {/* Show the matching icon small */}
             {activePanel && RAIL_ITEMS.find((i) => i.id === activePanel)?.icon && (
@@ -417,12 +419,12 @@ className='absolute top-0 bottom-0 -left-1.5 w-3 cursor-col-resize z-20 group/re
                 {RAIL_ITEMS.find((i) => i.id === activePanel)!.icon}
               </span>
             )}
-            <span className="text-[12px] font-mono font-medium text-text-secondary truncate">
+            <span className="text-[12px] font-mono font-medium text-text-secondary truncate uppercase tracking-wider">
               {activePanel ? (RAIL_ITEMS.find((i) => i.id === activePanel)?.label ?? activePanel) : '\u200B'}
             </span>
-            {/* Diff count badge */}
+            {/* Diff count badge — sharp rectangle */}
             {activePanel === 'diff' && diffCount > 0 && (
-              <span className="text-[10px] font-mono text-text-tertiary bg-surface-800/60 px-1.5 py-0.5 rounded shrink-0">
+              <span className="text-[10px] font-mono text-text-tertiary bg-surface-900 px-1.5 py-0.5 rounded-none shrink-0">
                 {diffCount} file{diffCount !== 1 ? 's' : ''}
               </span>
             )}
@@ -430,7 +432,7 @@ className='absolute top-0 bottom-0 -left-1.5 w-3 cursor-col-resize z-20 group/re
           {activePanel && (
             <button
               onClick={() => setRightSidebarPanel(null)}
-              className="flex items-center justify-center w-6 h-6 rounded-md hover:bg-surface-800/50 text-text-tertiary hover:text-text-secondary transition-colors shrink-0"
+              className="flex items-center justify-center w-6 h-6 rounded-none hover:bg-surface-900 text-text-tertiary hover:text-text-secondary transition-colors shrink-0"
               title="Close panel (Escape)"
               aria-label="Close panel"
             >

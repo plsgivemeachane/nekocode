@@ -205,10 +205,10 @@ export function WelcomeScreen({ isAgentConnecting }: { isAgentConnecting?: boole
   const { tip, visible: tipVisible } = useRotatingTip()
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-full select-none pt-16">
-      {/* Logo */}
+    <div className="flex flex-col items-center justify-center min-h-full select-none pt-16 font-mono">
+      {/* Logo — sharp rectangle, accent left bar (OpenCode blocky style) */}
       <div className="relative mb-6">
-        <div className="w-14 h-14 rounded-xl bg-surface-900/80 border border-surface-700/50 flex items-center justify-center overflow-hidden">
+        <div className="w-14 h-14 rounded-none border-l-[3px] border-accent-500 bg-terminal-panel flex items-center justify-center overflow-hidden">
           <img
             src="./favicon.png"
             alt="nekocode"
@@ -240,11 +240,11 @@ export function WelcomeScreen({ isAgentConnecting }: { isAgentConnecting?: boole
         <cite className="text-[#9CA3AF] text-xs not-italic">&mdash; {quote.author}</cite>
       </div>
 
-      {/* Rotating Tip */}
+      {/* Rotating Tip — sharp rectangle, terminal panel, accent left bar */}
       <div className="max-w-md w-full px-4 mb-10">
-        <h2 className="text-text-primary text-sm font-medium mb-4 text-center">Tip for Nekocode</h2>
+        <h2 className="text-text-primary text-sm font-medium mb-4 text-center uppercase tracking-wider">Tip for Nekocode</h2>
         <div
-          className={`flex items-start gap-3 px-4 py-3 rounded-xl bg-surface-900/60 border border-surface-800/50 transition-all duration-400 ease-out-expo ${
+          className={`flex items-start gap-3 px-4 py-3 rounded-none border-l-[3px] border-role-assistant-500 bg-terminal-panel transition-all duration-400 ease-out-expo ${
             tipVisible
               ? 'opacity-100 translate-y-0'
               : 'opacity-0 translate-y-1'
@@ -258,9 +258,9 @@ export function WelcomeScreen({ isAgentConnecting }: { isAgentConnecting?: boole
         </div>
       </div>
 
-      {/* Keyboard shortcuts */}
+      {/* Keyboard shortcuts — sharp kbd rectangles, terminal panel bg */}
       <div className="max-w-lg w-full px-4">
-        <h2 className="text-text-primary text-sm font-medium mb-4 text-center">Keyboard Shortcuts</h2>
+        <h2 className="text-text-primary text-sm font-medium mb-4 text-center uppercase tracking-wider">Keyboard Shortcuts</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2">
           {SHORTCUTS.map((s) => (
             <div key={s.description} className="flex items-center justify-between gap-3 py-1.5">
@@ -269,7 +269,7 @@ export function WelcomeScreen({ isAgentConnecting }: { isAgentConnecting?: boole
                 {s.keys.map((key) => (
                   <kbd
                     key={key}
-                    className="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-1.5 text-[10px] leading-none font-mono text-[#C9CED6] bg-surface-800/80 border border-surface-600/50 rounded"
+                    className="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-1.5 text-[10px] leading-none font-mono text-[#C9CED6] bg-terminal-panel border border-terminal-border rounded-none"
                   >
                     {key}
                   </kbd>

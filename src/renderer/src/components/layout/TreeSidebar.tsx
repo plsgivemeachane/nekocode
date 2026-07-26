@@ -26,13 +26,17 @@ function truncate(str: string, max: number): string {
 
 function StatusDot({ status, errorMessage }: { status: SessionStatus; errorMessage?: string }) {
   if (status === 'idle') return null
+  // ─── OpenCode TUI: square status marker, no rounded dot ──────────────
+  // streaming → accent square with glow pulse (the "live" indicator)
+  // finished_unread → blue square (unread signal)
+  // error → red square
   const color =
     status === 'streaming'
       ? 'bg-accent-400 animate-glow-pulse'
       : status === 'finished_unread'
         ? 'bg-blue-400'
         : 'bg-error'
-  return <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${color}`} title={status === 'error' && errorMessage ? errorMessage : status === 'finished_unread' ? 'Agent finished — click to view' : undefined} />
+  return <span className={`inline-block w-1.5 h-1.5 rounded-none shrink-0 ${color}`} title={status === 'error' && errorMessage ? errorMessage : status === 'finished_unread' ? 'Agent finished — click to view' : undefined} />
 }
 
 const VISIBLE_SESSIONS = 6
@@ -75,11 +79,12 @@ function SessionList({
   }
 
   return (
-    <div className="ml-3 mt-0.5 space-y-1">
-      {/* New Session — at the top */}
+    <div className="ml-3 mt-0.5 space-y-0.5">
+      {/* New Session — at the top. Sharp rectangle, dim accent left bar,
+          monospace — matches the OpenCode flat log aesthetic. */}
       <button
         onClick={onCreateSession}
-        className="flex items-center gap-2 px-2.5 py-1.5 w-full text-left text-[12px] text-text-tertiary/80 hover:text-text-primary hover:bg-surface-800/70 rounded-lg transition-colors duration-150 pl-5"
+        className="flex items-center gap-2 px-2.5 py-1.5 w-full text-left text-[12px] font-mono text-text-tertiary/80 hover:text-text-primary hover:bg-terminal-panel border-l-[3px] border-l-surface-700 hover:border-l-accent-500 transition-colors duration-150 pl-5"
       >
         <svg width="11" height="11" viewBox="0 0 12 12" fill="none" className="shrink-0">
           <path d="M6 2.5v7M2.5 6h7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
@@ -96,10 +101,14 @@ function SessionList({
           <ContextMenu key={session.id}>
             <ContextMenuTrigger asChild>
               <div
-                className={`flex items-center gap-2 px-2.5 py-1.5 cursor-pointer rounded-lg transition-colors duration-150 text-[13px] ${
+                // ─── OpenCode TUI session row ───────────────────────────────
+                // Sharp rectangle (no rounded-lg). Active = surface-800/80 bg
+                // (test contract) + accent left bar. Hover = terminal-panel bg.
+                // Monospace, dimmer than the project row above it.
+                className={`flex items-center gap-2 px-2.5 py-1.5 cursor-pointer border-l-[3px] transition-colors duration-150 text-[13px] font-mono ${
                   isActiveSession
-                    ? 'bg-surface-800/80 text-text-primary'
-                    : 'text-text-secondary/80 hover:bg-surface-800/60 hover:text-text-primary'
+                    ? 'bg-surface-800/80 text-text-primary border-l-accent-500'
+                    : 'text-text-secondary/80 hover:bg-terminal-panel hover:text-text-primary border-l-transparent'
                 } ${isPending ? 'opacity-60 cursor-wait' : ''}`}
                 onClick={() => handleSessionClick(session.id)}
                 onMouseEnter={() => !isPending && onHoverSession(session.id)}
@@ -134,7 +143,7 @@ function SessionList({
       {hasMore && (
         <button
           onClick={() => setShowAll(prev => !prev)}
-          className="flex items-center gap-2 px-2.5 py-[6px] w-full text-left text-[12px] text-text-tertiary/80 hover:text-text-primary hover:bg-surface-800/60 rounded-lg transition-colors duration-150 pl-5"
+          className="flex items-center gap-2 px-2.5 py-[6px] w-full text-left text-[12px] font-mono text-text-tertiary/80 hover:text-text-primary hover:bg-terminal-panel transition-colors duration-150 pl-5"
         >
           {showAll ? 'Show less' : `Show more (${sessions.length - VISIBLE_SESSIONS})`}
         </button>
@@ -445,16 +454,20 @@ export function TreeSidebar() {
 
   return (
     <aside
-      className="bg-surface-900 h-full flex flex-col shrink-0 text-text-primary shadow-[inset_-1px_0_0_rgba(255,255,255,0.06)] relative"
+      // ─── OpenCode TUI left sidebar chrome ────────────────────────────
+      // Pitch-black panel with a single thin terminal-border divider on the
+      // right edge (replaces the old inset white glow). Sharp corners.
+      className="bg-terminal-bg h-full flex flex-col shrink-0 text-text-primary border-r border-terminal-border relative"
       style={{ width: sidebarWidth }}
     >
       {/* Header moved to NavBar (same row as window controls) */}
 
-      {/* Top: Add Folder button (fixed, does not scroll) */}
-      <div className="px-2 pt-2 pb-1 border-b border-surface-800/50">
+      {/* Top: Add Folder button (fixed, does not scroll). Sharp rectangle,
+          dashed terminal-border outline, monospace — reads like a TUI prompt. */}
+      <div className="px-2 pt-2 pb-1 border-b border-terminal-border">
         <button
           onClick={handleAddProject}
-          className="flex items-center gap-2 px-2.5 py-1.5 mx-1 mt-1 mb-1 w-[calc(100%-8px)] text-left text-[12px] text-text-tertiary/80 hover:text-text-primary hover:bg-surface-800/70 rounded-lg border border-dashed border-surface-700/50 transition-colors duration-150"
+          className="flex items-center gap-2 px-2.5 py-1.5 mx-1 mt-1 mb-1 w-[calc(100%-8px)] text-left text-[12px] font-mono text-text-tertiary/80 hover:text-text-primary hover:bg-terminal-panel border border-dashed border-terminal-border hover:border-terminal-border-bright transition-colors duration-150"
         >
           <svg width="11" height="11" viewBox="0 0 16 16" fill="none" className="shrink-0">
             <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
@@ -466,7 +479,7 @@ export function TreeSidebar() {
       {/* Middle: Scrollable project/session list */}
       <ScrollArea className="flex-1 min-h-0 px-2">
         {state.projects.length === 0 && (
-          <p className="text-[11px] text-text-tertiary/80 px-3 py-10 text-center leading-relaxed">
+          <p className="text-[11px] font-mono text-text-tertiary/80 px-3 py-10 text-center leading-relaxed">
             No projects yet.
             <br />
             Click &ldquo;Add Folder&rdquo; above to add one.
@@ -479,12 +492,15 @@ export function TreeSidebar() {
 
           return (
             <div key={project.id} className="mb-1">
-              {/* Project row */}
+              {/* Project row — OpenCode TUI: sharp rectangle, accent left bar
+                  when active, monospace label. No rounded corners. */}
               <ContextMenu>
                 <ContextMenuTrigger asChild>
                   <div
-                    className={`group flex items-center gap-2 px-2.5 py-[7px] cursor-pointer rounded-lg transition-colors duration-150 ${
-                      isActive ? 'bg-surface-800/80' : 'hover:bg-surface-800/60'
+                    className={`group flex items-center gap-2 px-2.5 py-[7px] cursor-pointer border-l-[3px] transition-colors duration-150 font-mono ${
+                      isActive
+                        ? 'bg-terminal-panel border-l-accent-500'
+                        : 'hover:bg-terminal-panel border-l-transparent'
                     }`}
                     onClick={() => toggleExpand(project.id)}
                   >
@@ -507,7 +523,7 @@ export function TreeSidebar() {
                     </span>
                   </div>
                 </ContextMenuTrigger>
-                <ContextMenuContent className="min-w-[180px] bg-surface-900/95 backdrop-blur-md border-surface-700/60 shadow-xl shadow-black/40">
+                <ContextMenuContent className="min-w-[180px] bg-terminal-panel backdrop-blur-md border-terminal-border shadow-xl shadow-black/60">
                   {renderProjectMenu(project)}
                 </ContextMenuContent>
               </ContextMenu>
@@ -532,12 +548,13 @@ export function TreeSidebar() {
         })}
       </ScrollArea>
 
-      {/* Settings button at sidebar bottom */}
-      <div className="px-3 py-3 border-t border-surface-800/50">
+      {/* Settings button at sidebar bottom — sharp rectangle, accent left bar
+          when active. Matches the OpenCode flat footer aesthetic. */}
+      <div className="px-3 py-3 border-t border-terminal-border">
         {/* Settings button */}
         <button
           onClick={() => setActiveView('settings')}
-          className={`w-full flex items-center gap-2 px-2.5 py-[7px] ${state.activeView === 'settings' ? 'text-accent bg-accent/10' : 'text-text-secondary hover:text-text-primary hover:bg-surface-800/80'} rounded-lg transition-colors duration-200`}
+          className={`w-full flex items-center gap-2 px-2.5 py-[7px] border-l-[3px] font-mono ${state.activeView === 'settings' ? 'text-accent bg-terminal-panel border-l-accent-500' : 'text-text-secondary hover:text-text-primary hover:bg-terminal-panel border-l-transparent'} transition-colors duration-200`}
           title="Settings"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -548,12 +565,13 @@ export function TreeSidebar() {
         </button>
       </div>
 
-      {/* Toast notification for shell operation failures */}
+      {/* Toast notification for shell operation failures — sharp rectangle,
+          monospace, no rounded corners. */}
       {toast && (
-        <div className={`absolute bottom-4 left-3 right-3 px-3 py-2 rounded-lg text-[12px] font-medium transition-all duration-300 ${
+        <div className={`absolute bottom-4 left-3 right-3 px-3 py-2 text-[12px] font-mono font-medium transition-all duration-300 border-l-[3px] ${
           toast.type === 'error'
-            ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-            : 'bg-green-500/20 text-green-400 border border-green-500/30'
+            ? 'bg-error-surface/40 text-error border-l-error'
+            : 'bg-success/10 text-success border-l-success'
         }`}>
           {toast.message}
         </div>
@@ -569,9 +587,10 @@ export function TreeSidebar() {
         onMouseEnter={() => setIsHoveringResize(true)}
         onMouseLeave={() => setIsHoveringResize(false)}
       >
-        {/* Small floating stick indicator (smooth, like GitCommandCenter) */}
+        {/* Small floating stick indicator (smooth, like GitCommandCenter) —
+            sharp rectangle to match the OpenCode blocky aesthetic. */}
         <div
-          className={`absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 w-0.75 rounded-full transition-all duration-200 ${
+          className={`absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 w-0.75 rounded-none transition-all duration-200 ${
             isHoveringResize || isDraggingState
               ? 'h-12 bg-surface-400/70'
               : 'h-8 bg-surface-600/60 group-hover/resize-ls:h-10 group-hover/resize-ls:bg-surface-500/80'
