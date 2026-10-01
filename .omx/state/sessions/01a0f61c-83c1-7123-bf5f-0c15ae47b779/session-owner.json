@@ -1,0 +1,17 @@
+{
+  "session_id": "01a0f61c-83c1-7123-bf5f-0c15ae47b779",
+  "native_session_id": "01a0f61c-83c1-7123-bf5f-0c15ae47b779",
+  "started_at": "2026-10-01T06:17:54.115Z",
+  "cwd": "/mnt/e/project/node/nekocode",
+  "state_root": "/mnt/e/project/node/nekocode/.omx/state/sessions/01a0f61c-83c1-7123-bf5f-0c15ae47b779",
+  "pid": 23346,
+  "platform": "linux",
+  "identity_schema_version": 2,
+  "process_identity": {
+    "platform": "linux",
+    "birth": "137469",
+    "cmdline_hash": "852b30f89bc58ca41669e52c670ff6fa2917892ed01e6f788a212ba0d5f50a67"
+  },
+  "pid_start_ticks": 137469,
+  "pid_cmdline": "/home/yuzukadev/.codex/packages/app-server-daemon/releases/0.159.2-x86_64-unknown-linux-musl/bin/codex app-server --listen unix:// --managed-daemon"
+}

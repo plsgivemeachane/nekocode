@@ -1,0 +1,14 @@
+{
+  "sessions": {
+    "01a0f61c-83c1-7123-bf5f-0c15ae47b779": {
+      "ordinary_no_progress_guard": {
+        "fingerprint": "ordinary|fixed `bun run dev` for linux and verified the app starts. it’s currently running. the command now installs the correct electron binary using bun and applies `--no-sandbox` for linux development. lint and type-check pass. tests have 53 `localstorage` failures; the renderer also reports a separate shiki csp error. details: [bug documentation](/mnt/e/project/node/nekocode/docs/bugs/linux-dev-windows-electron-binary.md).",
+        "first_seen_at": "2026-10-01T06:46:50.522Z",
+        "last_seen_at": "2026-10-01T06:46:50.522Z",
+        "repeat_count": 1,
+        "last_turn_id": "01a0f629-2c70-7362-ba21-a9eefaf2cbe5",
+        "last_thread_id": null
+      }
+    }
+  }
+}
