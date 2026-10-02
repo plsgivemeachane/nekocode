@@ -17,6 +17,7 @@
 import { safeStorage } from 'electron'
 import { createLogger } from './logger'
 import type { AuthStorageBackend } from '@earendil-works/pi-coding-agent'
+import type { AuthOperationOptions } from '@earendil-works/pi-ai'
 
 const logger = createLogger('secure-key-store')
 
@@ -82,7 +83,7 @@ function decryptValue(maybeEncrypted: string): string {
  * Parses the JSON, encrypts the `key` field of `api_key` credentials and
  * relevant OAuth fields, then re-serializes.
  */
-function encryptAuthJson(jsonString: string): string {
+export function encryptAuthJson(jsonString: string): string {
   try {
     const data = JSON.parse(jsonString)
     for (const provider of Object.keys(data)) {
@@ -95,6 +96,12 @@ function encryptAuthJson(jsonString: string): string {
       }
       // OAuth tokens are also sensitive
       if (cred && cred.type === 'oauth') {
+        if (typeof cred.access === 'string' && !cred.access.startsWith(ENCRYPTED_PREFIX)) {
+          cred.access = encryptValue(cred.access)
+        }
+        if (typeof cred.refresh === 'string' && !cred.refresh.startsWith(ENCRYPTED_PREFIX)) {
+          cred.refresh = encryptValue(cred.refresh)
+        }
         if (typeof cred.accessToken === 'string' && !cred.accessToken.startsWith(ENCRYPTED_PREFIX)) {
           cred.accessToken = encryptValue(cred.accessToken)
         }
@@ -114,7 +121,7 @@ function encryptAuthJson(jsonString: string): string {
  * Decrypt all credential values in an auth.json string.
  * Parses the JSON, decrypts encrypted fields, then re-serializes for use by the Pi SDK.
  */
-function decryptAuthJson(jsonString: string): string {
+export function decryptAuthJson(jsonString: string): string {
   try {
     const data = JSON.parse(jsonString)
     let hasEncrypted = false
@@ -133,6 +140,27 @@ function decryptAuthJson(jsonString: string): string {
         }
       }
       if (cred && cred.type === 'oauth') {
+        if (typeof cred.access === 'string' && cred.access.startsWith(ENCRYPTED_PREFIX)) {
+          try {
+            cred.access = decryptValue(cred.access)
+            hasEncrypted = true
+          } catch {
+            // If decryption fails, remove the credential — user must re-auth
+            logger.warn(`Could not decrypt OAuth access token for ${provider} — removing`)
+            delete data[provider]
+            continue
+          }
+        }
+        if (typeof cred.refresh === 'string' && cred.refresh.startsWith(ENCRYPTED_PREFIX)) {
+          try {
+            cred.refresh = decryptValue(cred.refresh)
+            hasEncrypted = true
+          } catch {
+            // If decryption fails, remove the credential — user must re-auth
+            logger.warn(`Could not decrypt OAuth refresh token for ${provider} — removing`)
+            delete data[provider]
+          }
+        }
         if (typeof cred.accessToken === 'string' && cred.accessToken.startsWith(ENCRYPTED_PREFIX)) {
           try {
             cred.accessToken = decryptValue(cred.accessToken)
@@ -195,7 +223,7 @@ export function createEncryptedAuthStorage(
         return lockResult
       })
     },
-    withLockAsync<T>(fn: (current: string | undefined) => Promise<{ result: T; next?: string }>): Promise<T> {
+    withLockAsync<T>(fn: (current: string | undefined) => Promise<{ result: T; next?: string }>, options?: AuthOperationOptions): Promise<T> {
       return inner.withLockAsync(async (current) => {
         // Decrypt before passing to the SDK
         const decrypted = current ? decryptAuthJson(current) : current
@@ -205,7 +233,7 @@ export function createEncryptedAuthStorage(
           lockResult.next = encryptAuthJson(lockResult.next)
         }
         return lockResult
-      })
+      }, options)
     },
   }
 }
@@ -216,10 +244,10 @@ export function createEncryptedAuthStorage(
  *
  * Must be called after app.whenReady() in the main process.
  */
-export async function createSecureAuthStorage() {
+export async function createSecureAuthStorage(authPath?: string) {
   const { AuthStorage, FileAuthStorageBackend } = await import('@earendil-works/pi-coding-agent')
 
-  const fileBackend = new FileAuthStorageBackend()
+  const fileBackend = new FileAuthStorageBackend(authPath)
 
   if (isSafeStorageAvailable()) {
     logger.info('safeStorage available — API keys will be encrypted at rest')
@@ -227,6 +255,6 @@ export async function createSecureAuthStorage() {
     return AuthStorage.fromStorage(encryptedBackend)
   } else {
     logger.warn('safeStorage not available — API keys stored in plaintext. This is expected in development/CI.')
-    return AuthStorage.create()
+    return AuthStorage.create(authPath)
   }
 }

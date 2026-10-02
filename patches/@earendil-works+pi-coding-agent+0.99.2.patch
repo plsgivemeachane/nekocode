@@ -1,0 +1,129 @@
+diff --git a/node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js b/node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js
+index f62782a..d60e86e 100755
+--- a/node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js
++++ b/node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/loader.js
+@@ -34,21 +34,34 @@ function getVirtualModules() {
+  * In compiled binary mode, virtualModules is used instead.
+  */
+ let _aliases = null;
++let _aliasesKey = null;
+ function getAliases() {
+-    if (_aliases)
++    const contextKey = `${process.cwd()}|${process.env.NODE_PATH ?? ""}`;
++    if (_aliases && _aliasesKey === contextKey)
+         return _aliases;
+     const __dirname = path.dirname(fileURLToPath(import.meta.url));
+     const packageIndex = path.resolve(__dirname, "../..", "index.js");
+-    const typeboxEntry = require.resolve("typebox");
+-    const typeboxCompileEntry = require.resolve("typebox/compile");
+-    const typeboxValueEntry = require.resolve("typebox/value");
++    // Bundled workers provide TypeBox through virtualModules when disk resolution fails.
++    let typeboxEntry = "";
++    try { typeboxEntry = require.resolve("typebox"); } catch {}
++    // Bundled workers provide TypeBox through virtualModules when disk resolution fails.
++    let typeboxCompileEntry = "";
++    try { typeboxCompileEntry = require.resolve("typebox/compile"); } catch {}
++    // Bundled workers provide TypeBox through virtualModules when disk resolution fails.
++    let typeboxValueEntry = "";
++    try { typeboxValueEntry = require.resolve("typebox/value"); } catch {}
+     const packagesRoot = path.resolve(__dirname, "../../../../");
+     const resolveWorkspaceOrImport = (workspaceRelativePath, specifier) => {
+         const workspacePath = path.join(packagesRoot, workspaceRelativePath);
+         if (fs.existsSync(workspacePath)) {
+             return workspacePath;
+         }
+-        return fileURLToPath(import.meta.resolve(specifier));
++        try {
++            return fileURLToPath(import.meta.resolve(specifier));
++        } catch {
++            // Bundled workers resolve these packages through virtualModules.
++            return specifier;
++        }
+     };
+     const piCodingAgentEntry = packageIndex;
+     const piAgentCoreEntry = resolveWorkspaceOrImport("agent/dist/index.js", "@earendil-works/pi-agent-core");
+@@ -81,6 +94,7 @@ function getAliases() {
+         "@sinclair/typebox/compile": typeboxCompileEntry,
+         "@sinclair/typebox/value": typeboxValueEntry,
+     };
++    _aliasesKey = contextKey;
+     return _aliases;
+ }
+ let extensionCacheCwd;
+@@ -453,6 +467,25 @@ function isCurrentCacheToken(cacheToken) {
+         extensionCacheCwd === cacheToken.cwd &&
+         extensionCacheGeneration === cacheToken.generation);
+ }
++/**
++ * Properly extract the default export from a module, handling cases where
++ * the default export is explicitly null or undefined.
++ * This fixes the '(void 0) is not a function' error when loading extensions.
++ */
++function interopDefault(mod) {
++    // Handle non-objects (functions, primitives) directly
++    if (mod === null || typeof mod !== 'object') {
++        return mod;
++    }
++    // Check if the module has a 'default' key
++    for (const [key, value] of Object.entries(mod)) {
++        if (key === 'default') {
++            const defIsNil = value === null || value === undefined;
++            return defIsNil ? mod : value;
++        }
++    }
++    return mod;
++}
+ async function loadExtensionModule(extensionPath, cacheToken) {
+     if (isCurrentCacheToken(cacheToken)) {
+         const cachedFactory = extensionCache.get(extensionPath);
+@@ -472,9 +505,12 @@ async function loadExtensionModule(extensionPath, cacheToken) {
+     const jiti = createJitiImpl(import.meta.url, {
+         moduleCache: false,
+         ...resolutionOptions,
++        // NekoCode also bundles the SDK in Node workers: always use embedded dependencies.
++        virtualModules: await getVirtualModules(),
++        tryNative: false,
+     });
+     const module = await jiti.import(extensionPath, { default: true });
+-    const factory = module;
++    const factory = interopDefault(module);
+     if (typeof factory !== "function") {
+         return undefined;
+     }
+@@ -529,7 +565,8 @@ async function loadExtension(extensionPath, cwd, eventBus, runtime, cacheToken)
+     }
+     catch (err) {
+         const message = err instanceof Error ? err.message : String(err);
+-        return { extension: null, error: `Failed to load extension: ${message}` };
++        const stack = err instanceof Error ? err.stack : "";
++        return { extension: null, error: `Failed to load extension: ${message}${stack ? `\n${stack}` : ""}` };
+     }
+ }
+ /**
+diff --git a/node_modules/@earendil-works/pi-coding-agent/dist/index.d.ts b/node_modules/@earendil-works/pi-coding-agent/dist/index.d.ts
+index 045ddb2..6f25b20 100755
+--- a/node_modules/@earendil-works/pi-coding-agent/dist/index.d.ts
++++ b/node_modules/@earendil-works/pi-coding-agent/dist/index.d.ts
+@@ -41,4 +41,7 @@ export { convertToPng } from "./utils/image-convert.ts";
+ export { formatDimensionNote, type ResizedImage, resizeImage } from "./utils/image-resize.ts";
+ export { detectSupportedImageMimeTypeFromFile } from "./utils/mime.ts";
+ export { getPowerShellConfig, getShellConfig } from "./utils/shell.ts";
+-//# sourceMappingURL=index.d.ts.map
+\ No newline at end of file
++//# sourceMappingURL=index.d.ts.map
++// NekoCode retains the SDK credential backend to preserve encrypted storage and locking semantics.
++export { AuthStorage, FileAuthStorageBackend } from "./core/auth-storage.js";
++export type { AuthStorageBackend } from "./core/auth-storage.js";
+diff --git a/node_modules/@earendil-works/pi-coding-agent/dist/index.js b/node_modules/@earendil-works/pi-coding-agent/dist/index.js
+index c48934f..d14e6bd 100755
+--- a/node_modules/@earendil-works/pi-coding-agent/dist/index.js
++++ b/node_modules/@earendil-works/pi-coding-agent/dist/index.js
+@@ -50,4 +50,6 @@ export { formatDimensionNote, resizeImage } from "./utils/image-resize.js";
+ export { detectSupportedImageMimeTypeFromFile } from "./utils/mime.js";
+ // Shell utilities
+ export { getPowerShellConfig, getShellConfig } from "./utils/shell.js";
+-//# sourceMappingURL=index.js.map
+\ No newline at end of file
++//# sourceMappingURL=index.js.map
++// NekoCode retains the SDK credential backend to preserve encrypted storage and locking semantics.
++export { AuthStorage, FileAuthStorageBackend } from "./core/auth-storage.js";

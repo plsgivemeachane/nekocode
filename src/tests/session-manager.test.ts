@@ -40,6 +40,13 @@ function mockAssistantMessage(overrides: Partial<AssistantMessage> = {}): Assist
 function createMockSession(id?: string, initialActiveTools: string[] = ['read', 'write']) {
   const listeners: Array<(event: AgentSessionEvent) => void> = []
   let activeTools = [...initialActiveTools]
+  const modelRuntime = {
+    getAvailable: vi.fn(async () => [{ id: 'test-model', name: 'Test Model', provider: 'test-provider' }]),
+    getModel: vi.fn((provider: string, modelId: string) =>
+      provider === 'test-provider' && modelId === 'test-model'
+        ? { id: modelId, name: 'Test Model', provider }
+        : undefined),
+  }
   return {
     sessionId: id ?? `sdk-session-${Math.random().toString(36).slice(2, 10)}`,
     messages: [] as Message[],
@@ -58,6 +65,7 @@ function createMockSession(id?: string, initialActiveTools: string[] = ['read', 
       activeTools = [...toolNames]
     }),
     getContextUsage: vi.fn(() => ({ percent: 50, contextWindow: 200000 })),
+    modelRuntime,
     /** Simulate the SDK emitting an event */
     emit(event: AgentSessionEvent) {
       for (const fn of listeners) fn(event)
@@ -189,12 +197,39 @@ describe('PiSessionManager', () => {
       message: mockAssistantMessage(),
       assistantMessageEvent: { type: 'text_delta', delta: 'final', contentIndex: 0, partial: mockAssistantMessage() },
     })
-    mockSession().emit({ type: 'agent_end', messages: [] })
+    mockSession().emit({ type: 'agent_end', messages: [], willRetry: false })
 
     // Pending text should be flushed, then done
     expect(events).toHaveLength(2)
     expect(events[0].event).toEqual({ type: 'text_delta', delta: 'final' })
     expect(events[1].event).toEqual({ type: 'done' })
+  })
+
+  it('should defer done while the SDK is retrying after agent_end', async () => {
+    await manager.create('/tmp/project')
+
+    mockSession().emit({ type: 'agent_end', messages: [], willRetry: true })
+
+    expect(events).toEqual([])
+  })
+
+  it('should emit one done event when a retry settles without another agent_end', async () => {
+    await manager.create('/tmp/project')
+
+    mockSession().emit({ type: 'agent_end', messages: [], willRetry: true })
+    mockSession().emit({ type: 'agent_settled' })
+    mockSession().emit({ type: 'agent_settled' })
+
+    expect(events).toEqual([{ sessionId: expect.any(String), event: { type: 'done' } }])
+  })
+
+  it('should not emit a duplicate done when a normal agent end settles', async () => {
+    await manager.create('/tmp/project')
+
+    mockSession().emit({ type: 'agent_end', messages: [], willRetry: false })
+    mockSession().emit({ type: 'agent_settled' })
+
+    expect(events.filter(({ event }) => event.type === 'done')).toHaveLength(1)
   })
 
   it('should emit agent_start on turn_start for continued agent work', async () => {
@@ -246,7 +281,7 @@ describe('PiSessionManager', () => {
       message: mockAssistantMessage(),
       assistantMessageEvent: { type: 'text_delta', delta: ' world', contentIndex: 0, partial: mockAssistantMessage() },
     })
-    mockSession().emit({ type: 'agent_end', messages: [] })
+    mockSession().emit({ type: 'agent_end', messages: [], willRetry: false })
 
     const history = manager.getHistory(id)
     expect(history).toHaveLength(1)
@@ -278,7 +313,7 @@ describe('PiSessionManager', () => {
       result: 'file contents',
       isError: false,
     })
-    mockSession().emit({ type: 'agent_end', messages: [] })
+    mockSession().emit({ type: 'agent_end', messages: [], willRetry: false })
 
     const history = manager.getHistory(id)
     expect(history).toHaveLength(1)
@@ -293,6 +328,15 @@ describe('PiSessionManager', () => {
     const id = await manager.create('/tmp/project')
     const history = manager.getHistory(id)
     expect(history).toEqual([])
+  })
+
+  it('should use the session model runtime for available models', async () => {
+    await manager.create('/tmp/project')
+
+    await expect(manager.listModels()).resolves.toEqual([
+      { id: 'test-model', name: 'Test Model', provider: 'test-provider' },
+    ])
+    expect(mockSession().modelRuntime.getAvailable).toHaveBeenCalledOnce()
   })
 
   it('should flush pending text before tool_call events', async () => {
@@ -398,7 +442,7 @@ describe('PiSessionManager', () => {
       result: 'command not found: bad_command',
       isError: true,
     })
-    mockSession().emit({ type: 'agent_end', messages: [] })
+    mockSession().emit({ type: 'agent_end', messages: [], willRetry: false })
 
     const history = manager.getHistory(id)
     expect(history).toHaveLength(1)
@@ -530,5 +574,3 @@ describe('PiSessionManager', () => {
     expect(history[0].usage).toEqual({ inputTokens: 0, outputTokens: 0, totalCost: 0 })
   })
 })
-
-

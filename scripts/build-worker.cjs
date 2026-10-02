@@ -16,6 +16,7 @@ const projectRoot = path.resolve(__dirname, '..')
 const workerSrc = path.join(projectRoot, 'src/main/threading/worker-bootstrap.ts')
 // Output to a separate 'workers' directory that won't be wiped by electron-vite
 const workerOut = path.join(projectRoot, 'workers/worker-bootstrap.mjs')
+const sdkPackageName = '@earendil-works/pi-coding-agent'
 
 async function buildWorker() {
   console.log('[build-worker] Building worker-bootstrap.js...')
@@ -35,6 +36,8 @@ async function buildWorker() {
       target: 'node22',
       format: 'esm',
       sourcemap: false,
+      // Select upstream's embedded jiti/Babel loader for the bundled Node worker.
+      define: { PI_BUNDLED_NODE: 'true' },
       // Polyfill require, __filename, __dirname for bundled CJS code running in ESM context.
       // Without this, any bundled dependency that uses require('os') or similar
       // will throw "Dynamic require of X is not supported" at runtime.
@@ -105,16 +108,24 @@ var __dirname = __nekocode_banner_req('path').dirname(__filename);`,
  * - README.md, docs/, examples/ (pi_docs)
  * - CHANGELOG.md (pi_changelog)
  */
-function copySdkStaticAssets(targetDir) {
-  const sdkPkgDir = path.join(
-    projectRoot,
-    'node_modules/@mariozechner/pi-coding-agent'
-  )
+function copySdkStaticAssets(targetDir, sdkPkgDir = path.join(projectRoot, 'node_modules', sdkPackageName)) {
   const piPackageDir = path.join(targetDir, 'pi-package')
 
   if (!fs.existsSync(sdkPkgDir)) {
-    console.warn('[build-worker] SDK package not found, skipping static asset copy')
-    return
+    throw new Error(`[build-worker] SDK package not found at ${sdkPkgDir}`)
+  }
+
+  const expectedVersion = getPinnedSdkVersion()
+  const sdkPackageJsonPath = path.join(sdkPkgDir, 'package.json')
+  if (!fs.existsSync(sdkPackageJsonPath)) {
+    throw new Error(`[build-worker] SDK package metadata not found at ${sdkPackageJsonPath}`)
+  }
+  const sdkPackageJson = JSON.parse(fs.readFileSync(sdkPackageJsonPath, 'utf8'))
+  if (sdkPackageJson.name !== sdkPackageName || sdkPackageJson.version !== expectedVersion) {
+    throw new Error(
+      `[build-worker] SDK package metadata mismatch: expected ${sdkPackageName}@${expectedVersion}, ` +
+        `found ${sdkPackageJson.name}@${sdkPackageJson.version}`
+    )
   }
 
   // Clean previous copy
@@ -151,7 +162,24 @@ function copySdkStaticAssets(targetDir) {
     console.error('[build-worker] This will cause ENOENT errors when loading the worker.')
     process.exit(1)
   }
+  const copiedPackageJson = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'))
+  if (copiedPackageJson.name !== sdkPackageName || copiedPackageJson.version !== expectedVersion) {
+    throw new Error(
+      `[build-worker] Copied SDK metadata mismatch: expected ${sdkPackageName}@${expectedVersion}, ` +
+        `found ${copiedPackageJson.name}@${copiedPackageJson.version}`
+    )
+  }
   console.log('[build-worker] pi-package/package.json validation passed')
+  return { packageDir: piPackageDir, copied }
+}
+
+function getPinnedSdkVersion() {
+  const rootPackageJson = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'))
+  const pinnedVersion = rootPackageJson.dependencies?.[sdkPackageName]
+  if (!pinnedVersion || pinnedVersion.startsWith('^') || pinnedVersion.startsWith('~')) {
+    throw new Error(`[build-worker] ${sdkPackageName} must have an exact dependency pin in package.json`)
+  }
+  return pinnedVersion
 }
 
 function copyDirRecursive(src, dst) {
@@ -168,4 +196,12 @@ function copyDirRecursive(src, dst) {
   }
 }
 
-buildWorker()
+if (require.main === module) {
+  buildWorker()
+}
+
+module.exports = {
+  buildWorker,
+  copySdkStaticAssets,
+  getPinnedSdkVersion,
+}

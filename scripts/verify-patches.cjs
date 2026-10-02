@@ -40,6 +40,7 @@ function main() {
   }
 
   // Verify @aws-crypto patches exist (required for electron-builder traversal with Bun)
+  // Pi 0.99.2 no longer depends on these packages; retain their patches in archive.
   // These patches widen @smithy/util-utf8 from ^2.0.0 to >=2.0.0 to match the installed 4.x version.
   // See: docs/bugs/aws-crypto-smithy-version-mismatch.md
   const awsCryptoPatches = [
@@ -47,9 +48,9 @@ function main() {
     "@aws-crypto+sha256-browser+5.2.0.patch",
   ];
   for (const patchFile of awsCryptoPatches) {
-    const awsPatchPath = path.join(root, "patches", patchFile);
+    const awsPatchPath = path.join(root, "docs", "patches", "archive", patchFile);
     if (!fs.existsSync(awsPatchPath)) {
-      fail(`required patch file is missing: patches/${patchFile}`);
+      fail(`archived compatibility patch is missing: docs/patches/archive/${patchFile}`);
     }
   }
 

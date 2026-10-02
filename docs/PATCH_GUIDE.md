@@ -1,7 +1,7 @@
 # SDK Patch Guide: `@earendil-works/pi-coding-agent`
 
-> **Target version:** `0.75.3`  
-> **Patch file:** `patches/@earendil-works+pi-coding-agent+0.75.3.patch`  
+> **Target version:** `0.99.2`
+> **Patch file:** `patches/@earendil-works+pi-coding-agent+0.99.2.patch`
 > **Purpose:** Recreate the patch-package diff from this document alone.  
 > **Bug references:** `docs/bugs/extension-typebox-resolve-failure.md`, `docs/bugs/pi-extension-load-failure-bug.md`, `docs/bugs/extension-load-pi-agent-core-resolution-bug.md`
 
@@ -10,11 +10,16 @@
 ## Overview
 
 NekoCode bundles the Pi SDK (`@earendil-works/pi-coding-agent`) into a worker ESM file via esbuild.
-This creates several runtime failures that do not occur when the SDK runs normally from `node_modules/`.
+At `0.99.2`, upstream has added lazy jiti loading and embedded/source resolution branches. Keep
+those branches intact and apply only the equivalent fixes below where the installed loader still
+has the documented failure. The remaining failures do not occur when the SDK runs normally from
+`node_modules/`.
 The patches below fix those failures by modifying the SDK's **dist** files in `node_modules/` before
 `patch-package` captures the diff.
 
-All patches target **one file**: `dist/core/extensions/loader.js` (the extension loader).
+The extension fixes target `dist/core/extensions/loader.js`. Pi 0.99.2 also
+requires the credential compatibility exports in `dist/index.js` and
+`dist/index.d.ts` described at the end of this guide.
 Source maps (`.map`) and declaration maps (`.d.ts.map`) should be regenerated or deleted after patching
 — they are cosmetic and do not affect runtime.
 
@@ -201,13 +206,13 @@ return typeof factory !== "function" ? undefined : factory;
 
 ---
 
-## Patch 4 — Always provide `virtualModules`
+## Patch 4 — Provide `virtualModules` for the bundled worker
 
 ### Problem
 
-The original code only passes `virtualModules` in Bun binary mode. In the NekoCode worker (Node.js
-ESM bundle), jiti falls back to filesystem resolution, which fails because bundled packages don't
-exist on disk.
+Pi 0.99.2 now selects `resolutionOptions` for embedded, TypeScript-source, and normal Node
+runtimes. NekoCode's bundled Node worker still needs the embedded module table even when the
+upstream branch selected aliases; otherwise jiti falls back to filesystem resolution.
 
 ### File
 
@@ -215,26 +220,25 @@ Same file: `node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/lo
 
 ### Locate
 
-Inside `loadExtensionModule`, the jiti creation:
+Inside `loadExtensionModule`, locate the upstream jiti creation:
 
 ```js
-const jiti = createJiti(import.meta.url, {
+const jiti = createJitiImpl(import.meta.url, {
     moduleCache: false,
-    ...(isBunBinary ? { virtualModules: VIRTUAL_MODULES, tryNative: false } : { alias: getAliases() }),
+    ...resolutionOptions,
 });
 ```
 
 ### Replace with
 
 ```js
-const jiti = createJiti(import.meta.url, {
+const jiti = createJitiImpl(import.meta.url, {
     moduleCache: false,
+    ...resolutionOptions,
     // Always provide virtualModules so core packages resolve deterministically.
-    // In Node/dev we keep aliases for non-bundled paths, but disable tryNative so
-    // jiti resolves imports consistently instead of mixing native/module paths.
-    virtualModules: VIRTUAL_MODULES,
+    // NekoCode also bundles the SDK in Node workers: always use embedded dependencies.
+    virtualModules: await getVirtualModules(),
     tryNative: false,
-    ...(isBunBinary ? {} : { alias: getAliases() }),
 });
 ```
 
@@ -392,9 +396,9 @@ for (const d of fs.readdirSync('node_modules')) {
 Update the stale pins in `package.json` `resolutions` to the latest versions. Check latest with:
 
 ```bash
-npm view @aws-sdk/core version
-npm view @aws-sdk/nested-clients version
-npm view @aws-sdk/types version
+# Resolve versions with Bun, then inspect the installed package metadata.
+bun install
+node -e "for (const n of ['@aws-sdk/core','@aws-sdk/nested-clients','@aws-sdk/types']) console.log(n, require('./node_modules/'+n+'/package.json').version)"
 ```
 
 ### Recurrence history
@@ -411,13 +415,24 @@ npm view @aws-sdk/types version
 
 ## Regenerating the patch file
 
-After applying all edits to `node_modules/@earendil-works/pi-coding-agent/`:
+After copying the pristine package into a temporary Git repository, apply all edits there:
 
 ```bash
-bunx patch-package @earendil-works/pi-coding-agent
+tmp_dir=$(mktemp -d)
+git -C "$tmp_dir" init
+mkdir -p "$tmp_dir/node_modules/@earendil-works"
+cp -a node_modules/@earendil-works/pi-coding-agent \
+  "$tmp_dir/node_modules/@earendil-works/"
+git -C "$tmp_dir" add node_modules
+git -C "$tmp_dir" -c user.name=patch -c user.email=patch@example.invalid commit -m pristine
+# Apply the edits above under "$tmp_dir/node_modules/...", then:
+git -C "$tmp_dir" diff -- node_modules/@earendil-works/pi-coding-agent \
+  > patches/@earendil-works+pi-coding-agent+0.99.2.patch
+rm -rf "$tmp_dir"
 ```
 
-This creates/updates `patches/@earendil-works+pi-coding-agent+0.75.3.patch`.
+This creates/updates `patches/@earendil-works+pi-coding-agent+0.99.2.patch`. Do not generate an
+`npm` lockfile; keep `bun.lock` and regenerate it only with `bun install` after manifest changes.
 
 > **Important:** Delete `.map` files from the patch if they bloat the diff. Source maps are not
 > needed at runtime and can be regenerated. The patch file should ideally contain only `.js` and
@@ -429,7 +444,7 @@ This creates/updates `patches/@earendil-works+pi-coding-agent+0.75.3.patch`.
 
 After patching:
 
-1. `bun run build-worker` — worker builds without errors
+1. `bun run build:worker` — worker builds without errors
 2. `bun run test` — all tests pass
 3. `bun run lint` — no lint errors
 4. `bun run type-check` — type check passes
@@ -437,3 +452,28 @@ After patching:
 6. `bun run package:local` — electron-builder packages successfully (validates `@aws-crypto` patches AND resolution pins)
 7. Launch app -> extensions load successfully (check console for `Extensions loaded: N` with no errors)
 8. Session reconnect works without `Cannot find module 'typebox'` or `Cannot find package '@earendil-works/pi-agent-core'`
+
+## Pi 0.99.2 credential compatibility exports
+
+Upstream still implements `AuthStorage`, `FileAuthStorageBackend`, and
+`AuthStorageBackend` in `dist/core/auth-storage.*`, but no longer exports them
+from its root. NekoCode's patch restores the first two value exports in
+`dist/index.js` and `dist/index.d.ts`, plus the backend type export in
+`dist/index.d.ts`. This lets the existing encrypted backend retain upstream's
+command/environment key resolution, concurrent locking, and cancellation
+behavior rather than implementing a separate file credential store.
+
+```js
+export { AuthStorage, FileAuthStorageBackend } from "./core/auth-storage.js";
+```
+
+```ts
+export type { AuthStorageBackend } from "./core/auth-storage.js";
+```
+
+Include these pristine entrypoint files alongside the loader when generating
+this version's temporary Git diff. Session model APIs still migrate to the
+new `ModelRuntime` and public `CredentialStore` contract.
+
+For 0.99.2, the AWS crypto patches are preserved in `docs/patches/archive/`;
+these packages no longer occur in `bun.lock`. Only the Pi patch is active.

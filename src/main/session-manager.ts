@@ -1,4 +1,4 @@
-import { SessionManager as SdkSessionManager } from '@earendil-works/pi-coding-agent'
+import { ModelRuntime, SessionManager as SdkSessionManager } from '@earendil-works/pi-coding-agent'
 import type { AgentSession, AgentSessionEvent } from '@earendil-works/pi-coding-agent'
 import type { TextContent } from '@earendil-works/pi-ai'
 import { unlinkSync, readFileSync, existsSync } from 'fs'
@@ -37,6 +37,8 @@ interface ManagedSession {
   previousFileContent: Map<string, string>
   /** Electron-specific UI context for forwarding extension UI requests to renderer */
   uiContext: ElectronUIContext
+  /** Whether an agent_end retry is waiting for terminal settlement before done. */
+  awaitingRetrySettlement: boolean
 }
 
 /** Callback type for emitting events to the renderer */
@@ -372,25 +374,22 @@ export class PiSessionManager {
 
   /** List all available models with valid API keys. */
   async listModels(): Promise<ModelInfo[]> {
-    let modelRegistry: import('@earendil-works/pi-coding-agent').ModelRegistry | null = null
+    let modelRuntime: ModelRuntime | null = null
     for (const [, managed] of this.sessions) {
-      modelRegistry = managed.session.modelRegistry
+      modelRuntime = managed.session.modelRuntime
       break
     }
-    if (!modelRegistry) {
-      const { ModelRegistry } = await import('@earendil-works/pi-coding-agent')
-      const authStorage = await createSecureAuthStorage()
-      modelRegistry = ModelRegistry.create(authStorage)
+    if (!modelRuntime) {
+      modelRuntime = await ModelRuntime.create({ credentials: await createSecureAuthStorage() })
     }
-    const available = modelRegistry.getAvailable()
+    const available = await modelRuntime.getAvailable()
     return available.map((m) => ({ id: m.id, name: m.name, provider: m.provider }))
   }
 
   /** Set the model for a session. */
   async setModel(sessionId: string, provider: string, modelId: string): Promise<ModelInfo> {
     const managed = this.getManaged(sessionId)
-    const modelRegistry = managed.session.modelRegistry
-    const model = modelRegistry.find(provider, modelId)
+    const model = managed.session.modelRuntime.getModel(provider, modelId)
     if (!model) {
       throw new Error(`Model not found: ${provider}/${modelId}`)
     }
@@ -446,6 +445,7 @@ export class PiSessionManager {
       hasPrompted: false,
       usageTotals: { input: 0, output: 0, totalCost: 0 },
       uiContext,
+      awaitingRetrySettlement: false,
     }
 
     // Bind the ElectronUIContext to the session's extension runner
@@ -675,7 +675,18 @@ export class PiSessionManager {
         this.finalizeThinkingMessage(managed)
         this.finalizeAssistantMessage(managed)
         logger.debug(`agent_end: total accumulated messages=${managed.messages.length}`)
-        emit({ type: 'done' })
+        if (!event.willRetry) {
+          managed.awaitingRetrySettlement = false
+          emit({ type: 'done' })
+        } else {
+          managed.awaitingRetrySettlement = true
+        }
+        break
+      case 'agent_settled':
+        if (managed.awaitingRetrySettlement) {
+          managed.awaitingRetrySettlement = false
+          emit({ type: 'done' })
+        }
         break
       case 'turn_start': {
         // A new turn is starting (e.g. after tool execution).

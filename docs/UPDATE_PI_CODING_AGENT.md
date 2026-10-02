@@ -1,6 +1,6 @@
 # Update Pipeline: `@earendil-works/pi-coding-agent`
 
-> **Purpose:** Step-by-step procedure to update the Pi SDK dependency to the latest version
+> **Purpose:** Step-by-step procedure to update the Pi SDK dependency to the target version
 > and re-apply NekoCode's patches.  
 > **Package:** `@earendil-works/pi-coding-agent`  
 > **Patch tool:** `patch-package` (via `bunx`)  
@@ -17,7 +17,7 @@
 ## Prerequisites
 
 - Bun installed (`bun --version`)
-- Node.js installed (`node --version`) — needed for `npm` commands
+- Node.js installed (`node --version`) — needed by the build and verification scripts
 - Clean git working tree (commit or stash any pending changes)
 
 ---
@@ -26,10 +26,11 @@
 
 ### Step 1 — Remove old artifacts
 
-Delete lockfiles and `node_modules` to start from a clean slate:
+Remove only the installed dependency tree and any generated npm lockfile. Keep `bun.lock` so
+unrelated resolutions and the rest of the dependency graph remain stable:
 
 ```bash
-rm -f package-lock.json bun.lock
+rm -f package-lock.json
 rm -rf node_modules
 ```
 
@@ -53,10 +54,10 @@ Edit the `dependencies` entry:
 "@earendil-works/pi-coding-agent": "<NEW_VERSION>"
 ```
 
-You can find the latest version on npm:
+Confirm the installed target version after `bun install`:
 
 ```bash
-npm view @earendil-works/pi-coding-agent version
+node -e "console.log(require('./node_modules/@earendil-works/pi-coding-agent/package.json').version)"
 ```
 
 ### Step 4 — Install dependencies with Bun
@@ -71,6 +72,10 @@ will run cleanly — there is no stale patch to mismatch.
 
 ### Step 5 — Apply patches manually
 
+Before editing, create the pristine temporary checkout using the setup commands
+in Step 7. Apply the edits there, or copy the edited files there after the
+pristine commit. Never use already-patched files as the pristine baseline.
+
 You have two options:
 
 #### Option A — Use PATCH_GUIDE.md (preferred for major version bumps)
@@ -83,7 +88,7 @@ Each patch section has a **Locate** and **Replace with** block. Apply them in or
 1. Patch 1 — TypeBox `require.resolve` try/catch
 2. Patch 2 — `resolveWorkspaceOrImport` try/catch
 3. Patch 3 — `interopDefault` helper
-4. Patch 4 — Always provide `virtualModules`
+4. Patch 4 — Provide `virtualModules` for the bundled worker (preserve 0.99.2 resolution branches)
 5. Patch 5 — Extension error stack traces
 
 #### Option B — Port from old patch file (faster for minor bumps)
@@ -94,18 +99,7 @@ and manually apply the same edits to the new version's file.
 
 Verify the edits are correct by checking that the surrounding code context matches.
 
-### Step 6 — Generate `package-lock.json` with npm
-
-`patch-package` has known issues generating patches from Bun's resolution.
-Create a `package-lock.json` using npm so `patch-package` can compute the diff correctly:
-
-```bash
-npm install --package-lock-only
-```
-
-> **Do NOT commit `package-lock.json`.** It is only needed temporarily for patch generation.
-
-### Step 7 — Delete old patch file
+### Step 6 — Delete old patch file
 
 Delete the old patch file that was moved to `/tmp/` in Step 2:
 
@@ -113,15 +107,31 @@ Delete the old patch file that was moved to `/tmp/` in Step 2:
 rm /tmp/@earendil-works+pi-coding-agent+OLD_VERSION.patch
 ```
 
-### Step 8 — Generate new patch file
+### Step 7 — Generate new patch file
+
+Generate the replacement patch from pristine package files in a temporary Git repository. This
+avoids relying on npm's lockfile format and makes the patch paths relative to `node_modules/`:
 
 ```bash
-bunx patch-package @earendil-works/pi-coding-agent
+tmp_dir=$(mktemp -d)
+git -C "$tmp_dir" init
+mkdir -p "$tmp_dir/node_modules/@earendil-works"
+cp -a node_modules/@earendil-works/pi-coding-agent \
+  "$tmp_dir/node_modules/@earendil-works/"
+git -C "$tmp_dir" add node_modules
+git -C "$tmp_dir" -c user.name=patch -c user.email=patch@example.invalid commit -m pristine
+# Run the commands above BEFORE Step 5 edits.
+# Apply the documented edits in the temporary checkout, then:
+git -C "$tmp_dir" diff -- node_modules/@earendil-works/pi-coding-agent \
+  > patches/@earendil-works+pi-coding-agent+NEW_VERSION.patch
+rm -rf "$tmp_dir"
 ```
 
-This creates `patches/@earendil-works+pi-coding-agent+NEW_VERSION.patch`.
+The resulting patch must contain paths rooted at `node_modules/@earendil-works/pi-coding-agent/`.
+Do not generate or commit `package-lock.json`; regenerate `bun.lock` with `bun install` only when
+the manifest actually changed.
 
-### Step 9 — Verify the patch
+### Step 8 — Verify the patch
 
 Run the patch verification script and full test suite:
 
@@ -130,19 +140,19 @@ bun run verify:patches
 bun run test
 bun run lint
 bun run type-check
-bun run build-worker
+bun run build:worker
 ```
 
 All commands must pass. If any fail, re-check the manual edits from Step 5.
 
-### Step 9b — Verify `@aws-crypto` patches still apply
+### Step 8b — Verify `@aws-crypto` patches still apply
 
 The Pi SDK update may pull in different transitive `@aws-sdk` / `@aws-crypto` versions.
 After `bun install`, verify that the existing `@aws-crypto` patches still apply and that the
 electron-builder build succeeds:
 
 ```bash
-bunx patch-package           # should show all 3 patches applying ✔
+bunx patch-package --error-on-fail # active Pi patch must apply cleanly
 bun run package:local        # must complete without "production dependency not found"
 ```
 
@@ -158,15 +168,7 @@ If the versions changed from `5.2.0`, rename the patch files accordingly and upd
 `scripts/verify-patches.cjs`. See `docs/bugs/aws-crypto-smithy-version-mismatch.md` for the
 full diagnostic and patch generation procedure.
 
-### Step 10 — Cleanup
-
-Remove the temporary `package-lock.json`:
-
-```bash
-rm -f package-lock.json
-```
-
-### Step 11 — Documentation
+### Step 9 — Documentation
 
 1. Update the **target version** at the top of `docs/PATCH_GUIDE.md`:
    ```
@@ -192,26 +194,26 @@ rm -f package-lock.json
 
 | Step | Command | Purpose |
 |------|---------|---------|
-| 1 | `rm -f package-lock.json bun.lock && rm -rf node_modules` | Clean slate |
+| 1 | `rm -f package-lock.json && rm -rf node_modules` | Clean installed tree |
 | 2 | `mv patches/...OLD_VERSION.patch /tmp/` | Move stale patch out |
 | 3 | Edit `package.json` version | Target new version |
 | 4 | `bun install` | Install deps (postinstall runs cleanly) |
 | 5 | Manual edits per `PATCH_GUIDE.md` | Apply patches |
-| 6 | `npm install --package-lock-only` | Generate lockfile for patch-package |
-| 7 | `rm /tmp/...OLD_VERSION.patch` | Delete old patch |
-| 8 | `bunx patch-package @earendil-works/pi-coding-agent` | Generate new patch |
-| 9 | `bun run verify:patches && bun run test && bun run lint && bun run type-check` | Validate |
-| 9b | `bunx patch-package && bun run package:local` | Verify @aws-crypto patches + build |
-| 10 | `rm -f package-lock.json` | Cleanup |
-| 11 | Update docs, commit | Document & ship |
+| 6 | `rm /tmp/...OLD_VERSION.patch` | Delete old patch |
+| 7 | Temporary Git repo + `git diff -- node_modules/...` | Generate new patch |
+| 8 | `bun run verify:patches && bun run test && bun run lint && bun run type-check` | Validate |
+| 8b | `bunx patch-package && bun run package:local` | Verify @aws-crypto patches + build |
+| 9 | Update docs, commit | Document & ship |
 
 ---
 
 ## Troubleshooting
 
-### `patch-package` fails with "No such file or directory"
+### The generated patch has incorrect paths
 
-Ensure `package-lock.json` exists (Step 6). `patch-package` requires it to resolve package paths.
+Regenerate it from the pristine temporary Git repository and pass an explicit pathspec rooted at
+`node_modules/@earendil-works/pi-coding-agent/`. Do not introduce a `package-lock.json` just for
+patch generation.
 
 ### Patch doesn't apply cleanly after version bump
 
@@ -226,7 +228,7 @@ to re-apply patches against the new source, then regenerate.
    - `try/catch` around `import.meta.resolve()`
    - `interopDefault` function
    - `virtualModules: VIRTUAL_MODULES` in jiti config
-3. Run `bun run build-worker` and check for build errors
+3. Run `bun run build:worker` and check for build errors
 
 ### `electron-builder` fails with "production dependency not found"
 
@@ -244,3 +246,38 @@ ls node_modules/@aws-crypto/*/package.json | ForEach-Object { $_; node -e "const
 # 3. Generate patches via temp git repo (see bug doc)
 # 4. Update scripts/verify-patches.cjs with new version strings
 ```
+
+### Offline bundled-worker smoke validation
+
+After building the worker, run `node scripts/smoke-worker.cjs`. This creates an
+isolated temporary agent directory and project, loads a TypeScript extension
+through the bundled SDK, and verifies session creation/reconnect, model
+selection, deterministic offline streaming, and extension UI round trips.
+For Pi 0.99.2 the worker build must define `PI_BUNDLED_NODE: true` so jiti embeds
+its Babel transform. On Node 26, use
+`NODE_OPTIONS=--no-experimental-webstorage bun run test` to avoid global Web
+Storage shadowing jsdom's localStorage.
+
+### Linux host validation limitation
+
+On a host without Wine, `bun run package:local` completes Vite/worker builds and
+production dependency traversal but fails while editing the Windows executable
+with `wine is required`. Run
+`bun run package:local --dir -c.win.signAndEditExecutable=false` to validate an
+unsigned unpacked Windows artifact. This fallback does not validate NSIS or
+portable installers; full installer validation still requires Windows or Wine.
+
+The existing threaded-auth limitation remains: worker runtimes read their SDK
+credential file directly and cannot decrypt Electron safeStorage values written
+by the main process. This predates the upgrade; the offline smoke test does not
+validate real encrypted credentials or provider login. A main-process credential
+bridge is separate work. The restored backend exports preserve the main-process
+encrypted adapter without changing this existing worker boundary.
+
+### Archived AWS crypto patches in 0.99.2
+
+The new locked dependency graph no longer contains `@aws-crypto/util` or
+`@aws-crypto/sha256-browser`. Their original 5.2.0 patches are preserved under
+`docs/patches/archive/`, outside patch-package's active directory. If a future SDK
+reintroduces these packages, restore the appropriate patches to `patches/`
+and revalidate their versions and dependency ranges before building.

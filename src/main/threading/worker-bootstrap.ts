@@ -53,9 +53,9 @@ async function importSdk(): Promise<typeof import('@earendil-works/pi-coding-age
         'Available exports: ' + Object.keys(module).join(', ')
       )
     }
-    if (!module.ModelRegistry) {
+    if (!module.ModelRuntime) {
       throw new Error(
-        'SDK module loaded but ModelRegistry is undefined. ' +
+        'SDK module loaded but ModelRuntime is undefined. ' +
         'Available exports: ' + Object.keys(module).join(', ')
       )
     }
@@ -89,6 +89,8 @@ interface ManagedSession {
   usageTotals: { input: number; output: number; totalCost: number }
   /** Electron-specific UI context for forwarding extension UI requests to renderer */
   uiContext: import('../electron-ui-context').ElectronUIContext
+  /** Whether an agent_end retry is waiting for terminal settlement before done. */
+  awaitingRetrySettlement: boolean
 }
 
 // Active sessions in this worker
@@ -283,7 +285,19 @@ function handleAgentEvent(sessionId: string, event: AgentSessionEvent, managed: 
       finalizeThinkingMessage(managed)
       finalizeAssistantMessage(managed)
       logger.debug(`agent_end: total messages=${managed.messages.length}`)
-      emitEvent(sessionId, { type: 'done' })
+      if (!event.willRetry) {
+        managed.awaitingRetrySettlement = false
+        emitEvent(sessionId, { type: 'done' })
+      } else {
+        managed.awaitingRetrySettlement = true
+      }
+      break
+    }
+    case 'agent_settled': {
+      if (managed.awaitingRetrySettlement) {
+        managed.awaitingRetrySettlement = false
+        emitEvent(sessionId, { type: 'done' })
+      }
       break
     }
     case 'turn_start': {
@@ -633,16 +647,17 @@ async function handleSessionLoadHistoryDisk(input: {
 async function handleSessionListModels(): Promise<{ models: Array<{ id: string; name: string; provider: string }> }> {
   logger.debug('Listing available models')
 
-  const { ModelRegistry, AuthStorage } = await importSdk()
+  const { ModelRuntime } = await importSdk()
   // Security note: Worker threads cannot access Electron safeStorage.
   // Auth keys on disk are encrypted by the main process; the worker reads
   // plaintext via AuthStorage which handles decryption internally through the
   // file backend. If safeStorage encryption is enabled, the main process
   // must migrate keys on first access.
-  const authStorage = AuthStorage.create()
-  const modelRegistry = ModelRegistry.create(authStorage)
+  // In SDK 0.99.2, ModelRuntime owns this credential-store integration; the
+  // worker still uses the configured file-backed credentials for model lookup.
+  const modelRuntime = await ModelRuntime.create()
 
-  const available = modelRegistry.getAvailable()
+  const available = await modelRuntime.getAvailable()
   const models = available.map(m => ({
     id: m.id,
     name: m.name,
@@ -667,7 +682,7 @@ async function handleSessionSetModel(input: {
     throw new Error(`Session not found: ${input.sessionId}`)
   }
 
-  const model = managed.session.modelRegistry.find(input.provider, input.modelId)
+  const model = managed.session.modelRuntime.getModel(input.provider, input.modelId)
   if (!model) {
     throw new Error(`Model not found: ${input.provider}/${input.modelId}`)
   }
@@ -934,6 +949,7 @@ async function wrapSession(
     currentToolCallId: null,
     usageTotals: { input: 0, output: 0, totalCost: 0 },
     uiContext,
+    awaitingRetrySettlement: false,
   }
 
   // Bind the ElectronUIContext to the session's extension runner
