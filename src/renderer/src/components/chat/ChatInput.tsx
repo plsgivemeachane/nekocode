@@ -2,11 +2,7 @@ import React, { useRef, useState, useCallback, useImperativeHandle, forwardRef, 
 import { useCommands } from '../../hooks/useCommands'
 import { CommandPalette } from './CommandPalette'
 import { Textarea } from '../ui/textarea'
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-} from '../ui/popover'
+import { ModelSelector } from './ModelSelector'
 import type { CommandInfo } from '../../../../shared/ipc-types'
 import { createLogger } from '../../utils/logger'
 
@@ -69,7 +65,6 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
 }, ref) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const inputContainerRef = useRef<HTMLDivElement>(null)
-  const [showModelDropdown, setShowModelDropdown] = useState(false)
   const [showCommandPalette, setShowCommandPalette] = useState(false)
 
   // Fetch available commands for the current session
@@ -89,6 +84,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
   }), [])
 
   // Click-outside for model dropdown handled by Radix Popover
+  // The replacement model modal delegates dismissal and focus management to Radix Dialog.
 
   const resetHeight = useCallback(() => {
     if (textareaRef.current) {
@@ -211,7 +207,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
   }, [])
 
   return (
-    <footer className="px-6 py-2 bg-surface-950">
+    <footer className="shrink-0 min-w-0 px-3 sm:px-4 lg:px-6 py-2 bg-surface-950">
       <div className="max-w-3xl mx-auto">
         <form onSubmit={handleSubmit}>
           <div
@@ -227,45 +223,18 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
               placeholder={isAgentConnecting ? 'Agent starting, please wait...' : 'Ask anything, @tag files/folders, or type / for commands'}
               disabled={!sessionId || isStreaming || isAgentConnecting}
               rows={1}
-              className="w-full bg-transparent dark:bg-transparent text-sm text-text-primary placeholder:text-text-tertiary/50 focus-visible:ring-0 focus-visible:border-transparent border-0 shadow-none rounded-none min-h-0 p-0 disabled:opacity-40 disabled:cursor-not-allowed resize-none overflow-y-auto leading-relaxed field-sizing-none"
+              className="w-full bg-transparent dark:bg-transparent text-sm text-text-primary placeholder:text-text-tertiary/50 focus-visible:ring-0 focus-visible:border-transparent border-0 shadow-none rounded-none min-h-0 max-h-[min(200px,20vh)] p-0 disabled:opacity-40 disabled:cursor-not-allowed resize-none overflow-y-auto leading-relaxed field-sizing-none"
             />
-            <div className="flex items-center pt-5">
-              <div className="flex items-center gap-0 text-xs text-text-secondary">
-                <div className="relative">
-                  <Popover open={showModelDropdown} onOpenChange={(open) => setShowModelDropdown(open)}>
-                    <PopoverTrigger asChild>
-                      <button type="button" className="flex items-center gap-1.5 px-1.5 py-2 rounded-none transition-colors duration-150 border border-transparent hover:border-surface-600">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-accent-400">
-                          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5"/>
-                          <path d="M8 12h8M12 8v8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                        </svg>
-                        <span>{activeModel ? activeModel.name : "Loading..."}</span>
-                        <svg width="10" height="10" viewBox="0 0 10 10" className="text-text-tertiary"><path d="M3 4l2 2 2-2" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent
-                      align="start"
-                      side="top"
-                      className="w-56 bg-surface-800 border-surface-700 rounded-lg shadow-xl p-2 max-h-64 overflow-y-auto"
-                    >
-                      {(() => {
-                        const visibleModels = modelList.filter(m => !["anthropic", "google", "openai"].includes(m.provider))
-                        return visibleModels.length > 0 ? visibleModels.map(m => (
-                          <button
-                            key={`${m.provider}:${m.id}`}
-                            type="button"
-                            onClick={() => { setModel(m.provider, m.id); setShowModelDropdown(false) }}
-                            className={`w-full text-left px-3.5 py-2 text-xs hover:bg-surface-700 transition-colors flex items-center justify-between rounded-md border border-transparent hover:border-surface-600 ${activeModel?.id === m.id && activeModel?.provider === m.provider ? "text-accent-400" : "text-text-secondary"}`}
-                          >
-                            <span>{m.name}</span>
-                            <span className="text-text-tertiary text-[10px] ml-2">{m.provider}</span>
-                          </button>
-                        )) : (
-                          <div className="px-3 py-2 text-xs text-text-tertiary">No models configured</div>
-                        )
-                      })()}
-                    </PopoverContent>
-                  </Popover>
+            <div className="flex min-w-0 items-center pt-3 lg:pt-5">
+              <div className="flex min-w-0 max-w-full items-center gap-0 text-xs text-text-secondary">
+                <div className="relative min-w-0 max-w-full">
+                  <ModelSelector
+                    key={sessionId}
+                    activeModel={activeModel}
+                    modelList={modelList}
+                    setModel={setModel}
+                    disabled={!sessionId || isAgentConnecting}
+                  />
                 </div>
               </div>
             </div>
@@ -309,15 +278,15 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
           onClose={() => setShowCommandPalette(false)}
           recentCommandNames={recentCommandNames}
         />
-        <div className="flex items-center justify-between mt-2 px-1">
-          <span className="flex items-center gap-1.5 text-[11px] text-text-tertiary truncate max-w-[260px]">
+        <div className="flex min-w-0 items-center justify-between gap-2 mt-2 px-1">
+          <span className="flex items-center gap-1.5 text-[11px] text-text-tertiary min-w-0 truncate max-w-[260px]">
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
               <path d="M2 4h12M2 4v8a2 2 0 002 2h8a2 2 0 002-2V4M2 4l2-2h8l2 2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
             {projectPath}
           </span>
-          <span className="flex items-center gap-1 text-[11px] text-text-tertiary">
-            {gitBranch ?? "..."}
+          <span className="flex min-w-0 max-w-[40%] items-center gap-1 text-[11px] text-text-tertiary">
+            <span className="truncate">{gitBranch ?? "..."}</span>
             <svg width="10" height="10" viewBox="0 0 10 10"><path d="M3 4l2 2 2-2" stroke="currentColor" strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </span>
         </div>

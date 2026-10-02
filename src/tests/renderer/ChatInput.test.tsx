@@ -221,6 +221,8 @@ describe("ChatInput", () => {
     await user.click(screen.getByText("Test Model"))
 
     // Model dropdown should show other model names
+    // Choose the provider in the replacement modal before browsing its models.
+    await user.click(screen.getByRole("button", { name: "other" }))
     expect(screen.getByText("Other Model")).toBeInTheDocument()
   })
 
@@ -230,20 +232,17 @@ describe("ChatInput", () => {
     renderChatInput({ setModel })
 
     await user.click(screen.getByText("Test Model"))
+    await user.click(screen.getByRole("button", { name: "other" }))
     await user.click(screen.getByText("Other Model"))
 
     expect(setModel).toHaveBeenCalledWith("other", "model-2")
   })
 
-  it("shows no models configured message when no custom models available", async () => {
+  it("shows no models configured message when no models are available", async () => {
     const user = userEvent.setup()
     // Only default providers, which are filtered out
-    renderChatInput({
-      modelList: [
-        { id: "m1", name: "Claude", provider: "anthropic" },
-        { id: "m2", name: "GPT", provider: "openai" },
-      ],
-    })
+    // The modal now includes default providers; this empty state requires an empty list.
+    renderChatInput({ modelList: [] })
 
     await user.click(screen.getByText("Test Model"))
     expect(screen.getByText("No models configured")).toBeInTheDocument()
