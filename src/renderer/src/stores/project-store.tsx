@@ -355,7 +355,7 @@ interface ProjectStoreAPI {
   setRightSidebarWidth: (width: number) => void
   setLeftSidebarWidth: (width: number) => void
   reconnectSession: (sessionId: string, projectPath: string) => Promise<void>
-  createSession: (projectPath: string) => Promise<void>
+  createSession: (projectPath: string, initialPrompt?: string) => Promise<void>
   refreshSessions: (projectId: string) => Promise<void>
   refreshSessionMessages: (sessionId: string) => void
   preloadSession: (sessionId: string, projectPath: string) => void

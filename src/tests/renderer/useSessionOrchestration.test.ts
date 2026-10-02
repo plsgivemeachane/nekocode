@@ -61,6 +61,7 @@ function setupNekocode(overrides: Record<string, unknown> = {}) {
         extensionsDisabled: false,
       }),
       loadHistory: overrides.loadHistory ?? vi.fn().mockResolvedValue([]),
+      prompt: overrides.prompt ?? vi.fn().mockResolvedValue(undefined),
     },
   })
 }
@@ -196,6 +197,81 @@ describe("useSessionOrchestration", () => {
   })
 
   describe("createSession", () => {
+    it("creates a fresh prompted session even when an empty draft is active", async () => {
+      const prompt = vi.fn().mockImplementation(async (id, text) => {
+        expect(id).toBe(SESSION_ID)
+        expect(text).toBe('Auto commit test')
+        expect(dispatch).toHaveBeenCalledWith({ type: 'SET_GIT_OVERLAY', show: false })
+        expect(dispatch).toHaveBeenCalledWith({ type: 'SET_ACTIVE_VIEW', view: 'chat' })
+        expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'PRELOAD_HISTORY', sessionId: SESSION_ID }))
+      })
+      setupNekocode({ prompt })
+      const { createSession, draftSessionsRef } = runInHookScope(() =>
+        useSessionOrchestration({ dispatch, activeSessionId: 'old-draft', activeProjectPath: PROJECT_PATH }),
+      )
+      draftSessionsRef.current.set('old-draft', PROJECT_PATH)
+      await createSession(PROJECT_PATH, 'Auto commit test')
+      expect(window.nekocode.session.create).toHaveBeenCalledWith(PROJECT_PATH)
+      expect(window.nekocode.session.loadHistory).not.toHaveBeenCalled()
+      expect(prompt).toHaveBeenCalledOnce()
+      expect(draftSessionsRef.current.has(SESSION_ID)).toBe(false)
+    })
+
+    it("reports creation failure without submitting a prompt or closing the modal", async () => {
+      setupNekocode({ create: vi.fn().mockRejectedValue(new Error('create failed')) })
+      const { createSession } = runInHookScope(() =>
+        useSessionOrchestration({ dispatch, activeSessionId: null, activeProjectPath: null }),
+      )
+      await expect(createSession(PROJECT_PATH, 'Auto commit test')).rejects.toThrow('create failed')
+      expect(window.nekocode.session.prompt).not.toHaveBeenCalled()
+      expect(dispatch).not.toHaveBeenCalledWith({ type: 'SET_GIT_OVERLAY', show: false })
+      expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'UPDATE_SESSION_STATUS', status: 'error', errorMessage: 'create failed' }))
+    })
+
+    it("reports prompt failure on the real session and reopens the modal", async () => {
+      setupNekocode({ prompt: vi.fn().mockRejectedValue(new Error('prompt failed')) })
+      const { createSession } = runInHookScope(() =>
+        useSessionOrchestration({ dispatch, activeSessionId: null, activeProjectPath: null }),
+      )
+      await expect(createSession(PROJECT_PATH, 'Auto commit test')).rejects.toThrow('prompt failed')
+      expect(dispatch).toHaveBeenCalledWith({ type: 'UPDATE_SESSION_STATUS', sessionId: SESSION_ID, status: 'error', errorMessage: 'prompt failed' })
+      expect(dispatch).toHaveBeenLastCalledWith({ type: 'SET_GIT_OVERLAY', show: true })
+    })
+
+    it("rejects duplicate prompted creation while the first creation is pending", async () => {
+      let finishCreate!: (value: unknown) => void
+      setupNekocode({ create: vi.fn(() => new Promise(resolve => { finishCreate = resolve })) })
+      const { createSession } = runInHookScope(() =>
+        useSessionOrchestration({ dispatch, activeSessionId: null, activeProjectPath: null }),
+      )
+      const first = createSession(PROJECT_PATH, 'Auto commit test')
+      await expect(createSession(PROJECT_PATH, 'Auto commit test')).rejects.toThrow('already being created')
+      finishCreate({ sessionId: SESSION_ID })
+      await first
+      expect(window.nekocode.session.create).toHaveBeenCalledOnce()
+      expect(window.nekocode.session.prompt).toHaveBeenCalledOnce()
+    })
+
+    it("allows new sessions while a prompted agent is running without releasing another creation's lock", async () => {
+      let finishPrompt!: () => void
+      let finishCreate!: (value: unknown) => void
+      const create = vi.fn().mockResolvedValueOnce({ sessionId: SESSION_ID })
+        .mockImplementationOnce(() => new Promise(resolve => { finishCreate = resolve }))
+      setupNekocode({ create, prompt: vi.fn(() => new Promise<void>(resolve => { finishPrompt = resolve })) })
+      const { createSession } = runInHookScope(() =>
+        useSessionOrchestration({ dispatch, activeSessionId: null, activeProjectPath: null }),
+      )
+      const first = createSession(PROJECT_PATH, 'Auto commit test')
+      await Promise.resolve()
+      const second = createSession(PROJECT_PATH)
+      finishPrompt()
+      await first
+      await createSession(PROJECT_PATH)
+      expect(create).toHaveBeenCalledTimes(2)
+      finishCreate({ sessionId: 'second-session' })
+      await second
+    })
+
     it("skips creation if already in flight for same projectPath", async () => {
       const { createSession } = runInHookScope(() =>
         useSessionOrchestration({ dispatch, activeSessionId: null, activeProjectPath: null }),

@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react'
+import { flushSync } from 'react-dom'
 import type { ProjectAction } from '../stores/project-store'
 import type { Dispatch } from 'react'
 import { createLogger } from '../utils/logger'
@@ -53,15 +54,18 @@ export function useSessionOrchestration({
   )
 
   const createSession = useCallback(
-    async (projectPath: string) => {
+    async (projectPath: string, initialPrompt?: string) => {
       if (createInFlightProjectsRef.current.has(projectPath)) {
+        if (initialPrompt) throw new Error('A session is already being created for this project. Please try again shortly.')
         logger.debug(`createSession skipped: already in flight for cwd=${projectPath}`)
         return
       }
       createInFlightProjectsRef.current.add(projectPath)
+      let ownsCreationLock = true
 
       // Reuse only the currently active draft session that was created in this runtime.
       const isActiveDraft =
+        !initialPrompt &&
         activeSessionId != null &&
         activeProjectPath === projectPath &&
         draftSessionsRef.current.get(activeSessionId) === projectPath
@@ -101,8 +105,10 @@ export function useSessionOrchestration({
         },
       })
 
+      let createdSessionId: string | undefined
       try {
         const result = await window.nekocode.session.create(projectPath)
+        createdSessionId = result.sessionId
         logExtensionLoadWarnings('create', result.sessionId, result.extensionErrors, result.extensionsDisabled, (sid, errorMessage) => {
           dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId: sid, status: 'error', errorMessage })
         })
@@ -110,26 +116,51 @@ export function useSessionOrchestration({
         logger.info(`createSession OK: ${result.sessionId.slice(0, 8)}... cwd=${projectPath}`)
         
         // Replace the pending session with the real one
-        dispatch({
-          type: 'REPLACE_PENDING_SESSION',
-          projectPath,
-          pendingId,
-          realSession: {
-            id: result.sessionId,
-            firstMessage: 'New session',
-            created: new Date().toISOString(),
-            messageCount: 0,
-          },
-        })
-        dispatch({ type: 'SET_AGENT_READY', sessionId: result.sessionId })
+        const activateSession = () => {
+          dispatch({
+            type: 'REPLACE_PENDING_SESSION',
+            projectPath,
+            pendingId,
+            realSession: {
+              id: result.sessionId,
+              firstMessage: initialPrompt ? initialPrompt.slice(0, 100) : 'New session',
+              created: new Date().toISOString(),
+              messageCount: 0,
+            },
+          })
+          if (initialPrompt) {
+            dispatch({ type: 'SET_ACTIVE_SESSION', sessionId: result.sessionId, projectPath })
+            dispatch({ type: 'PRELOAD_HISTORY', sessionId: result.sessionId, messages: [{ id: `initial-${result.sessionId}`, role: 'user', content: initialPrompt, timestamp: Date.now() }] })
+            dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId: result.sessionId, status: 'streaming' })
+            dispatch({ type: 'SET_ACTIVE_VIEW', view: 'chat' })
+            dispatch({ type: 'SET_GIT_OVERLAY', show: false })
+          }
+          dispatch({ type: 'SET_AGENT_READY', sessionId: result.sessionId })
+        }
+        if (initialPrompt) {
+          // Mount the chat and its event subscriptions before the agent can emit streaming events.
+          flushSync(activateSession)
+          draftSessionsRef.current.delete(result.sessionId)
+          createInFlightProjectsRef.current.delete(projectPath)
+          ownsCreationLock = false
+          await window.nekocode.session.prompt(result.sessionId, initialPrompt)
+        } else {
+          activateSession()
+        }
       } catch (err) {
         logger.error('createSession failed:', err)
         // Remove the pending session on failure
-        dispatch({ type: 'SET_AGENT_READY', sessionId: pendingId })
+        dispatch({ type: 'SET_AGENT_READY', sessionId: createdSessionId ?? pendingId })
         // Note: The pending session will remain in the list but show as error state
         // User can retry or remove it
+        if (initialPrompt) {
+          const errorMessage = err instanceof Error ? err.message : String(err)
+          dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId: createdSessionId ?? pendingId, status: 'error', errorMessage })
+          dispatch({ type: 'SET_GIT_OVERLAY', show: true })
+          throw err
+        }
       } finally {
-        createInFlightProjectsRef.current.delete(projectPath)
+        if (ownsCreationLock) createInFlightProjectsRef.current.delete(projectPath)
       }
     },
     [dispatch, activeProjectPath, activeSessionId],

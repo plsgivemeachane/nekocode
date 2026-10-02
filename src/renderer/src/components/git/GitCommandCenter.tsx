@@ -24,11 +24,13 @@ import { DiffViewer } from './DiffViewer'
 import { StashIcon, GitCommitIcon, RefreshIcon } from './GitIcons'
 import { useProjectStore } from '../../stores/project-store'
 import { ScrollArea } from '../ui/scroll-area'
+import { Button } from '../ui/button'
+import { AUTO_COMMIT_PROMPT } from '../../utils/auto-commit'
 
 // ━━ Component ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 export function GitCommandCenter() {
-  const { state } = useProjectStore()
+  const { state, createSession } = useProjectStore()
   const activeProjectPath = state.activeProjectPath
   const git = useGitOperations()
 
@@ -36,6 +38,15 @@ export function GitCommandCenter() {
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null)
   const [_selectedFileStaged, setSelectedFileStaged] = useState(false)
   const [isCommitting, setIsCommitting] = useState(false)
+  const [isAutoCommitting, setIsAutoCommitting] = useState(false)
+  const [autoCommitError, setAutoCommitError] = useState<string | null>(null)
+  const autoCommitInFlightRef = useRef(false)
+  const projectSessions = state.projects.find(project => project.path === activeProjectPath)?.sessions ?? []
+  const activeSession = projectSessions.find(session => session.id === state.activeSessionId)
+  const isAutoCommitRunning = projectSessions.some(session => session.firstMessage.startsWith('Auto commit') && state.sessionStatuses[session.id] === 'streaming')
+  const autoCommitSessionError = state.activeSessionId && activeSession?.firstMessage.startsWith('Auto commit')
+    ? state.sessionErrorMessages[state.activeSessionId]
+    : null
   const [isPushing, setIsPushing] = useState(false)
   const [isPulling, setIsPulling] = useState(false)
   const [isFetching, setIsFetching] = useState(false)
@@ -83,6 +94,21 @@ export function GitCommandCenter() {
     }
   }, [git])
 
+  const handleAutoCommit = useCallback(async () => {
+    if (!activeProjectPath || autoCommitInFlightRef.current) return
+    autoCommitInFlightRef.current = true
+    setIsAutoCommitting(true)
+    setAutoCommitError(null)
+    try {
+      await createSession(activeProjectPath, AUTO_COMMIT_PROMPT)
+    } catch (err) {
+      setAutoCommitError(err instanceof Error ? err.message : String(err))
+    } finally {
+      autoCommitInFlightRef.current = false
+      setIsAutoCommitting(false)
+    }
+  }, [activeProjectPath, createSession])
+
   const handlePush = useCallback(async () => {
     setIsPushing(true)
     try {
@@ -115,6 +141,8 @@ export function GitCommandCenter() {
   }, [git])
 
   const isRemoteLoading = isPushing || isPulling || isFetching
+  const hasChanges = git.status.staged.length + git.status.modified.length + git.status.untracked.length > 0
+  const autoCommitDisabled = isAutoCommitting || isAutoCommitRunning || isCommitting || isRemoteLoading || !state.agentReady || git.isStatusLoading || git.isGitRepo !== true || git.status.conflicting.length > 0 || !hasChanges
 
   // ── Resize handle: left/right panel split ──
   const handleLeftResizeMouseDown = useCallback(
@@ -313,6 +341,19 @@ export function GitCommandCenter() {
               onCommit={handleCommit}
               isCommitting={isCommitting}
             />
+            <div className="flex flex-col gap-2 px-3 pb-3">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={handleAutoCommit}
+                disabled={autoCommitDisabled}
+                title={isAutoCommitRunning ? 'An Auto commit session is already running for this project' : git.status.conflicting.length > 0 ? 'Resolve merge conflicts before auto committing' : !hasChanges ? 'No changes to commit' : 'Start a Pi session to review and commit staged, unstaged, and untracked changes'}
+              >
+                {isAutoCommitting ? 'Starting session...' : 'Auto commit'}
+              </Button>
+              {(autoCommitError || autoCommitSessionError) && <p role="alert" className="text-xs text-destructive">{autoCommitError || autoCommitSessionError}</p>}
+            </div>
           </div>
         </ScrollArea>
 
