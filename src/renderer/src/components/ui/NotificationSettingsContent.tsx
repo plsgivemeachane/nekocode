@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { Switch } from './switch'
+import { Slider } from './slider'
+import { Label } from './label'
 import { soundManager } from '../../utils/sound-manager'
 import { createLogger } from '../../utils/logger'
 import type { NotificationSettings, NotificationSoundKey } from '../../../../shared/ipc-types'
@@ -12,39 +15,7 @@ const SOUND_KEYS: { key: NotificationSoundKey; label: string; description: strin
   { key: 'warning', label: 'Warning', description: 'Attention needed' },
 ]
 
-function Toggle({
-  checked,
-  onChange,
-  disabled,
-}: {
-  checked: boolean
-  onChange: (val: boolean) => void
-  disabled?: boolean
-}) {
-  return (
-    <button
-      role="switch"
-      aria-checked={checked}
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className={`
-        relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border border-transparent
-        transition-colors duration-200 ease-in-out
-        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-400/50
-        disabled:opacity-40 disabled:cursor-not-allowed
-        ${checked ? 'bg-accent-500' : 'bg-surface-600'}
-      `}
-    >
-      <span
-        className={`
-          pointer-events-none inline-block h-4 w-4 rounded-full bg-surface-50 shadow-sm
-          transform transition-transform duration-200 ease-in-out
-          ${checked ? 'translate-x-4' : 'translate-x-0'}
-        `}
-      />
-    </button>
-  )
-}
+/** Hand-rolled Toggle replaced by shadcn Switch in Phase 1D */
 
 /**
  * Inline notification settings content.
@@ -94,8 +65,8 @@ export function NotificationSettingsContent() {
     }
   }, [settings])
 
-  const handleVolumeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const volume = Number(e.target.value) / 100
+  const handleVolumeChange = useCallback((values: number[]) => {
+    const volume = (values[0] ?? 0) / 100
     if (!settings) return
     const next = { ...settings, soundVolume: volume }
     setSettings(next)
@@ -139,10 +110,10 @@ export function NotificationSettingsContent() {
       {/* Master toggle */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-surface-200 font-medium">Enable Notifications</p>
+          <Label className="text-sm text-surface-200 font-medium">Enable Notifications</Label>
           <p className="text-xs text-surface-500 mt-0.5">OS notifications and sounds</p>
         </div>
-        <Toggle checked={settings.enabled} onChange={(v) => updateSetting('enabled', v)} />
+        <Switch checked={settings.enabled} onCheckedChange={(v) => updateSetting('enabled', v)} />
       </div>
 
       <div className="h-px bg-surface-700/40" />
@@ -150,12 +121,12 @@ export function NotificationSettingsContent() {
       {/* Sound toggle */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-surface-200 font-medium">Sound Effects</p>
+          <Label className="text-sm text-surface-200 font-medium">Sound Effects</Label>
           <p className="text-xs text-surface-500 mt-0.5">Play sounds on events</p>
         </div>
-        <Toggle
+        <Switch
           checked={settings.soundEnabled}
-          onChange={(v) => updateSetting('soundEnabled', v)}
+          onCheckedChange={(v) => updateSetting('soundEnabled', v)}
           disabled={!settings.enabled}
         />
       </div>
@@ -163,22 +134,17 @@ export function NotificationSettingsContent() {
       {/* Volume slider */}
       <div className={`space-y-2 ${!settings.soundEnabled || !settings.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
         <div className="flex items-center justify-between">
-          <p className="text-sm text-surface-200">Volume</p>
+          <Label className="text-sm text-surface-200">Volume</Label>
           <span className="text-xs text-surface-500 font-mono">{Math.round(settings.soundVolume * 100)}%</span>
         </div>
-        <input
-          type="range"
+        <Slider
           min={0}
           max={100}
-          value={Math.round(settings.soundVolume * 100)}
-          onChange={handleVolumeChange}
-          onMouseUp={commitVolume}
-          onTouchEnd={commitVolume}
-          className="w-full h-1.5 bg-surface-700 rounded-full appearance-none cursor-pointer
-            [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5
-            [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent-400
-            [&::-webkit-slider-thumb]:shadow-sm [&::-webkit-slider-thumb]:cursor-pointer
-            [&::-webkit-slider-thumb]:hover:bg-accent-300 [&::-webkit-slider-thumb]:transition-colors"
+          step={1}
+          value={[Math.round(settings.soundVolume * 100)]}
+          onValueChange={handleVolumeChange}
+          onValueCommit={commitVolume}
+          className="w-full"
         />
       </div>
 
@@ -186,7 +152,7 @@ export function NotificationSettingsContent() {
 
       {/* Sound previews */}
       <div className={`space-y-2 ${!settings.soundEnabled || !settings.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
-        <p className="text-sm text-surface-200 font-medium mb-2.5">Preview Sounds</p>
+        <Label className="text-sm text-surface-200 font-medium mb-2.5">Preview Sounds</Label>
         {SOUND_KEYS.map(({ key, label, description }) => (
           <div key={key} className="flex items-center justify-between py-1">
             <div>
@@ -210,34 +176,34 @@ export function NotificationSettingsContent() {
 
       {/* Per-task toggles */}
       <div className="space-y-3">
-        <p className="text-sm text-surface-200 font-medium">Notify On</p>
+        <Label className="text-sm text-surface-200 font-medium">Notify On</Label>
 
-        <label className="flex items-center justify-between cursor-pointer">
-          <span className="text-[12px] text-text-primary">AI response complete</span>
-          <Toggle
+        <div className="flex items-center justify-between">
+          <Label className="text-[12px] text-text-primary cursor-pointer">AI response complete</Label>
+          <Switch
             checked={settings.tasks.aiResponseComplete}
-            onChange={(v) => updateTaskSetting('aiResponseComplete', v)}
+            onCheckedChange={(v) => updateTaskSetting('aiResponseComplete', v)}
             disabled={!settings.enabled}
           />
-        </label>
+        </div>
 
-        <label className="flex items-center justify-between cursor-pointer">
-          <span className="text-[12px] text-text-primary">File operations complete</span>
-          <Toggle
+        <div className="flex items-center justify-between">
+          <Label className="text-[12px] text-text-primary cursor-pointer">File operations complete</Label>
+          <Switch
             checked={settings.tasks.fileOperationComplete}
-            onChange={(v) => updateTaskSetting('fileOperationComplete', v)}
+            onCheckedChange={(v) => updateTaskSetting('fileOperationComplete', v)}
             disabled={!settings.enabled}
           />
-        </label>
+        </div>
 
-        <label className="flex items-center justify-between cursor-pointer">
-          <span className="text-[12px] text-text-primary">Extension operations complete</span>
-          <Toggle
+        <div className="flex items-center justify-between">
+          <Label className="text-[12px] text-text-primary cursor-pointer">Extension operations complete</Label>
+          <Switch
             checked={settings.tasks.extensionOperationComplete}
-            onChange={(v) => updateTaskSetting('extensionOperationComplete', v)}
+            onCheckedChange={(v) => updateTaskSetting('extensionOperationComplete', v)}
             disabled={!settings.enabled}
           />
-        </label>
+        </div>
       </div>
     </div>
   )

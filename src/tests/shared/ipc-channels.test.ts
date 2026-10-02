@@ -6,7 +6,7 @@ describe('IPC_CHANNELS', () => {
   const allValues = Object.values(channels)
 
   it('has expected number of channels', () => {
-    expect(allValues).toHaveLength(65)
+    expect(allValues).toHaveLength(66)
   })
 
   it('has no duplicate values', () => {
@@ -166,6 +166,7 @@ it('IpcChannel type is a union of all values', () => {
       'SHELL_OPEN_IN_VSCODE',
       'SHELL_OPEN_IN_EXPLORER',
       'SHELL_CHECK_VSCODE_AVAILABLE',
+      'SEARCH_FILES',
     ])
   })
 })

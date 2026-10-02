@@ -57,6 +57,28 @@
   --animate-fade-in: fade-in 0.3s var(--ease-out-expo) forwards;
   --animate-slide-up: slide-up 0.25s var(--ease-out-expo) forwards;
   --animate-glow-pulse: glow-pulse 2s ease-in-out infinite;
+
+  /* ─── shadcn/ui Semantic Tokens (bridged from existing design tokens) ─── */
+  --color-background: var(--color-surface-950);
+  --color-foreground: var(--color-text-primary);
+  --color-card: var(--color-surface-900);
+  --color-card-foreground: var(--color-text-primary);
+  --color-popover: var(--color-surface-900);
+  --color-popover-foreground: var(--color-text-primary);
+  --color-primary: var(--color-accent-500);
+  --color-primary-foreground: var(--color-surface-50);
+  --color-secondary: var(--color-surface-800);
+  --color-secondary-foreground: var(--color-text-primary);
+  --color-muted: var(--color-surface-800);
+  --color-muted-foreground: var(--color-text-tertiary);
+  --color-accent: var(--color-accent-500);
+  --color-accent-foreground: var(--color-surface-50);
+  --color-destructive: var(--color-error);
+  --color-destructive-foreground: var(--color-surface-50);
+  --color-border: var(--color-surface-700);
+  --color-input: var(--color-surface-700);
+  --color-ring: var(--color-accent-400);
+  --radius: 0.5rem;
 }
 
 /* ─── Keyframes ─── */
@@ -83,6 +105,30 @@
 
 /* ─── Base Layer ─── */
 @layer base {
+  :root {
+    /* shadcn/ui CSS variables (dark-only, values reference existing tokens) */
+    --background: var(--color-background);
+    --foreground: var(--color-foreground);
+    --card: var(--color-card);
+    --card-foreground: var(--color-card-foreground);
+    --popover: var(--color-popover);
+    --popover-foreground: var(--color-popover-foreground);
+    --primary: var(--color-primary);
+    --primary-foreground: var(--color-primary-foreground);
+    --secondary: var(--color-secondary);
+    --secondary-foreground: var(--color-secondary-foreground);
+    --muted: var(--color-muted);
+    --muted-foreground: var(--color-muted-foreground);
+    --accent: var(--color-accent);
+    --accent-foreground: var(--color-accent-foreground);
+    --destructive: var(--color-destructive);
+    --destructive-foreground: var(--color-destructive-foreground);
+    --border: var(--color-border);
+    --input: var(--color-input);
+    --ring: var(--color-ring);
+    --radius: 0.5rem;
+  }
+
   html {
     font-family: var(--font-body);
     -webkit-font-smoothing: antialiased;
@@ -318,4 +364,27 @@
     font-size: 0.75rem;
     color: var(--color-text-tertiary);
   }
+}
+
+/* ─── Radix ScrollArea Fix ─── */
+/* The Radix ScrollArea viewport wraps children in an internal div with
+   "display: table; min-width: 100%". This table layout can cause the inner
+   content to expand beyond the viewport width, and since the viewport has
+   overflowX: hidden (when no horizontal scrollbar is enabled), the right
+   side of the content gets clipped — cutting off rounded corners, borders,
+   and entire UI elements.
+   Changing to display: block prevents the width expansion while keeping
+   min-width: 100% behavior (content fills available space). */
+[data-radix-scroll-area-viewport] > div {
+  display: block !important;
+}
+
+/* Sidebar: suppress focus outlines and rings for a cleaner hover experience.
+   Background highlight is sufficient visual feedback. */
+aside button:focus-visible,
+aside a:focus-visible,
+aside [role="button"]:focus-visible,
+aside [data-radix-collection-item]:focus-visible {
+  outline: none;
+  box-shadow: none;
 }

@@ -35,14 +35,21 @@ export class StreamBatcher {
    * Push an event through the batcher.
    * text_delta and thinking_delta events are accumulated; all other events are flushed immediately.
    */
+  /** Tracks whether flush is currently executing to prevent re-entrant double-fire */
+  private isFlushing = false
+
   push(event: SessionStreamEvent): void {
     if (event.type === 'text_delta') {
+      // Guard: empty string delta is a no-op — don't schedule a timer for nothing
+      if (event.delta.length === 0) return
       this.pendingText += event.delta
       logger.debug(`push: accumulated ${this.pendingText.length} chars (delta=${event.delta.length})`)
       if (this.timer === null) {
         this.timer = setTimeout(() => this.flush(), this.flushIntervalMs)
       }
     } else if (event.type === 'thinking_delta') {
+      // Guard: empty string delta is a no-op
+      if (event.delta.length === 0) return
       this.pendingThinking += event.delta
       logger.debug(`push: accumulated thinking ${this.pendingThinking.length} chars (delta=${event.delta.length})`)
       if (this.timer === null) {
@@ -52,27 +59,51 @@ export class StreamBatcher {
       // Non-text events flush any pending text/thinking first, then pass through
       this.flush()
       logger.debug(`passthrough: ${event.type}`)
-      this.onFlush(event)
+      try {
+        this.onFlush(event)
+      } catch (err) {
+        // Error boundary: prevent a throwing onFlush from crashing the batcher
+        logger.error('onFlush threw during passthrough:', err)
+      }
     }
   }
 
   /** Flush any accumulated text and thinking. Safe to call multiple times. */
   flush(): void {
-    if (this.timer !== null) {
-      clearTimeout(this.timer)
-      this.timer = null
-    }
-    if (this.pendingThinking.length > 0) {
-      const thinking = this.pendingThinking
-      this.pendingThinking = ''
-      logger.debug(`flush thinking: ${thinking.length} chars`)
-      this.onFlush({ type: 'thinking_delta', delta: thinking })
-    }
-    if (this.pendingText.length > 0) {
-      const text = this.pendingText
-      this.pendingText = ''
-      logger.debug(`flush: ${text.length} chars`)
-      this.onFlush({ type: 'text_delta', delta: text })
+    // Re-entrancy guard: if flush is already executing (e.g., a timer fires
+    // while flush() is called synchronously), skip to prevent double-fire.
+    if (this.isFlushing) return
+    this.isFlushing = true
+
+    try {
+      if (this.timer !== null) {
+        clearTimeout(this.timer)
+        this.timer = null
+      }
+      if (this.pendingThinking.length > 0) {
+        const thinking = this.pendingThinking
+        this.pendingThinking = ''
+        logger.debug(`flush thinking: ${thinking.length} chars`)
+        try {
+          this.onFlush({ type: 'thinking_delta', delta: thinking })
+        } catch (err) {
+          // Error boundary: prevent a throwing onFlush from crashing the batcher
+          logger.error('onFlush threw during thinking flush:', err)
+        }
+      }
+      if (this.pendingText.length > 0) {
+        const text = this.pendingText
+        this.pendingText = ''
+        logger.debug(`flush: ${text.length} chars`)
+        try {
+          this.onFlush({ type: 'text_delta', delta: text })
+        } catch (err) {
+          // Error boundary: prevent a throwing onFlush from crashing the batcher
+          logger.error('onFlush threw during text flush:', err)
+        }
+      }
+    } finally {
+      this.isFlushing = false
     }
   }
 

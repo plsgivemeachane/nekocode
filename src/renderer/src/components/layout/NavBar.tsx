@@ -1,7 +1,18 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useZoom } from '../../hooks/useZoom'
 import { useProjectStore } from '../../stores/project-store'
 import { VSCodeIcon } from '../icons/VSCodeIcon'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '../ui/dropdown-menu'
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from '../ui/tooltip'
 
 /**
  * Top bar spanning the full window width in frameless mode.
@@ -13,8 +24,7 @@ export function NavBar() {
   const { zoom, zoomIn, zoomOut, resetZoom, minZoom, maxZoom } = useZoom()
   const { addProject, setGitOverlay, state: projectState } = useProjectStore()
   const [isMaximized, setIsMaximized] = useState(false)
-  const [openDropdown, setOpenDropdown] = useState(false)
-  const dropdownRef = useRef<HTMLDivElement>(null)
+  const [dropdownOpen, setDropdownOpen] = useState(false)
   const percentage = Math.round(zoom * 100)
 
   // Subscribe to maximize state changes from the main process
@@ -51,18 +61,7 @@ export function NavBar() {
     }
   }, [addProject])
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setOpenDropdown(false)
-      }
-    }
-    if (openDropdown) {
-      document.addEventListener("mousedown", handleClickOutside)
-      return () => document.removeEventListener("mousedown", handleClickOutside)
-    }
-  }, [openDropdown])
+  // Click-outside for dropdown handled by Radix Popover
 
   return (
     <header
@@ -82,8 +81,34 @@ export function NavBar() {
         </span>
       </div>
 
-      {/* ─── Center/Right: project actions + zoom controls + window controls ─── */}
-      <div className="flex-1 flex items-center justify-end px-2">
+      {/* ─── Center: YouTube-style search bar ─── */}
+      <div
+        className="flex-1 flex justify-center px-4"
+        style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+      >
+        <div
+          className="group flex items-center w-full max-w-[480px] h-8 rounded-full border border-surface-700/60 bg-surface-950/60 hover:bg-surface-900/80 hover:border-surface-600/80 focus-within:border-accent-400/50 focus-within:bg-surface-900/80 transition-colors cursor-text"
+          onClick={() => window.dispatchEvent(new CustomEvent('nekocode:open-search', { detail: { mode: 'all' } }))}
+          title="Search commands, files, sessions… (Ctrl+P for files, Ctrl+Shift+P for commands)"
+        >
+          {/* Search icon */}
+          <div className="flex items-center justify-center w-10 shrink-0 text-surface-400 group-focus-within:text-accent-400/70 transition-colors">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </div>
+          {/* Placeholder text */}
+          <span className="flex-1 text-[12px] text-surface-500 select-none truncate">Search</span>
+          {/* Keyboard shortcut hint */}
+          <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 mr-2 text-[10px] font-mono text-surface-500 bg-surface-800/50 rounded border border-surface-700/40">
+            Ctrl P
+          </kbd>
+        </div>
+      </div>
+
+      {/* ─── Right: project actions + zoom controls + window controls ─── */}
+      <div className="flex items-center justify-end px-2">
         {/* Project action buttons (add project + open in vscode) */}
         <div
           className="flex items-center mr-2"
@@ -114,8 +139,8 @@ export function NavBar() {
             <span>Git</span>
           </button>
 
-          {/* Open in VS Code split button with dropdown */}
-          <div className="relative" ref={dropdownRef}>
+          {/* Open in VS Code split button with dropdown (Radix DropdownMenu) */}
+          <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
             <div className="flex">
               {/* Main action: Open in VS Code — rounded left only */}
               <button
@@ -135,50 +160,51 @@ export function NavBar() {
               </button>
 
               {/* Dropdown toggle: down arrow — rounded right only */}
-              <button
-                onClick={() => setOpenDropdown(prev => !prev)}
-                className="flex items-center px-1.5 py-1.5 text-xs font-medium text-surface-200 bg-surface-800/60 hover:bg-surface-700/60 border border-surface-600/30 hover:border-surface-500/40 shadow-sm shadow-surface-900/50 hover:shadow-md hover:shadow-surface-900/60 rounded-r-lg rounded-l-none transition-all"
-                title="More open options"
-                aria-expanded={openDropdown}
-                aria-haspopup="true"
-              >
-                <svg
-                  width="10"
-                  height="10"
-                  viewBox="0 0 10 10"
-                  fill="none"
-                  className={`transition-transform duration-150 ${openDropdown ? 'rotate-180' : ''}`}
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="flex items-center px-1.5 py-1.5 text-xs font-medium text-surface-200 bg-surface-800/60 hover:bg-surface-700/60 border border-surface-600/30 hover:border-surface-500/40 shadow-sm shadow-surface-900/50 hover:shadow-md hover:shadow-surface-900/60 rounded-r-lg rounded-l-none transition-all"
+                  title="More open options"
+                  aria-expanded={dropdownOpen}
+                  aria-haspopup="true"
                 >
-                  <path d="M2.5 3.75L5 6.25L7.5 3.75" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
+                  <svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 10 10"
+                    fill="none"
+                    className={`transition-transform duration-150 ${dropdownOpen ? 'rotate-180' : ''}`}
+                  >
+                    <path d="M2.5 3.75L5 6.25L7.5 3.75" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              </DropdownMenuTrigger>
             </div>
 
             {/* Floating dropdown menu */}
-            {openDropdown && (
-              <div className="absolute top-full left-0 mt-1.5 w-full bg-surface-800 border border-surface-600/40 rounded-lg shadow-lg shadow-surface-950/60 z-50 py-0.5 overflow-hidden">
-                {/* Open in Explorer */}
-                <button
-                  onClick={async () => {
-                    setOpenDropdown(false)
-                    if (projectState.activeProjectPath) {
-                      const success = await window.nekocode.shell.openInExplorer(projectState.activeProjectPath)
-                      if (!success) {
-                        console.warn('Failed to open in Explorer')
-                      }
+            <DropdownMenuContent
+              align="start"
+              className="min-w-[180px] bg-surface-800 border-surface-600/40 rounded-lg shadow-lg shadow-surface-950/60 p-1"
+            >
+              {/* Open in Explorer */}
+              <DropdownMenuItem
+                onClick={async () => {
+                  setDropdownOpen(false)
+                  if (projectState.activeProjectPath) {
+                    const success = await window.nekocode.shell.openInExplorer(projectState.activeProjectPath)
+                    if (!success) {
+                      console.warn('Failed to open in Explorer')
                     }
-                  }}
-                  className="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-surface-200 hover:bg-surface-700/60 hover:text-text-primary transition-colors"
-                  title="Open Project in File Explorer"
-                >
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="shrink-0">
-                    <path d="M1.5 3.5v9h13v-7l-2-2h-6l-1.5-2h-2.5z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
-                  </svg>
-                  <span>Open in Explorer</span>
-                </button>
-              </div>
-            )}
-          </div>
+                  }
+                }}
+                className="text-xs text-text-secondary hover:text-text-primary hover:bg-surface-700/60 gap-2"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="shrink-0">
+                  <path d="M1.5 3.5v9h13v-7l-2-2h-6l-1.5-2h-2.5z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
+                </svg>
+                Open in Explorer
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {/* Separator between project actions and zoom controls */}
@@ -189,29 +215,50 @@ export function NavBar() {
           className="flex items-center"
           style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
         >
-          <button
-            onClick={zoomOut}
-            disabled={zoom <= minZoom}
-            className="px-3 py-2 text-sm text-surface-300 hover:text-surface-100 hover:bg-surface-800/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            title="Zoom out (Ctrl+-)"
-          >
-            −
-          </button>
-          <button
-            onClick={resetZoom}
-            className="px-3 py-2 text-sm text-surface-300 hover:text-surface-100 hover:bg-surface-800/50 min-w-[48px] text-center transition-colors"
-            title="Reset zoom (Ctrl+0)"
-          >
-            {percentage}%
-          </button>
-          <button
-            onClick={zoomIn}
-            disabled={zoom >= maxZoom}
-            className="px-3 py-2 text-sm text-surface-300 hover:text-surface-100 hover:bg-surface-800/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            title="Zoom in (Ctrl+=)"
-          >
-            +
-          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={zoomOut}
+                disabled={zoom <= minZoom}
+                className="px-3 py-2 text-sm text-surface-300 hover:text-surface-100 hover:bg-surface-800/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Zoom out (Ctrl+-)"
+              >
+                -
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="bg-surface-700 text-surface-100 border-surface-600">
+              Zoom out (Ctrl+-)
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={resetZoom}
+                className="px-3 py-2 text-sm text-surface-300 hover:text-surface-100 hover:bg-surface-800/50 min-w-[48px] text-center transition-colors"
+                title="Reset zoom (Ctrl+0)"
+              >
+                {percentage}%
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="bg-surface-700 text-surface-100 border-surface-600">
+              Reset zoom (Ctrl+0)
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={zoomIn}
+                disabled={zoom >= maxZoom}
+                className="px-3 py-2 text-sm text-surface-300 hover:text-surface-100 hover:bg-surface-800/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Zoom in (Ctrl+=)"
+              >
+                +
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="bg-surface-700 text-surface-100 border-surface-600">
+              Zoom in (Ctrl+=)
+            </TooltipContent>
+          </Tooltip>
         </div>
 
         {/* Window control buttons */}
@@ -270,3 +317,5 @@ export function NavBar() {
     </header>
   )
 }
+
+// Historical note: dropdowns close when clicking outside them.

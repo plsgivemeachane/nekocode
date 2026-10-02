@@ -34,6 +34,9 @@ interface RailItem {
   icon: React.ReactNode
 }
 
+// Historical note: scrollIntoView requestAnimationFrame callbacks are
+// cancelled on unmount so detached elements are never accessed.
+
 const RAIL_ITEMS: RailItem[] = [
   {
     id: 'diff',
@@ -181,8 +184,18 @@ export function RightSidebar() {
   const { messages, registerToolCallClickHandler } = useSessionMessages()
 
   const activePanel = state.rightSidebarActivePanel
-  const width = state.rightSidebarWidth
+  // Use local state for smooth dragging (avoids store re-renders on every mousemove)
+  // Sync to store only on mouseup for persistence
+  const [sidebarWidth, setSidebarWidth] = useState(state.rightSidebarWidth)
+  const sidebarWidthRef = useRef(state.rightSidebarWidth)
+  const width = sidebarWidth
   const selectedToolCallId = state.rightSidebarSelectedToolCallId
+
+  // Sync from store if it changes externally
+  useEffect(() => {
+    setSidebarWidth(state.rightSidebarWidth)
+    sidebarWidthRef.current = state.rightSidebarWidth
+  }, [state.rightSidebarWidth])
 
   // Resize drag state
   const isDraggingRef = useRef(false)
@@ -192,6 +205,17 @@ export function RightSidebar() {
   const activeResizeHandlersRef = useRef<{ mousemove: ((e: MouseEvent) => void) | null; mouseup: (() => void) | null }>({ mousemove: null, mouseup: null })
   const [isHoveringResize, setIsHoveringResize] = useState(false)
   const [isDraggingState, setIsDraggingState] = useState(false)
+
+  // Track the last active panel so that dragging the resize handle with no panel
+  // open will auto-open the most recent panel (or default to "diff").
+  const lastActivePanelRef = useRef<Exclude<RightSidebarPanel, null>>("diff")
+
+  // Keep lastActivePanelRef in sync whenever a panel is opened
+  useEffect(() => {
+    if (activePanel) {
+      lastActivePanelRef.current = activePanel
+    }
+  }, [activePanel])
 
   // Build diff entries from messages
   const diffEntries = useMemo(() => buildDiffEntries(messages), [messages])
@@ -218,15 +242,10 @@ export function RightSidebar() {
   }, [activePanel, setRightSidebarPanel])
 
   // Scroll to the selected diff entry when the diff panel opens or selection changes
-  useEffect(() => {
-    if (activePanel !== 'diff' || !selectedToolCallId) return
-    const rafId = requestAnimationFrame(() => {
-      const el = document.getElementById(`diff-entry-${selectedToolCallId}`)
-      el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    })
-    // Cancel the rAF on unmount to prevent calling scrollIntoView on a detached DOM element
-    return () => cancelAnimationFrame(rafId)
-  }, [activePanel, selectedToolCallId])
+  // NOTE: Scrolling to the selected diff entry is now handled internally by
+  // SessionDiffView via react-virtuoso's scrollToIndex. The old approach of
+  // using DOM scrollIntoView no longer works with virtualization because
+  // off-screen entries may not be mounted in the DOM.
 
   // Toggle a panel: clicking an active icon closes it, clicking inactive opens it
   const handleIconClick = useCallback(
@@ -240,17 +259,28 @@ export function RightSidebar() {
   const handleResizeMouseDown = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault()
+
+      // If no panel is active, auto-open the last used panel so content renders,
+      // but start the width at 0 — the drag itself will size the sidebar naturally
+      // to wherever the mouse moves. No more "pop to 480px" mismatch.
+      if (!activePanel) {
+        setRightSidebarPanel(lastActivePanelRef.current)
+        sidebarWidthRef.current = 0
+        setSidebarWidth(0)
+      }
+      startWidth.current = sidebarWidthRef.current
+
       isDraggingRef.current = true
       setIsDraggingState(true)
       startX.current = e.clientX
-      startWidth.current = width
 
       const handleMouseMove = (moveEvent: MouseEvent) => {
         if (!isDraggingRef.current) return
         // Dragging left = wider sidebar (width increases as mouse moves left)
         const delta = startX.current - moveEvent.clientX
-        const newWidth = Math.max(280, Math.min(900, startWidth.current + delta))
-        setRightSidebarWidth(newWidth)
+        const newWidth = Math.max(0, Math.min(900, startWidth.current + delta))
+        sidebarWidthRef.current = newWidth
+        setSidebarWidth(newWidth)
       }
 
       const handleMouseUp = () => {
@@ -262,6 +292,18 @@ export function RightSidebar() {
         activeResizeHandlersRef.current = { mousemove: null, mouseup: null }
         document.body.style.cursor = ''
         document.body.style.userSelect = ''
+        // If the user dragged the sidebar nearly closed, snap it fully closed.
+        // This makes drag-to-close feel natural — drag all the way right and it dismisses.
+        if (sidebarWidthRef.current <= 10) {
+          setRightSidebarPanel(null)
+          // Reset width to default so next open isn't stuck at 0
+          sidebarWidthRef.current = 480
+          setSidebarWidth(480)
+          setRightSidebarWidth(480)
+        } else {
+          // Sync final width to store for persistence
+          setRightSidebarWidth(sidebarWidthRef.current)
+        }
       }
 
       // Store handlers so they can be cleaned up on unmount mid-drag
@@ -271,7 +313,7 @@ export function RightSidebar() {
       document.addEventListener('mousemove', handleMouseMove)
       document.addEventListener('mouseup', handleMouseUp)
     },
-    [width, setRightSidebarWidth],
+    [activePanel, setRightSidebarPanel, setRightSidebarWidth],
   )
 
   // Cleanup: remove resize listeners and reset drag state on unmount
@@ -303,24 +345,24 @@ export function RightSidebar() {
 
   return (
     <div className="flex h-full shrink-0 relative">
-      {/* ═══════ Resize handle — on the left edge of the entire sidebar ═══════ */}
-      {activePanel && (
-        <div
+      {/* ═══════ Resize handle — on the left edge of the entire sidebar ═══════
+           Always visible so the user can drag to open even when no panel is active.
+           Dragging with no active panel auto-opens the last-used panel (or defaults to "diff"). */}
+      <div
 className='absolute top-0 bottom-0 -left-1.5 w-3 cursor-col-resize z-20 group/resize'
-          onMouseDown={handleResizeMouseDown}
-          onMouseEnter={() => setIsHoveringResize(true)}
-          onMouseLeave={() => setIsHoveringResize(false)}
-        >
-          {/* Small floating stick indicator (like a scrollbar thumb) */}
-          <div
-            className={`absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 w-0.75 rounded-full transition-all duration-200 ${
-              isHoveringResize || isDraggingState
-                ? 'h-12 bg-accent/70'
-                : 'h-8 bg-surface-600/60 group-hover/resize:h-10 group-hover/resize:bg-surface-500/80'
-            }`}
-          />
-        </div>
-      )}
+        onMouseDown={handleResizeMouseDown}
+        onMouseEnter={() => setIsHoveringResize(true)}
+        onMouseLeave={() => setIsHoveringResize(false)}
+      >
+        {/* Small floating stick indicator (like a scrollbar thumb) */}
+        <div
+          className={`absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 w-0.75 rounded-full transition-all duration-200 ${
+            isHoveringResize || isDraggingState
+              ? 'h-12 bg-surface-400/70'
+              : 'h-8 bg-surface-600/60 group-hover/resize:h-10 group-hover/resize:bg-surface-500/80'
+          }`}
+        />
+      </div>
 
       {/* ═══════ Icon Rail ═══════ */}
       <div className="w-12 bg-surface-900/90 flex flex-col items-center pt-2 shrink-0 border-l border-surface-800/60">
@@ -334,7 +376,7 @@ className='absolute top-0 bottom-0 -left-1.5 w-3 cursor-col-resize z-20 group/re
               className={`
                 relative w-9 h-9 flex items-center justify-center rounded-lg mb-1 transition-colors
                 ${isActive
-                  ? 'bg-accent/15 text-accent'
+                  ? 'bg-surface-700/50 text-text-primary'
                   : 'text-text-tertiary hover:text-text-secondary hover:bg-surface-800/60'
                 }
               `}
@@ -345,13 +387,13 @@ className='absolute top-0 bottom-0 -left-1.5 w-3 cursor-col-resize z-20 group/re
               {item.icon}
               {/* Badge count */}
               {badge !== undefined && badge > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 text-[9px] font-mono font-bold text-accent bg-accent/10 rounded-full min-w-4 h-4 flex items-center justify-center border border-accent/20 px-0.5">
+                <span className="absolute -top-0.5 -right-0.5 text-[9px] font-mono font-bold text-text-primary bg-surface-600/80 rounded-full min-w-4 h-4 flex items-center justify-center border border-surface-500/30 px-0.5">
                   {badge > 99 ? '99+' : badge}
                 </span>
               )}
               {/* Active indicator bar */}
               {isActive && (
-                <span className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-0.75 h-5 rounded-r-full bg-accent" />
+                <span className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-0.75 h-5 rounded-r-full bg-surface-400" />
               )}
             </button>
           )
@@ -360,7 +402,9 @@ className='absolute top-0 bottom-0 -left-1.5 w-3 cursor-col-resize z-20 group/re
 
       {/* ═══════ Content Panel (always mounted, animated in/out) ═══════ */}
       <aside
-        className={`h-full flex flex-col shrink-0 bg-surface-950 relative transition-[width,opacity] duration-300 ease-out overflow-hidden ${
+        className={`h-full flex flex-col shrink-0 bg-surface-950 relative ${
+          isDraggingState ? '' : 'transition-[width,opacity] duration-300 ease-out'
+        } overflow-hidden ${
           activePanel ? 'opacity-100' : 'opacity-0 w-0!'
         }`}
         style={activePanel ? { width: `${width}px` } : undefined}

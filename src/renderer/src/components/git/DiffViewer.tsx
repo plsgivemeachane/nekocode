@@ -112,7 +112,7 @@ export function DiffViewer({ diff, isLoading, title }: DiffViewerProps) {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-text-muted">
-        <div className="animate-spin h-6 w-6 border-2 border-accent-400 border-t-transparent rounded-full mb-3" />
+        <div className="animate-spin h-6 w-6 border-2 border-surface-400 border-t-transparent rounded-full mb-3" />
         <span className="text-xs font-mono">Loading diff...</span>
       </div>
     )

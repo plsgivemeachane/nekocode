@@ -3,7 +3,7 @@ import type { ProjectInfo, SessionInfoDisplay, ChatMessageIPC } from "@/shared/i
 
 // ── Types (match source exactly) ───────────────────────────────────
 
-type SessionStatus = "idle" | "streaming" | "error"
+type SessionStatus = "idle" | "streaming" | "error" | "finished_unread"
 
 interface ProjectState {
   projects: ProjectInfo[]
@@ -111,12 +111,18 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
         ),
       }
 
-    case "SET_ACTIVE_SESSION":
+    case "SET_ACTIVE_SESSION": {
+      const newStatuses = { ...state.sessionStatuses }
+      if (newStatuses[action.sessionId] === "finished_unread") {
+        newStatuses[action.sessionId] = "idle"
+      }
       return {
         ...state,
         activeSessionId: action.sessionId,
         activeProjectPath: action.projectPath,
+        sessionStatuses: newStatuses,
       }
+    }
 
     case "RECONNECT_SESSION":
       if (state.activeSessionId !== action.sessionId) {
@@ -175,7 +181,7 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
       const { projectPath, pendingId, realSession } = action
       const project = state.projects.find(p => p.path === projectPath)
       if (!project) return state
-      
+
       return {
         ...state,
         activeSessionId: state.activeSessionId === pendingId ? realSession.id : state.activeSessionId,
@@ -586,7 +592,7 @@ describe("project-store reducer", () => {
       const pendingSession = makeSession({ id: "pending-123", firstMessage: "Connecting..." })
       const project = makeProject({ path: "/p", sessions: [pendingSession] })
       const s1 = reducer(INITIAL_STATE, { type: "ADD_PROJECT", project })
-      
+
       const realSession = { id: "real-456", firstMessage: "New session", created: "2024-01-01T00:00:00Z", messageCount: 0 }
       const s2 = reducer(s1, {
         type: "REPLACE_PENDING_SESSION",
@@ -594,7 +600,7 @@ describe("project-store reducer", () => {
         pendingId: "pending-123",
         realSession,
       })
-      
+
       expect(s2.projects[0].sessions).toHaveLength(1)
       expect(s2.projects[0].sessions[0].id).toBe("real-456")
       expect(s2.projects[0].sessions[0].firstMessage).toBe("New session")
@@ -605,7 +611,7 @@ describe("project-store reducer", () => {
       const project = makeProject({ path: "/p", sessions: [pendingSession] })
       const s1 = reducer(INITIAL_STATE, { type: "ADD_PROJECT", project })
       const s2 = reducer(s1, { type: "SET_ACTIVE_SESSION", sessionId: "pending-123", projectPath: "/p" })
-      
+
       const realSession = { id: "real-456", firstMessage: "New session", created: "2024-01-01T00:00:00Z", messageCount: 0 }
       const s3 = reducer(s2, {
         type: "REPLACE_PENDING_SESSION",
@@ -613,7 +619,7 @@ describe("project-store reducer", () => {
         pendingId: "pending-123",
         realSession,
       })
-      
+
       expect(s3.activeSessionId).toBe("real-456")
     })
 
@@ -623,7 +629,7 @@ describe("project-store reducer", () => {
       const project = makeProject({ path: "/p", sessions: [pendingSession, otherSession] })
       const s1 = reducer(INITIAL_STATE, { type: "ADD_PROJECT", project })
       const s2 = reducer(s1, { type: "SET_ACTIVE_SESSION", sessionId: "other-session", projectPath: "/p" })
-      
+
       const realSession = { id: "real-456", firstMessage: "New session", created: "2024-01-01T00:00:00Z", messageCount: 0 }
       const s3 = reducer(s2, {
         type: "REPLACE_PENDING_SESSION",
@@ -631,7 +637,7 @@ describe("project-store reducer", () => {
         pendingId: "pending-123",
         realSession,
       })
-      
+
       expect(s3.activeSessionId).toBe("other-session")
     })
 
@@ -640,7 +646,7 @@ describe("project-store reducer", () => {
       const existingSession = makeSession({ id: "existing-789" })
       const project = makeProject({ path: "/p", sessions: [pendingSession, existingSession] })
       const s1 = reducer(INITIAL_STATE, { type: "ADD_PROJECT", project })
-      
+
       const realSession = { id: "real-456", firstMessage: "New session", created: "2024-01-01T00:00:00Z", messageCount: 0 }
       const s2 = reducer(s1, {
         type: "REPLACE_PENDING_SESSION",
@@ -648,7 +654,7 @@ describe("project-store reducer", () => {
         pendingId: "pending-123",
         realSession,
       })
-      
+
       expect(s2.projects[0].sessions).toHaveLength(2)
       expect(s2.projects[0].sessions[0].id).toBe("real-456")
       expect(s2.projects[0].sessions[1].id).toBe("existing-789")
@@ -660,7 +666,7 @@ describe("project-store reducer", () => {
       const otherSession = makeSession({ id: "other-999" })
       const project2 = makeProject({ path: "/p2", sessions: [otherSession] })
       const s1 = reducer(INITIAL_STATE, { type: "SET_PROJECTS", projects: [project1, project2] })
-      
+
       const realSession = { id: "real-456", firstMessage: "New session", created: "2024-01-01T00:00:00Z", messageCount: 0 }
       const s2 = reducer(s1, {
         type: "REPLACE_PENDING_SESSION",
@@ -668,7 +674,7 @@ describe("project-store reducer", () => {
         pendingId: "pending-123",
         realSession,
       })
-      
+
       expect(s2.projects[0].sessions[0].id).toBe("real-456")
       expect(s2.projects[1].sessions[0].id).toBe("other-999")
     })
@@ -677,7 +683,7 @@ describe("project-store reducer", () => {
       const existingSession = makeSession({ id: "existing-789" })
       const project = makeProject({ path: "/p", sessions: [existingSession] })
       const s1 = reducer(INITIAL_STATE, { type: "ADD_PROJECT", project })
-      
+
       const realSession = { id: "real-456", firstMessage: "New session", created: "2024-01-01T00:00:00Z", messageCount: 0 }
       const s2 = reducer(s1, {
         type: "REPLACE_PENDING_SESSION",
@@ -685,7 +691,7 @@ describe("project-store reducer", () => {
         pendingId: "pending-nonexistent",
         realSession,
       })
-      
+
       // Should add the real session even if pending wasn't found
       expect(s2.projects[0].sessions).toHaveLength(2)
       expect(s2.projects[0].sessions[0].id).toBe("real-456")
@@ -693,7 +699,7 @@ describe("project-store reducer", () => {
 
     it("handles project not found gracefully", () => {
       const s1 = reducer(INITIAL_STATE, { type: "ADD_PROJECT", project: makeProject() })
-      
+
       const realSession = { id: "real-456", firstMessage: "New session", created: "2024-01-01T00:00:00Z", messageCount: 0 }
       const s2 = reducer(s1, {
         type: "REPLACE_PENDING_SESSION",
@@ -701,7 +707,7 @@ describe("project-store reducer", () => {
         pendingId: "pending-123",
         realSession,
       })
-      
+
       // State should remain unchanged if project not found
       expect(s2).toEqual(s1)
     })
@@ -711,7 +717,7 @@ describe("project-store reducer", () => {
       const project = makeProject({ path: "/p", sessions: [pendingSession] })
       const s1 = reducer(INITIAL_STATE, { type: "ADD_PROJECT", project })
       const s2 = reducer(s1, { type: "SET_AGENT_CONNECTING" })
-      
+
       const realSession = { id: "real-456", firstMessage: "New session", created: "2024-01-01T00:00:00Z", messageCount: 0 }
       const s3 = reducer(s2, {
         type: "REPLACE_PENDING_SESSION",
@@ -719,7 +725,7 @@ describe("project-store reducer", () => {
         pendingId: "pending-123",
         realSession,
       })
-      
+
       expect(s3.agentReady).toBe(false)
     })
   })

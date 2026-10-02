@@ -30,6 +30,9 @@ interface ActivityRailProps {
   selectedToolCallId: string | null
 }
 
+// Historical note: the rail scrolls to the selected diff entry after a small
+// delay so the DOM has time to render when the rail opens or selection changes.
+
 /**
  * Build DiffEntry objects from the session's tool call messages.
  * Only write and edit tool calls that have completed with results
@@ -119,15 +122,10 @@ export function ActivityRail({ isOpen, onClose, messages, selectedToolCallId }: 
     return () => window.removeEventListener('keydown', handler)
   }, [isOpen, onClose])
 
-  // Scroll to the selected diff entry when the rail opens or selection changes
-  useEffect(() => {
-    if (!isOpen || !selectedToolCallId) return
-    // Small delay to allow the DOM to render
-    requestAnimationFrame(() => {
-      const el = document.getElementById(`diff-entry-${selectedToolCallId}`)
-      el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    })
-  }, [isOpen, selectedToolCallId])
+  // NOTE: Scrolling to the selected diff entry is now handled internally by
+  // SessionDiffView via react-virtuoso's scrollToIndex. The old approach of
+  // using DOM scrollIntoView no longer works with virtualization because
+  // off-screen entries may not be mounted in the DOM.
 
   const handleSelectEntry = useCallback((_id: string) => {
     // Future: could update selection state for highlighting

@@ -1,6 +1,14 @@
 /**
  * Shared IPC types for session and project management.
  * These types are used by both main and renderer processes.
+ *
+ * Future refactor: This file could be split by domain into:
+ * - ipc-session-types.ts (SessionCreatePayload, SessionStreamEvent, etc.)
+ * - ipc-project-types.ts (ProjectInfo, ProjectAddPayload, etc.)
+ * - ipc-git-types.ts (GitStatusResult, GitLogResult, etc.)
+ * - ipc-ui-types.ts (UIResponse, NotificationSettings, etc.)
+ * With a barrel re-export from ipc-types.ts for backward compatibility.
+ * See: docs/abstraction-oop-audit.md Priority 10
  */
 
 /** Payload for creating a new session */
@@ -478,6 +486,40 @@ export interface GitStashListResult {
 // ━━ Coms (inter-agent messaging) Types ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
+// ━━ Search Types ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/** Request payload for searching files in a project directory */
+export interface SearchFilesRequest {
+  /** Absolute path to the project root */
+  projectPath: string
+  /** Search query string (fuzzy matched against file paths) */
+  query: string
+  /** Maximum number of results to return (default: 50) */
+  limit?: number
+  /** File extensions to include (e.g., ['.ts', '.tsx']). If omitted, all files are included. */
+  extensions?: string[]
+  /** Directories to exclude (e.g., ['node_modules', '.git']). Merged with defaults. */
+  excludeDirs?: string[]
+}
+
+/** A single file search result entry */
+export interface SearchResultEntry {
+  /** Relative path from project root */
+  relativePath: string
+  /** Absolute file path */
+  absolutePath: string
+  /** File name only (last path component) */
+  fileName: string
+  /** Match score (0–1, higher = better match) */
+  score: number
+}
+
+/** Result of searching files */
+export interface SearchFilesResult {
+  /** Matching file entries, sorted by score descending */
+  files: SearchResultEntry[]
+}
+
 export interface NekoCodeIPC {
   session: {
     create: (cwd: string) => Promise<SessionCreateResult>
@@ -575,6 +617,10 @@ export interface NekoCodeIPC {
     onPlaySound: (callback: (payload: NotificationPayload) => void) => () => void
   }
     window: WindowApi
+  search: {
+    /** Search for files in a project directory */
+    files: (request: SearchFilesRequest) => Promise<SearchFilesResult>
+  }
   shell: ShellApi
 
 }

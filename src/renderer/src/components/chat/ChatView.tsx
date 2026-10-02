@@ -8,7 +8,7 @@ import { ToolCallGroup } from './ToolCallSection'
 import { ThinkingBlock } from './ThinkingBlock'
 import { UIDialog } from './UIDialog'
 import { WorkflowStepProgress } from './WorkflowStepProgress'
-import { GlobalCommandPalette } from './GlobalCommandPalette'
+import { SearchPalette } from './SearchPalette'
 import { useCommands } from '../../hooks/useCommands'
 import { MessagesTimeline, type MessagesTimelineHandle } from './MessagesTimeline'
 import { StatusIndicator } from '../layout/StatusIndicator'
@@ -17,6 +17,7 @@ import { ChatInput, type ChatInputHandle } from './ChatInput'
 import { useProjectStore } from '../../stores/project-store'
 import { useSessionMessages } from '../../contexts/session-messages-context'
 import { createLogger } from '../../utils/logger'
+import { groupMessages, type MessageGroup } from '../../utils/message-grouping'
 
 const logger = createLogger('ChatView')
 import type { ChatMessage } from '../../types/chat'
@@ -27,6 +28,9 @@ interface ChatViewProps {
   sessionId: string | null
   className?: string
 }
+
+// Historical note: Ctrl+Shift+P is the global keyboard shortcut for opening
+// the command palette.
 
 export function ChatView({ sessionId, className }: ChatViewProps) {
   const { state: projectState } = useProjectStore()
@@ -65,16 +69,38 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
   } = useCommands({ sessionId })
   const [showGlobalPalette, setShowGlobalPalette] = useState(false)
 
-  // Global keyboard shortcut: Ctrl+Shift+P to open command palette
+  // Track the initial mode for the search palette
+  const [searchPaletteInitialMode, setSearchPaletteInitialMode] = useState<import('../../hooks/useSearchMode').SearchMode>('all')
+
+  // Global keyboard shortcuts
+  // Ctrl+Shift+P → Open search palette in command mode
+  // Ctrl+P       → Open search palette in files mode
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
+    const keyHandler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'P') {
         e.preventDefault()
-        setShowGlobalPalette(prev => !prev)
+        setSearchPaletteInitialMode('commands')
+        setShowGlobalPalette(true)
+      } else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'p') {
+        e.preventDefault()
+        setSearchPaletteInitialMode('files')
+        setShowGlobalPalette(true)
       }
     }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
+
+    // Listen for the NavBar search button event
+    const customHandler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { mode?: import('../../hooks/useSearchMode').SearchMode } | undefined
+      setSearchPaletteInitialMode(detail?.mode ?? 'all')
+      setShowGlobalPalette(true)
+    }
+
+    window.addEventListener('keydown', keyHandler)
+    window.addEventListener('nekocode:open-search', customHandler)
+    return () => {
+      window.removeEventListener('keydown', keyHandler)
+      window.removeEventListener('nekocode:open-search', customHandler)
+    }
   }, [])
 
   // Handle command selection from global palette
@@ -153,43 +179,8 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
   // --- Message grouping ---
   const lastMessageId = messages.length > 0 ? messages[messages.length - 1].id : null
 
-  type ToolCallMsg = Extract<ChatMessage, { role: 'assistant'; type: 'tool_call' }>
-  type ThinkingMsg = Extract<ChatMessage, { role: 'assistant'; type: 'thinking' }>
-  type MessageGroup =
-    | { key: string; type: 'single'; msg: ChatMessage }
-    | { key: string; type: 'tool-group'; msgs: ToolCallMsg[] }
-    | { key: string; type: 'thinking-group'; msgs: ThinkingMsg[] }
-    | { key: string; type: 'ui-dialog' }
-    | { key: string; type: 'workflow-step'; workflowId: string }
-  const isToolCall = (msg: ChatMessage): msg is ToolCallMsg => msg.role === 'assistant' && msg.type === 'tool_call'
-  const isThinking = (msg: ChatMessage): msg is ThinkingMsg => msg.role === 'assistant' && msg.type === 'thinking'
-  const messageGroups: MessageGroup[] = []
-  let i = 0
-  while (i < messages.length) {
-    const msg = messages[i]
-    if (isToolCall(msg)) {
-      const toolMsgs: ToolCallMsg[] = []
-      let current = messages[i]
-      while (i < messages.length && isToolCall(current)) {
-        toolMsgs.push(current)
-        i++
-        current = messages[i]
-      }
-      messageGroups.push({ key: `tg-${toolMsgs[0].id}`, type: 'tool-group', msgs: toolMsgs })
-    } else if (isThinking(msg)) {
-      const thinkingMsgs: ThinkingMsg[] = []
-      let current = messages[i]
-      while (i < messages.length && isThinking(current)) {
-        thinkingMsgs.push(current)
-        i++
-        current = messages[i]
-      }
-      messageGroups.push({ key: `th-${thinkingMsgs[0].id}`, type: 'thinking-group', msgs: thinkingMsgs })
-    } else {
-      messageGroups.push({ key: msg.id, type: 'single', msg })
-      i++
-    }
-  }
+  // Use extracted grouping utility instead of inline logic
+  const messageGroups: MessageGroup[] = groupMessages(messages)
   logger.debug(`messageGroups: ${messageGroups.length} groups (${messageGroups.filter(g => g.type === 'tool-group').length} tool-groups, ${messageGroups.filter(g => g.type === 'thinking-group').length} thinking-groups), total messages: ${messages.length}`)
 
   // Append active workflow steps to the timeline (show all active workflows)
@@ -445,12 +436,24 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
         gitBranch={gitBranch}
       />
 
-      {/* Global command palette (Ctrl+Shift+P) */}
-      <GlobalCommandPalette
+      {/* Search palette (Ctrl+Shift+P / Ctrl+P) */}
+      <SearchPalette
         visible={showGlobalPalette}
+        initialMode={searchPaletteInitialMode}
         commands={allCommands}
-        isLoading={isCommandsLoading}
-        onSelect={handleGlobalCommandSelect}
+        isCommandsLoading={isCommandsLoading}
+        projectPath={projectState.activeProjectPath ?? null}
+        onCommandSelect={handleGlobalCommandSelect}
+        onFileSelect={(file) => {
+          logger.info(`File selected: ${file.relativePath}`)
+          // Insert file reference into the chat input
+          setInput(file.relativePath)
+        }}
+        onSessionSelect={(sessionId, cwd) => {
+          logger.info(`Session selected: ${sessionId} in ${cwd}`)
+          // Dispatch session selection event
+          window.dispatchEvent(new CustomEvent(SESSION_SELECTED_EVENT, { detail: { sessionId, cwd } }))
+        }}
         onClose={() => setShowGlobalPalette(false)}
         recentCommandNames={getRecentCommandNames()}
       />

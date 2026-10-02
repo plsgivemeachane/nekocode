@@ -18,6 +18,8 @@ import type {
   NotificationPayload,
   NotificationSettings,
   ShellApi,
+  SearchFilesRequest,
+  SearchFilesResult,
 } from '../shared/ipc-types'
 
 const sessionApi: NekoCodeIPC['session'] = {
@@ -249,5 +251,9 @@ contextBridge.exposeInMainWorld('nekocode', {
 
     checkVscodeAvailable: (): Promise<{ available: boolean; command: string | null; method: 'cli' | 'uri' | null }> =>
       ipcRenderer.invoke(IPC_CHANNELS.SHELL_CHECK_VSCODE_AVAILABLE),
-  } satisfies ShellApi
+  } satisfies ShellApi,
+  search: {
+    files: (request: SearchFilesRequest): Promise<SearchFilesResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SEARCH_FILES, request),
+  },
 })

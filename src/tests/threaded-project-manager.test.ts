@@ -34,7 +34,7 @@ vi.mock('../main/logger', () => ({
 }))
 
 import { ThreadedProjectManager } from '../main/threading/threaded-project-manager'
-import type { ProjectInfo } from '../shared/ipc-types'
+import type { ProjectInfo, SessionInfoDisplay } from '../shared/ipc-types'
 
 // ── Mock ProjectManager ──────────────────────────────────────────
 
@@ -59,6 +59,12 @@ function createMockProjectManager() {
     setActiveSession: vi.fn(async () => {}),
     getActiveSession: vi.fn<() => { sessionId: string | null; projectPath: string | null }>(() => ({ sessionId: null, projectPath: null })),
     restoreWorkspace: vi.fn(async () => {}),
+    addProjectWithSessions: vi.fn<(path: string, sessions: SessionInfoDisplay[]) => Promise<ProjectInfo>>(async (path, sessions) => ({
+      id: 'proj-1',
+      name: 'Test Project',
+      path,
+      sessions,
+    })),
   }
 }
 

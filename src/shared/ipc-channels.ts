@@ -73,6 +73,9 @@ export const IPC_CHANNELS = {
   SHELL_OPEN_IN_VSCODE: 'shell:openInVscode',
   SHELL_OPEN_IN_EXPLORER: 'shell:openInExplorer',
   SHELL_CHECK_VSCODE_AVAILABLE: 'shell:checkVscodeAvailable',
+
+  // --- Search handlers ---
+  SEARCH_FILES: 'search:files',
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]

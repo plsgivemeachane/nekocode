@@ -52,6 +52,11 @@ vi.mock("@/renderer/src/stores/project-store", () => ({
     refreshSessions: mockRefreshSessions,
     preloadSession: mockPreloadSession,
     setActiveSession: mockSetActiveSession,
+    setActiveView: vi.fn(),
+    setGitOverlay: vi.fn(),
+    setRightSidebarPanel: vi.fn(),
+    setRightSidebarWidth: vi.fn(),
+    refreshSessionMessages: vi.fn(),
   })),
 }))
 
@@ -62,11 +67,6 @@ vi.mock("@/renderer/src/hooks/useSessionOrchestration", () => ({
     reconnectSession: mockReconnectSession,
     preloadSession: mockPreloadSession,
   }),
-}))
-
-// ── Mock useClickOutside ────────────────────────────────────────────
-vi.mock("@/renderer/src/hooks/useClickOutside", () => ({
-  useClickOutside: vi.fn(),
 }))
 
 // ── Mock context-menu ────────────────────────────────────────────────
@@ -135,6 +135,11 @@ describe("TreeSidebar", () => {
       openInExplorer: vi.fn().mockResolvedValue(true),
       checkVscodeAvailable: vi.fn().mockResolvedValue({ available: true, command: "code", method: "cli" }),
     }
+    // Mock dialog for add-folder button
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(window as any).nekocode.dialog = {
+      openFolder: vi.fn().mockResolvedValue(null),
+    }
   })
 
   describe("pending session handling", () => {
@@ -146,63 +151,63 @@ describe("TreeSidebar", () => {
 
     it("does not call reconnectSession when clicking on a pending session", async () => {
       render(<TreeSidebar />)
-      
+
       // Find the pending session element by its text
       const pendingElement = screen.getByText("Connecting...")
       expect(pendingElement).toBeTruthy()
-      
+
       // Click on the pending session
       fireEvent.click(pendingElement.closest("div")!)
-      
+
       // reconnectSession should NOT be called for pending sessions
       expect(mockReconnectSession).not.toHaveBeenCalled()
     })
 
     it("calls reconnectSession when clicking on a real session", async () => {
       render(<TreeSidebar />)
-      
+
       // Find the real session element by its text
       const realElement = screen.getByText("Real Session")
       expect(realElement).toBeTruthy()
-      
+
       // Click on the real session
       fireEvent.click(realElement.closest("div")!)
-      
+
       // reconnectSession should be called for real sessions
       expect(mockReconnectSession).toHaveBeenCalledWith("sess-real", "/test/project")
     })
 
     it("does not call preloadSession when hovering over a pending session", async () => {
       render(<TreeSidebar />)
-      
+
       // Find the pending session element by its text
       const pendingElement = screen.getByText("Connecting...")
       expect(pendingElement).toBeTruthy()
-      
+
       // Hover over the pending session
       fireEvent.mouseEnter(pendingElement.closest("div")!)
-      
+
       // preloadSession should NOT be called for pending sessions
       expect(mockPreloadSession).not.toHaveBeenCalled()
     })
 
     it("calls preloadSession when hovering over a real session", async () => {
       render(<TreeSidebar />)
-      
+
       // Find the real session element by its text
       const realElement = screen.getByText("Real Session")
       expect(realElement).toBeTruthy()
-      
+
       // Hover over the real session
       fireEvent.mouseEnter(realElement.closest("div")!)
-      
+
       // preloadSession should be called for real sessions
       expect(mockPreloadSession).toHaveBeenCalledWith("sess-real", "/test/project")
     })
 
     it("shows spinner for pending session instead of status dot", () => {
       render(<TreeSidebar />)
-      
+
       // The pending session should have a spinner (SVG with animate-spin class)
       const pendingContainer = screen.getByText("Connecting...").closest("div")!
       const spinner = pendingContainer.querySelector("svg.animate-spin")
@@ -211,7 +216,7 @@ describe("TreeSidebar", () => {
 
     it("applies cursor-wait class to pending session", () => {
       render(<TreeSidebar />)
-      
+
       // The pending session container should have cursor-wait class
       const pendingContainer = screen.getByText("Connecting...").closest("div")!
       expect(pendingContainer.className).toContain("cursor-wait")
@@ -219,7 +224,7 @@ describe("TreeSidebar", () => {
 
     it("applies opacity-60 class to pending session", () => {
       render(<TreeSidebar />)
-      
+
       // The pending session container should have opacity-60 class
       const pendingContainer = screen.getByText("Connecting...").closest("div")!
       expect(pendingContainer.className).toContain("opacity-60")
@@ -227,18 +232,18 @@ describe("TreeSidebar", () => {
 
     it("can click real sessions when a pending session exists", async () => {
       render(<TreeSidebar />)
-      
+
       // First click on real session
       const realElement = screen.getByText("Real Session")
       fireEvent.click(realElement.closest("div")!)
-      
+
       expect(mockReconnectSession).toHaveBeenCalledTimes(1)
       expect(mockReconnectSession).toHaveBeenCalledWith("sess-real", "/test/project")
-      
+
       // Clear and click again to ensure pending session doesn't block interaction
       mockReconnectSession.mockClear()
       fireEvent.click(realElement.closest("div")!)
-      
+
       expect(mockReconnectSession).toHaveBeenCalledTimes(1)
     })
   })
@@ -253,25 +258,25 @@ describe("TreeSidebar", () => {
 
     it("handles multiple pending sessions correctly", async () => {
       render(<TreeSidebar />)
-      
+
       // Both pending sessions should be non-clickable
       const pendingElements = screen.getAllByText(/Connecting|Loading/)
       expect(pendingElements).toHaveLength(2)
-      
+
       pendingElements.forEach(element => {
         fireEvent.click(element.closest("div")!)
       })
-      
+
       // reconnectSession should not be called for any pending session
       expect(mockReconnectSession).not.toHaveBeenCalled()
     })
 
     it("allows clicking real sessions when multiple pending sessions exist", async () => {
       render(<TreeSidebar />)
-      
+
       const realElement = screen.getByText("Session 1")
       fireEvent.click(realElement.closest("div")!)
-      
+
       expect(mockReconnectSession).toHaveBeenCalledWith("sess-real-1", "/test/project")
     })
   })
@@ -285,9 +290,9 @@ describe("TreeSidebar", () => {
 
     it("highlights pending session when it is the active session", () => {
       mockProjectState.activeSessionId = "pending-123"
-      
+
       render(<TreeSidebar />)
-      
+
       const pendingContainer = screen.getByText("Connecting...").closest("div")!
       expect(pendingContainer.className).toContain("bg-surface-800/80")
       expect(pendingContainer.className).toContain("text-text-primary")
@@ -295,16 +300,18 @@ describe("TreeSidebar", () => {
 
     it("highlights other session correctly when pending session is not active", () => {
       mockProjectState.activeSessionId = "sess-other"
-      
+
       render(<TreeSidebar />)
-      
+
       const otherContainer = screen.getByText("Other Session").closest("div")!
       expect(otherContainer.className).toContain("bg-surface-800/80")
       expect(otherContainer.className).toContain("text-text-primary")
-      
+
       // Pending session should not be highlighted
       const pendingContainer = screen.getByText("Connecting...").closest("div")!
       expect(pendingContainer.className).not.toContain("bg-surface-800/80")
     })
   })
 })
+
+// Historical note: useClickOutside is mocked to isolate sidebar interactions.

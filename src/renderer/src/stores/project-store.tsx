@@ -18,11 +18,15 @@ import { useSessionOrchestration } from '../hooks/useSessionOrchestration'
 
 const logger = createLogger('project-store')
 
+// NOTE: The types, initial state, and reducer in this file could be
+// extracted into a separate `project-store-types.ts` for testability and
+// reusability. See: docs/abstraction-oop-audit.md Priority 5.
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type SessionStatus = 'idle' | 'streaming' | 'error'
+export type SessionStatus = 'idle' | 'streaming' | 'error' | 'finished_unread'
 
 /** Which main view is currently shown in the content area */
 export type ActiveView = 'chat' | 'settings'
@@ -53,6 +57,8 @@ interface ProjectState {
   rightSidebarWidth: number
   /** Tool call ID selected in the right sidebar for scrolling */
   rightSidebarSelectedToolCallId: string | null
+  /** Width of the left sidebar in pixels */
+  leftSidebarWidth: number
 }
 
 export type ProjectAction =
@@ -76,6 +82,7 @@ export type ProjectAction =
   | { type: 'REFRESH_SESSION_MESSAGES'; sessionId: string }
   | { type: 'SET_RIGHT_SIDEBAR_PANEL'; panel: RightSidebarPanel; selectedToolCallId?: string | null }
   | { type: 'SET_RIGHT_SIDEBAR_WIDTH'; width: number }
+  | { type: 'SET_LEFT_SIDEBAR_WIDTH'; width: number }
 
 // ---------------------------------------------------------------------------
 // Reducer (pure)
@@ -95,6 +102,7 @@ const INITIAL_STATE: ProjectState = {
   rightSidebarActivePanel: null,
   rightSidebarWidth: 480,
   rightSidebarSelectedToolCallId: null,
+  leftSidebarWidth: 240,
 }
 
 function reducer(state: ProjectState, action: ProjectAction): ProjectState {
@@ -151,7 +159,13 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
         ),
       }
 
-    case 'SET_ACTIVE_SESSION':
+    case 'SET_ACTIVE_SESSION': {
+      // Clear the finished_unread (blue dot) status when the user selects a session,
+      // since they are now viewing it
+      const newStatuses = { ...state.sessionStatuses }
+      if (newStatuses[action.sessionId] === 'finished_unread') {
+        newStatuses[action.sessionId] = 'idle'
+      }
       return {
         ...state,
         activeSessionId: action.sessionId,
@@ -159,7 +173,9 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
         // Always switch to chat view when selecting a session
         activeView: 'chat',
         showGitOverlay: false,
+        sessionStatuses: newStatuses,
       }
+    }
 
     case 'RECONNECT_SESSION':
       // Guard: ignore stale reconnect if user already switched to a different session
@@ -295,6 +311,15 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
       }
     }
 
+    case 'SET_LEFT_SIDEBAR_WIDTH': {
+      const safeWidth = Number.isFinite(action.width) ? action.width : 240
+      const clampedWidth = Math.max(180, Math.min(500, safeWidth))
+      return {
+        ...state,
+        leftSidebarWidth: clampedWidth,
+      }
+    }
+
     case 'REPLACE_PENDING_SESSION': {
       // Replace a pending session with the real one, and update active session ID
       const { projectPath, pendingId, realSession } = action
@@ -328,6 +353,7 @@ interface ProjectStoreAPI {
   setGitOverlay: (show: boolean) => void
   setRightSidebarPanel: (panel: RightSidebarPanel, selectedToolCallId?: string | null) => void
   setRightSidebarWidth: (width: number) => void
+  setLeftSidebarWidth: (width: number) => void
   reconnectSession: (sessionId: string, projectPath: string) => Promise<void>
   createSession: (projectPath: string) => Promise<void>
   refreshSessions: (projectId: string) => Promise<void>
@@ -344,6 +370,8 @@ const ProjectStoreContext = createContext<ProjectStoreAPI | null>(null)
 export function ProjectProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE)
   const initializedRef = useRef(false)
+  // Ref to track the active session ID without stale closures in the global event handler
+  const activeSessionIdRef = useRef<string | null>(null)
 
   // Delegate session orchestration (reconnect/create) to a dedicated hook
   const { reconnectSession, createSession, initReconnect, draftSessionsRef } =
@@ -352,6 +380,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       activeSessionId: state.activeSessionId,
       activeProjectPath: state.activeProjectPath,
     })
+
+  // Keep the ref in sync so the global event handler always sees the current active session
+  useEffect(() => {
+    activeSessionIdRef.current = state.activeSessionId
+  }, [state.activeSessionId])
 
   // Load persisted workspace on first mount
   useEffect(() => {
@@ -404,7 +437,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
         case 'done':
           logger.debug(`[global] done sessionId=${sessionId.slice(0, 8)}...`)
-          dispatch({ type: 'UPDATE_SESSION_STATUS', sessionId, status: 'idle' })
+          // If the session is not currently active, mark it as finished_unread (blue dot)
+          // so the user knows the agent finished but hasn't viewed it yet.
+          // If it IS the active session, just go to idle (user is already watching).
+          dispatch({
+            type: 'UPDATE_SESSION_STATUS',
+            sessionId,
+            status: activeSessionIdRef.current === sessionId ? 'idle' : 'finished_unread',
+          })
           break
 
         case 'error':
@@ -535,6 +575,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     [],
   )
 
+  const setLeftSidebarWidth = useCallback(
+    (width: number) => {
+      dispatch({ type: 'SET_LEFT_SIDEBAR_WIDTH', width })
+    },
+    [],
+  )
+
   const api: ProjectStoreAPI = {
     state,
     addProject,
@@ -544,6 +591,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     setGitOverlay,
     setRightSidebarPanel,
     setRightSidebarWidth,
+    setLeftSidebarWidth,
     reconnectSession,
     createSession,
     refreshSessions,
