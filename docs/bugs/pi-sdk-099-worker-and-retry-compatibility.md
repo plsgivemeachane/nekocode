@@ -33,8 +33,8 @@ project and offline provider, including extension imports, create/reconnect,
 streaming, models, and extension UI request/response. It does not use account
 credentials or make inference requests.
 
-On Node 26, run tests with `NODE_OPTIONS=--no-experimental-webstorage` to keep
-Node's global Web Storage from shadowing jsdom's localStorage implementation.
+The Node 26 jsdom storage issue is fixed in shared test setup. Use the ordinary
+`bun run test` command; see `node26-jsdom-storage-test-failures.md`.
 
 ## Clean-install patch failure
 

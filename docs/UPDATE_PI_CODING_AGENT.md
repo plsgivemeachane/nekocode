@@ -254,9 +254,8 @@ isolated temporary agent directory and project, loads a TypeScript extension
 through the bundled SDK, and verifies session creation/reconnect, model
 selection, deterministic offline streaming, and extension UI round trips.
 For Pi 0.99.2 the worker build must define `PI_BUNDLED_NODE: true` so jiti embeds
-its Babel transform. On Node 26, use
-`NODE_OPTIONS=--no-experimental-webstorage bun run test` to avoid global Web
-Storage shadowing jsdom's localStorage.
+its Babel transform. Run the standard `bun run test`; shared test setup binds
+renderer storage to jsdom even on Node 26, so no NODE_OPTIONS workaround is needed.
 
 ### Linux host validation limitation
 
