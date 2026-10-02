@@ -154,5 +154,3 @@ For EVERY bug fix, you MUST write a full detailed description of the bug and how
 | "pi-package" | The distributable package in `workers/pi-package/` |
 
 
-Coms mean the pi extension that allow multiple pi agents to communicate with each other.
-path: "C:\Users\admin\.pi\agent\extensions\coms.ts"
