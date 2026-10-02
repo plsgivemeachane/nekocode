@@ -99,6 +99,7 @@
     "vitest": "^4.1.2"
   },
   "build": {
+    "afterPack": "scripts/after-pack.cjs",
     "appId": "com.nekocode.app",
     "productName": "Nekocode",
     "copyright": "Copyright © 2026 Nekocode",
