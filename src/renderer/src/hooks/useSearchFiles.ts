@@ -41,11 +41,16 @@ export function useSearchFiles(
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const abortRef = useRef(false)
+  // A monotonically increasing request generation prevents a slower IPC
+  // response from an older query/project from publishing into newer state.
+  const requestGenerationRef = useRef(0)
 
   const search = useCallback(async (q: string) => {
+    const requestGeneration = ++requestGenerationRef.current
     if (!projectPath) {
       setResults([])
+      setIsLoading(false)
+      setError(null)
       return
     }
 
@@ -60,17 +65,18 @@ export function useSearchFiles(
       })
 
       // Only update if this search wasn't superseded
-      if (!abortRef.current) {
+      // Only update if this search is still the latest request.
+      if (requestGeneration === requestGenerationRef.current) {
         setResults(result.files)
       }
     } catch (err) {
       logger.error('File search failed', err)
-      if (!abortRef.current) {
+      if (requestGeneration === requestGenerationRef.current) {
         setError(err instanceof Error ? err.message : 'Search failed')
         setResults([])
       }
     } finally {
-      if (!abortRef.current) {
+      if (requestGeneration === requestGenerationRef.current) {
         setIsLoading(false)
       }
     }
@@ -78,7 +84,9 @@ export function useSearchFiles(
 
   // Debounced search effect
   useEffect(() => {
-    abortRef.current = false
+    // Invalidate an in-flight request as soon as query/project inputs change,
+    // before its cleanup or the next debounced request can run.
+    requestGenerationRef.current++
 
     // Clear any pending timer
     if (timerRef.current) {
@@ -89,6 +97,7 @@ export function useSearchFiles(
     if (!projectPath) {
       setResults([])
       setIsLoading(false)
+      setError(null)
       return
     }
 
@@ -102,7 +111,7 @@ export function useSearchFiles(
       }, debounceMs)
       // Initial file suggestions need the same unmount cleanup as nonempty searches.
       return () => {
-        abortRef.current = true
+        requestGenerationRef.current++
         if (timerRef.current) {
           clearTimeout(timerRef.current)
         }
@@ -116,7 +125,7 @@ export function useSearchFiles(
     }, debounceMs)
 
     return () => {
-      abortRef.current = true
+      requestGenerationRef.current++
       if (timerRef.current) {
         clearTimeout(timerRef.current)
       }

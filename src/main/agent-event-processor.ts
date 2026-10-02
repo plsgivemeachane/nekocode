@@ -212,8 +212,10 @@ export class AgentEventProcessor {
             managed.currentThinkingId = crypto.randomUUID()
             managed.currentThinkingContent = ''
           }
-          managed.currentThinkingContent += sub.delta
-          emitEvent({ type: 'thinking_delta', delta: sub.delta }, true)
+          // Match the text-delta boundary guard so malformed events cannot append "undefined".
+          const delta = sub.delta ?? ''
+          managed.currentThinkingContent += delta
+          emitEvent({ type: 'thinking_delta', delta }, true)
         } else if (sub.type === 'thinking_end') {
           emitEvent({ type: 'thinking_end' }, true)
           if (managed.currentThinkingId) {

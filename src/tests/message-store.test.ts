@@ -726,6 +726,9 @@ describe("loadHistoryFromDisk - STRESS TESTS", () => {
 describe("tryRefreshFromDisk - STRESS TESTS", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Empty-ID behavior needs an explicit disk fixture instead of a previous test's entries.
+    mockEntries.length = 0
+    mockSdkSessionManager.list.mockReset().mockResolvedValue([])
   })
 
   it("handles null currentMessages array", async () => {

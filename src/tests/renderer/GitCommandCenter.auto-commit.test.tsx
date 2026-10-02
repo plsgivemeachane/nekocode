@@ -85,14 +85,14 @@ describe('Git Auto commit', () => {
 
   it('shows persisted prompt errors when the modal is reopened', () => {
     state.activeSessionId = 'auto-session'
-    state.projects = [{ path: '/project', sessions: [{ id: 'auto-session', firstMessage: 'Auto commit' }] }]
+    state.projects = [{ path: '/project', sessions: [{ id: 'auto-session', firstMessage: AUTO_COMMIT_PROMPT.slice(0, 100) }] }]
     state.sessionErrorMessages = { 'auto-session': 'Prompt failed' }
     render(<GitCommandCenter />)
     expect(screen.getByRole('alert')).toHaveTextContent('Prompt failed')
   })
 
   it('prevents another Auto commit when the modal is reopened during a running session', () => {
-    state.projects = [{ path: '/project', sessions: [{ id: 'auto-session', firstMessage: 'Auto commit the changes' }] }]
+    state.projects = [{ path: '/project', sessions: [{ id: 'auto-session', firstMessage: AUTO_COMMIT_PROMPT.slice(0, 100) }] }]
     state.sessionStatuses = { 'auto-session': 'streaming' }
     render(<GitCommandCenter />)
     expect(screen.getByRole('button', { name: 'Auto commit' })).toBeDisabled()

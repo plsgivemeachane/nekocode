@@ -27,6 +27,9 @@ import { ScrollArea } from '../ui/scroll-area'
 import { Button } from '../ui/button'
 import { AUTO_COMMIT_PROMPT } from '../../utils/auto-commit'
 
+// Persisted first messages may be truncated; identify the complete generated opening line.
+const AUTO_COMMIT_TITLE = AUTO_COMMIT_PROMPT.split('\n', 1)[0]
+
 // ━━ Component ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 export function GitCommandCenter() {
@@ -43,8 +46,8 @@ export function GitCommandCenter() {
   const autoCommitInFlightRef = useRef(false)
   const projectSessions = state.projects.find(project => project.path === activeProjectPath)?.sessions ?? []
   const activeSession = projectSessions.find(session => session.id === state.activeSessionId)
-  const isAutoCommitRunning = projectSessions.some(session => session.firstMessage.startsWith('Auto commit') && state.sessionStatuses[session.id] === 'streaming')
-  const autoCommitSessionError = state.activeSessionId && activeSession?.firstMessage.startsWith('Auto commit')
+  const isAutoCommitRunning = projectSessions.some(session => session.firstMessage.split('\n', 1)[0] === AUTO_COMMIT_TITLE && state.sessionStatuses[session.id] === 'streaming')
+  const autoCommitSessionError = state.activeSessionId && activeSession?.firstMessage.split('\n', 1)[0] === AUTO_COMMIT_TITLE
     ? state.sessionErrorMessages[state.activeSessionId]
     : null
   const [isPushing, setIsPushing] = useState(false)

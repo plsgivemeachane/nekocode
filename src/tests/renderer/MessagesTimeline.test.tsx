@@ -17,8 +17,8 @@ import {
 // or defined inline. Using vi.hoisted() ensures the mock component is
 // available when the hoisted vi.mock factory executes.
 
-const { MockVirtuoso } = vi.hoisted(() => {
-  const MockVirtuoso = vi.fn(({ data, itemContent, followOutput }: { data: unknown[]; itemContent: (index: number) => React.ReactNode; followOutput?: string }) => {
+const { MockVirtuoso, renderVirtuoso } = vi.hoisted(() => {
+  const renderVirtuoso = ({ data, itemContent, followOutput }: { data: unknown[]; itemContent: (index: number) => React.ReactNode; followOutput?: string }) => {
     return (
       <div data-testid="virtuoso-mock" data-follow-output={String(followOutput)}>
         {data.map((row: unknown, index: number) => (
@@ -28,8 +28,9 @@ const { MockVirtuoso } = vi.hoisted(() => {
         ))}
       </div>
     )
-  })
-  return { MockVirtuoso }
+  }
+  const MockVirtuoso = vi.fn(renderVirtuoso)
+  return { MockVirtuoso, renderVirtuoso }
 })
 
 vi.mock("react-virtuoso", () => ({
@@ -82,6 +83,8 @@ function TimelineWithRef({
 describe("MessagesTimeline", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // The imperative-handle case installs a different renderer; restore the default each time.
+    MockVirtuoso.mockImplementation(renderVirtuoso)
   })
 
   // ═══════════════════════════════════════════════════════════════════

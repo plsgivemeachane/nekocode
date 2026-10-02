@@ -68,6 +68,11 @@ const mockAbort = vi.fn().mockResolvedValue(undefined)
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // Call history resets do not reset rejected implementations from earlier tests.
+  mockPrompt.mockReset().mockResolvedValue(undefined)
+  mockAbort.mockReset().mockResolvedValue(undefined)
+  mockLoadHistory.mockReset().mockResolvedValue([])
+  mockLoadHistoryFromDisk.mockReset().mockResolvedValue([])
   mockGetStreamStartTime.mockReturnValue(0)
   mockGetCachedError.mockReturnValue(null)
   mockGetCachedUsage.mockReturnValue({ inputTokens: 0, outputTokens: 0, totalCost: 0, contextPercent: 0, contextWindow: 0 })

@@ -11,7 +11,7 @@ vi.mock("shiki", () => ({
       getLoadedLanguages: () => ["typescript", "javascript"],
       loadLanguage: vi.fn(() => Promise.resolve()),
       codeToHtml: vi.fn((code: string, _opts: unknown) =>  
-        Promise.resolve(`<pre class="shiki"><code>${code}</code></pre>`)
+        `<pre class="shiki"><code>${code}</code></pre>`
       ),
     })
   ),

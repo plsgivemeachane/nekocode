@@ -124,6 +124,17 @@ export function usePolling(options: UsePollingOptions): UsePollingResult {
   const effectivePollIntervalRef = useRef(safeInterval)
   const isStoppedRef = useRef(false)
   const isPollingRef = useRef(false) // Guard against concurrent onPoll execution
+  // Each enabled effect owns a generation. Completions from a previous
+  // enabled/disabled cycle must not update state or schedule work in the new
+  // cycle (a promise can outlive both the timer and the React effect).
+  const pollingGenerationRef = useRef(0)
+  // Reactive errorCount state mirrors the ref and forces consumers to render
+  // reset/backoff changes immediately.
+  const [errorCountState, setErrorCountState] = useState(0)
+  // ── Reactive errorCount state ──
+  // Previously errorCount read directly from a ref, which meant React never
+  // re-rendered when it changed. Now we maintain a state that mirrors the ref
+  // and is updated after each poll tick.
 
   // Stable refs for callbacks to avoid re-creating the effect on every render
   const onPollRef = useRef(onPoll)
@@ -139,6 +150,7 @@ export function usePolling(options: UsePollingOptions): UsePollingResult {
   const resetBackoff = useCallback(() => {
     consecutiveErrorsRef.current = 0
     effectivePollIntervalRef.current = safeInterval
+    setErrorCountState(0)
     // Cancel and reschedule the pending timer so the reset takes effect immediately
     if (timerRef.current !== null && !isStoppedRef.current) {
       clearTimeout(timerRef.current)
@@ -157,9 +169,13 @@ export function usePolling(options: UsePollingOptions): UsePollingResult {
 
   const scheduleNextTick = useCallback(() => {
     if (isStoppedRef.current) return
+    const generation = pollingGenerationRef.current
 
     timerRef.current = setTimeout(async () => {
-      if (isStoppedRef.current) return
+      if (isStoppedRef.current || generation !== pollingGenerationRef.current) return
+      // The timeout has fired; clear ownership before running async work so a
+      // reset during this tick cannot schedule a duplicate timer.
+      timerRef.current = null
 
       // Skip polling if window is hidden — reschedule at base interval
       if (pauseWhenHidden && !isWindowVisibleRef.current) {
@@ -177,7 +193,7 @@ export function usePolling(options: UsePollingOptions): UsePollingResult {
       try {
         await onPollRef.current()
         // Check isStoppedRef after the await to prevent calling callbacks after unmount
-        if (isStoppedRef.current) return
+        if (isStoppedRef.current || generation !== pollingGenerationRef.current) return
         onSuccessRef.current?.()
         // Reset backoff on success
         consecutiveErrorsRef.current = 0
@@ -186,7 +202,7 @@ export function usePolling(options: UsePollingOptions): UsePollingResult {
         setErrorCountState(consecutiveErrorsRef.current)
       } catch (err) {
         // Check isStoppedRef after the await to prevent calling callbacks after unmount
-        if (isStoppedRef.current) return
+        if (isStoppedRef.current || generation !== pollingGenerationRef.current) return
         onErrorRef.current?.(err)
         // Apply backoff: double the interval on each consecutive error
         consecutiveErrorsRef.current++
@@ -201,18 +217,14 @@ export function usePolling(options: UsePollingOptions): UsePollingResult {
       }
 
       // Schedule the next tick with the (possibly increased) interval
-      scheduleNextTick()
+      if (!isStoppedRef.current && generation === pollingGenerationRef.current) {
+        scheduleNextTick()
+      }
     }, effectivePollIntervalRef.current)
   }, [safeInterval, pauseWhenHidden])
 
   // Keep the ref in sync so resetBackoff can call scheduleNextTick
   scheduleNextTickRef.current = scheduleNextTick
-
-  // ── Reactive errorCount state ──
-  // Previously errorCount read directly from a ref, which meant React never
-  // re-rendered when it changed. Now we maintain a state that mirrors the ref
-  // and is updated after each poll tick.
-  const [errorCountState, setErrorCountState] = useState(0)
 
   // ── Manual refresh trigger ──
   // Guarded with isPollingRef to prevent concurrent onPoll execution.
@@ -227,10 +239,11 @@ export function usePolling(options: UsePollingOptions): UsePollingResult {
     }
 
     isPollingRef.current = true
+    const generation = pollingGenerationRef.current
     onPollRef.current().then(() => {
       isPollingRef.current = false
       // Check isStoppedRef after the await to prevent calling callbacks after unmount
-      if (isStoppedRef.current) return
+      if (isStoppedRef.current || generation !== pollingGenerationRef.current) return
       onSuccessRef.current?.()
       resetBackoff()
       if (!isStoppedRef.current) {
@@ -239,7 +252,7 @@ export function usePolling(options: UsePollingOptions): UsePollingResult {
     }).catch((err) => {
       isPollingRef.current = false
       // Check isStoppedRef after the await to prevent calling callbacks after unmount
-      if (isStoppedRef.current) return
+      if (isStoppedRef.current || generation !== pollingGenerationRef.current) return
       onErrorRef.current?.(err)
       // Don't reset backoff on manual refresh failure
       if (!isStoppedRef.current) {
@@ -250,6 +263,7 @@ export function usePolling(options: UsePollingOptions): UsePollingResult {
 
   // ── Set up the polling effect ──
   useEffect(() => {
+    pollingGenerationRef.current++
     // Reset backoff when interval or enabled state changes
     resetBackoff()
 
@@ -263,6 +277,9 @@ export function usePolling(options: UsePollingOptions): UsePollingResult {
     }
 
     isStoppedRef.current = false
+    // Reflect the actual initial visibility. A hook mounted while hidden must
+    // not wait for the first visibility event before pausing its first tick.
+    isWindowVisibleRef.current = !document.hidden
 
     // ── Visibility-based polling pause ──
     const handleVisibilityChange = () => {
@@ -270,15 +287,16 @@ export function usePolling(options: UsePollingOptions): UsePollingResult {
       // When becoming visible again, immediately poll (but only if not already polling)
       if (!document.hidden && !isPollingRef.current) {
         isPollingRef.current = true
+        const visibilityGeneration = pollingGenerationRef.current
         onPollRef.current().then(() => {
           isPollingRef.current = false
-          if (isStoppedRef.current) return
+          if (isStoppedRef.current || visibilityGeneration !== pollingGenerationRef.current) return
           onSuccessRef.current?.()
           resetBackoff()
           setErrorCountState(consecutiveErrorsRef.current)
         }).catch((err) => {
           isPollingRef.current = false
-          if (isStoppedRef.current) return
+          if (isStoppedRef.current || visibilityGeneration !== pollingGenerationRef.current) return
           onErrorRef.current?.(err)
           consecutiveErrorsRef.current++
           effectivePollIntervalRef.current = Math.min(
@@ -298,6 +316,8 @@ export function usePolling(options: UsePollingOptions): UsePollingResult {
     scheduleNextTick()
 
     return () => {
+      // Invalidate all in-flight work before clearing timers/listeners.
+      pollingGenerationRef.current++
       isStoppedRef.current = true
       if (timerRef.current) {
         clearTimeout(timerRef.current)

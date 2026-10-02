@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from "vitest"
+import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, act } from "@testing-library/react"
 import React from "react"
 import { AssistantMessage } from "@/renderer/src/components/chat/AssistantMessage"
@@ -23,6 +23,7 @@ vi.mock("@/renderer/src/components/chat/MarkdownContent", () => ({
 // ========================================================================
 
 describe("AssistantMessage", () => {
+  beforeEach(() => { MockMarkdownContent.mockClear() })
   // ======================================================================
   // Streaming mode
   // ======================================================================

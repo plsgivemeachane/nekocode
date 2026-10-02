@@ -156,6 +156,10 @@ function getExtension(fileName: string): string {
 export async function searchFiles(request: SearchFilesRequest): Promise<SearchResultEntry[]> {
   const { projectPath, query, limit = DEFAULT_LIMIT, extensions, excludeDirs } = request
 
+  // Negative and fractional limits describe a result count, not Array.slice offsets.
+  const resultLimit = Number.isFinite(limit) ? Math.max(0, Math.trunc(limit)) : DEFAULT_LIMIT
+  if (resultLimit === 0) return []
+
   // Merge exclude directories with defaults
   const mergedExcludes = new Set([...DEFAULT_EXCLUDE_DIRS, ...(excludeDirs ?? [])])
 
@@ -170,7 +174,7 @@ export async function searchFiles(request: SearchFilesRequest): Promise<SearchRe
   if (!query.trim()) {
     return allFiles
       .sort((a, b) => basename(a).localeCompare(basename(b)))
-      .slice(0, limit)
+      .slice(0, resultLimit)
       .map((absolutePath) => {
         const relativePath = relative(projectPath, absolutePath)
         return {
@@ -202,5 +206,5 @@ export async function searchFiles(request: SearchFilesRequest): Promise<SearchRe
   // Sort by score descending, then alphabetically for ties
   scored.sort((a, b) => b.score - a.score || a.relativePath.localeCompare(b.relativePath))
 
-  return scored.slice(0, limit)
+  return scored.slice(0, resultLimit)
 }

@@ -23,11 +23,17 @@ async function advanceAndFlush(ms: number) {
 }
 
 describe('usePolling - Critical Contract Tests', () => {
+  let hiddenDescriptor: PropertyDescriptor | undefined
+
   beforeEach(() => {
     vi.useFakeTimers()
+    hiddenDescriptor = Object.getOwnPropertyDescriptor(document, 'hidden')
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false })
   })
 
   afterEach(() => {
+    if (hiddenDescriptor) Object.defineProperty(document, 'hidden', hiddenDescriptor)
+    else Reflect.deleteProperty(document, 'hidden')
     vi.useRealTimers()
   })
 

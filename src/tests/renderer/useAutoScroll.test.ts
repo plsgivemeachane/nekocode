@@ -61,6 +61,7 @@ function makeOpts(overrides: Partial<Opts> = {}): Opts {
 describe('useAutoScroll', () => {
   beforeEach(() => {
     rafCallbacks = []
+    mockRaf.mockClear()
     roCallback = undefined
     roCreated = false
     vi.stubGlobal('requestAnimationFrame', mockRaf)
@@ -70,6 +71,7 @@ describe('useAutoScroll', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
 
   // ── scrollToBottom ──────────────────────────────────────────
@@ -420,6 +422,7 @@ describe('useAutoScroll', () => {
 describe('useAutoScroll - STRESS TESTS', () => {
   beforeEach(() => {
     rafCallbacks = []
+    mockRaf.mockClear()
     roCallback = undefined
     roCreated = false
     vi.stubGlobal('requestAnimationFrame', mockRaf)

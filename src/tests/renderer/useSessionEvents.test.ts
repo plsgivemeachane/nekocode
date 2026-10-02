@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, type Mock } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from "vitest"
 import type { SessionStreamEvent, UsageData } from "@/shared/ipc-types"
 import type { ChatMessage } from "@/renderer/src/types/chat"
 
@@ -76,6 +76,23 @@ function cleanupEffects() {
 }
 
 // ── Tests ──────────────────────────────────────────────────────────
+
+// Both normal and stress suites need their own globals, regardless of describe order.
+beforeEach(() => {
+  resetHookState()
+  unsubMock = vi.fn()
+  vi.stubGlobal("window", globalThis)
+  vi.stubGlobal("nekocode", {
+    session: {
+      onEvent: vi.fn((cb) => {
+        eventCallback = cb
+        return unsubMock
+      }),
+    },
+  })
+})
+
+afterEach(() => { cleanupEffects(); vi.unstubAllGlobals() })
 
 describe("useSessionEvents", () => {
   const sessionId = "sess-abc123def456"

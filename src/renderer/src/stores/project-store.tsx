@@ -70,6 +70,7 @@ export type ProjectAction =
   | { type: 'SET_ACTIVE_SESSION'; sessionId: string; projectPath: string }
   | { type: 'RECONNECT_SESSION'; sessionId: string; projectPath: string }
   | { type: 'UPDATE_SESSION_STATUS'; sessionId: string; status: SessionStatus; errorMessage?: string }
+  | { type: 'SESSION_DONE'; sessionId: string }
   | { type: 'CLEAR_ACTIVE_SESSION' }
   | { type: 'UPDATE_SESSION_FIRST_MESSAGE'; sessionId: string; firstMessage: string }
   | { type: 'SET_SESSION_MESSAGE_COUNT'; sessionId: string; messageCount: number }
@@ -189,21 +190,27 @@ function reducer(state: ProjectState, action: ProjectAction): ProjectState {
         activeProjectPath: action.projectPath,
       }
 
+    case 'SESSION_DONE':
     case 'UPDATE_SESSION_STATUS': {
-      if (action.status === 'error') {
-        logger.error(`Session ${action.sessionId.slice(0, 8)}... entered error state${action.errorMessage ? `: ${action.errorMessage}` : ''}`)
+      // Resolve completion against reducer state so batched selections take effect first.
+      const status = action.type === 'SESSION_DONE'
+        ? (state.activeSessionId === action.sessionId ? 'idle' : 'finished_unread')
+        : action.status
+      const errorMessage = action.type === 'UPDATE_SESSION_STATUS' ? action.errorMessage : undefined
+      if (status === 'error') {
+        logger.error(`Session ${action.sessionId.slice(0, 8)}... entered error state${errorMessage ? `: ${errorMessage}` : ''}`)
       }
       const newErrorMessages = { ...state.sessionErrorMessages }
-      if (action.status === 'error' && action.errorMessage) {
-        newErrorMessages[action.sessionId] = action.errorMessage
-      } else if (action.status !== 'error') {
+      if (status === 'error' && errorMessage) {
+        newErrorMessages[action.sessionId] = errorMessage
+      } else if (status !== 'error') {
         delete newErrorMessages[action.sessionId]
       }
       return {
         ...state,
         sessionStatuses: {
           ...state.sessionStatuses,
-          [action.sessionId]: action.status,
+          [action.sessionId]: status,
         },
         sessionErrorMessages: newErrorMessages,
       }
@@ -371,7 +378,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE)
   const initializedRef = useRef(false)
   // Ref to track the active session ID without stale closures in the global event handler
-  const activeSessionIdRef = useRef<string | null>(null)
+  // Historical implementation: completion now reads reducer state, avoiding effect-lag races.
 
   // Delegate session orchestration (reconnect/create) to a dedicated hook
   const { reconnectSession, createSession, initReconnect, draftSessionsRef } =
@@ -382,9 +389,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     })
 
   // Keep the ref in sync so the global event handler always sees the current active session
-  useEffect(() => {
-    activeSessionIdRef.current = state.activeSessionId
-  }, [state.activeSessionId])
+  // Historical synchronization is superseded by the SESSION_DONE reducer action.
 
   // Load persisted workspace on first mount
   useEffect(() => {
@@ -441,9 +446,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           // so the user knows the agent finished but hasn't viewed it yet.
           // If it IS the active session, just go to idle (user is already watching).
           dispatch({
-            type: 'UPDATE_SESSION_STATUS',
+            type: 'SESSION_DONE',
             sessionId,
-            status: activeSessionIdRef.current === sessionId ? 'idle' : 'finished_unread',
           })
           break
 

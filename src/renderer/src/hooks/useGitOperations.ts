@@ -177,6 +177,18 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
   // Track the active project path so we can reset state when it changes
   const prevProjectPathRef = useRef<string | null>(null)
 
+  // Every project switch invalidates work started for the previous project.
+  // This is advanced during render so an old promise cannot win before the
+  // project-reset effect has run.
+  const projectGenerationRef = useRef(0)
+  const projectPathRef = useRef(activeProjectPath)
+  if (projectPathRef.current !== activeProjectPath) {
+    projectPathRef.current = activeProjectPath
+    projectGenerationRef.current += 1
+  }
+
+  const diffRequestRef = useRef(0)
+
   // ── Operation locking ──
   // Prevents concurrent mutations (stage/unstage/commit) that could race
   const pendingOperationsRef = useRef<Map<string, Promise<void>>>(new Map())
@@ -190,13 +202,20 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
   // without being a dependency of the effect that sets up the interval.
   const isGitRepoRef = useRef<boolean | null>(null)
 
+  const isCurrentProjectRequest = useCallback((path: string | null, generation: number) => (
+    path === projectPathRef.current && generation === projectGenerationRef.current
+  ), [])
+
   // ── Helpers ──
 
   const clearError = useCallback(() => setError(null), [])
 
   const clearDiff = useCallback(() => {
+    // Invalidate an in-flight diff so it cannot resurrect after clearing.
+    diffRequestRef.current += 1
     setSelectedDiff(null)
     setDiffSummary(null)
+    setIsDiffLoading(false)
   }, [])
 
   /**
@@ -204,21 +223,24 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
    * If an operation is already in-flight for the same key, the new call waits
    * for the previous one to complete before starting.
    */
-  const withLock = useCallback(async <T = void>(key: string, fn: () => Promise<T>): Promise<T> => {
+  const withLock = useCallback(<T = void>(key: string, fn: () => Promise<T>): Promise<T> => {
     // Wait for any existing operation with this key to finish
     const existing = pendingOperationsRef.current.get(key)
-    if (existing) {
-      await existing.catch(() => {}) // swallow error from previous op
-    }
     // Start the new operation
-    const promise = fn().finally(() => {
+    // Start the first operation immediately, while later callers chain from
+    // the current tail. Registering each tail before returning keeps three or
+    // more callers in strict FIFO order.
+    // swallow error from previous op
+    const operation = existing ? existing.catch(() => {}).then(fn) : fn()
+    const promise = operation.then(() => undefined, () => undefined)
+    promise.finally(() => {
       // Only remove if we're still the active promise
       if (pendingOperationsRef.current.get(key) === promise) {
         pendingOperationsRef.current.delete(key)
       }
-    }) as Promise<void>
+    })
     pendingOperationsRef.current.set(key, promise)
-    return promise as unknown as T
+    return operation
   }, [])
 
   // ── Refresh functions ──
@@ -226,16 +248,20 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
   const refreshStatus = useCallback(async () => {
     if (!activeProjectPath) return
     // Skip if we know this is not a git repo
-    if (isGitRepo === false) return
+    if (isGitRepoRef.current === false) return
+    const requestPath = activeProjectPath
+    const requestGeneration = projectGenerationRef.current
     try {
       setIsStatusLoading(true)
-      const result = await window.nekocode.git.getStatus(activeProjectPath)
+      const result = await window.nekocode.git.getStatus(requestPath)
+      if (!isCurrentProjectRequest(requestPath, requestGeneration)) return
       setStatus(result)
       // Clear error on success
       setError(null)
       // Mark initial load as complete
       setIsInitialLoad(false)
     } catch (err) {
+      if (!isCurrentProjectRequest(requestPath, requestGeneration)) return
       const msg = err instanceof Error ? err.message : String(err)
       logger.error('refreshStatus failed', msg)
       setError(msg)
@@ -243,47 +269,58 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
       // Callers that need to handle this already have their own try/catch.
       throw err
     } finally {
-      setIsStatusLoading(false)
+      if (isCurrentProjectRequest(requestPath, requestGeneration)) setIsStatusLoading(false)
     }
-  }, [activeProjectPath, isGitRepo])
+  }, [activeProjectPath, isGitRepo, isCurrentProjectRequest])
 
   const refreshLog = useCallback(async () => {
     if (!activeProjectPath) return
-    if (isGitRepo === false) return
+    if (isGitRepoRef.current === false) return
+    const requestPath = activeProjectPath
+    const requestGeneration = projectGenerationRef.current
     try {
       setIsLogLoading(true)
-      const result = await window.nekocode.git.getLog(activeProjectPath, 50)
+      const result = await window.nekocode.git.getLog(requestPath, 50)
+      if (!isCurrentProjectRequest(requestPath, requestGeneration)) return
       setLog(result)
     } catch (err) {
+      if (!isCurrentProjectRequest(requestPath, requestGeneration)) return
       const msg = err instanceof Error ? err.message : String(err)
       logger.error('refreshLog failed', msg)
       setError(msg)
     } finally {
-      setIsLogLoading(false)
+      if (isCurrentProjectRequest(requestPath, requestGeneration)) setIsLogLoading(false)
     }
   }, [activeProjectPath, isGitRepo])
 
   const refreshBranches = useCallback(async () => {
     if (!activeProjectPath) return
-    if (isGitRepo === false) return
+    if (isGitRepoRef.current === false) return
+    const requestPath = activeProjectPath
+    const requestGeneration = projectGenerationRef.current
     try {
       setIsBranchesLoading(true)
-      const result = await window.nekocode.git.branchList(activeProjectPath)
+      const result = await window.nekocode.git.branchList(requestPath)
+      if (!isCurrentProjectRequest(requestPath, requestGeneration)) return
       setBranches(result)
     } catch (err) {
+      if (!isCurrentProjectRequest(requestPath, requestGeneration)) return
       const msg = err instanceof Error ? err.message : String(err)
       logger.error('refreshBranches failed', msg)
       setError(msg)
     } finally {
-      setIsBranchesLoading(false)
+      if (isCurrentProjectRequest(requestPath, requestGeneration)) setIsBranchesLoading(false)
     }
   }, [activeProjectPath, isGitRepo])
 
   const refreshStashes = useCallback(async () => {
     if (!activeProjectPath) return
-    if (isGitRepo === false) return
+    if (isGitRepoRef.current === false) return
+    const requestPath = activeProjectPath
+    const requestGeneration = projectGenerationRef.current
     try {
-      const result = await window.nekocode.git.stashList(activeProjectPath)
+      const result = await window.nekocode.git.stashList(requestPath)
+      if (!isCurrentProjectRequest(requestPath, requestGeneration)) return
       setStashes(result)
     } catch (err) {
       logger.debug('refreshStashes failed (may not be a git repo)', err)
@@ -293,6 +330,8 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
   const refreshAll = useCallback(async () => {
     await Promise.allSettled([refreshStatus(), refreshLog(), refreshBranches(), refreshStashes()])
   }, [refreshStatus, refreshLog, refreshBranches, refreshStashes])
+  const refreshAllRef = useRef(refreshAll)
+  refreshAllRef.current = refreshAll
 
   // ── Mutations (auto-refresh status after mutation) ──
 
@@ -366,7 +405,6 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
     return withLock<GitCommitResult>('commit', async () => {
       const result = await window.nekocode.git.commit(activeProjectPath, message)
       await Promise.allSettled([refreshStatus(), refreshLog()])
-      setError(null)
       return result
     })
   }, [activeProjectPath, isGitRepo, refreshStatus, refreshLog, withLock])
@@ -474,22 +512,29 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
 
   const viewDiff = useCallback(async (filePath: string, staged: boolean = false) => {
     if (!activeProjectPath) return
-    if (isGitRepo === false) return
+    if (isGitRepoRef.current === false) return
+    const requestPath = activeProjectPath
+    const requestGeneration = projectGenerationRef.current
+    const requestId = ++diffRequestRef.current
     try {
       setIsDiffLoading(true)
       const [diffResult, summaryResult] = await Promise.all([
-        window.nekocode.git.getDiff(activeProjectPath, filePath, staged),
-        window.nekocode.git.getDiffSummary(activeProjectPath, staged),
+        window.nekocode.git.getDiff(requestPath, filePath, staged),
+        window.nekocode.git.getDiffSummary(requestPath, staged),
       ])
+      if (!isCurrentProjectRequest(requestPath, requestGeneration) || requestId !== diffRequestRef.current) return
       setSelectedDiff(diffResult)
       setDiffSummary(summaryResult)
     } catch (err) {
+      if (!isCurrentProjectRequest(requestPath, requestGeneration) || requestId !== diffRequestRef.current) return
       const msg = err instanceof Error ? err.message : String(err)
       setError(msg)
     } finally {
-      setIsDiffLoading(false)
+      if (isCurrentProjectRequest(requestPath, requestGeneration) && requestId === diffRequestRef.current) {
+        setIsDiffLoading(false)
+      }
     }
-  }, [activeProjectPath, isGitRepo])
+  }, [activeProjectPath, isGitRepo, isCurrentProjectRequest])
 
   // ── Auto-poll status on mount and when project changes ──
 
@@ -502,6 +547,11 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
       setStashes(EMPTY_STASHES)
       setSelectedDiff(null)
       setDiffSummary(null)
+      setIsDiffLoading(false)
+      // Stale request finalizers cannot release loading state in the new project.
+      setIsStatusLoading(false)
+      setIsLogLoading(false)
+      setIsBranchesLoading(false)
       setError(null)
       setIsInitialLoad(true)
       setIsGitRepo(null) // Reset git repo detection
@@ -511,24 +561,28 @@ export function useGitOperations(pollInterval: number = STATUS_POLL_INTERVAL): U
     // Initial load — check if this is a git repo first, then load data
     if (activeProjectPath) {
       // Check if the directory is a git repository before attempting any operations
-      window.nekocode.git.isRepo(activeProjectPath).then((isRepo) => {
+      const projectPath = activeProjectPath
+      const projectGeneration = projectGenerationRef.current
+      window.nekocode.git.isRepo(projectPath).then((isRepo) => {
+        if (!isCurrentProjectRequest(projectPath, projectGeneration)) return
         setIsGitRepo(isRepo)
         if (isRepo) {
           // It's a git repo, load all data
-          refreshAll()
+          refreshAllRef.current()
         } else {
           // Not a git repo, show empty state without errors
-          logger.info(`Project at ${activeProjectPath} is not a git repository — skipping git operations`)
+          logger.info(`Project at ${projectPath} is not a git repository — skipping git operations`)
           setIsInitialLoad(false)
         }
       }).catch((err) => {
+        if (!isCurrentProjectRequest(projectPath, projectGeneration)) return
         // If the isRepo check itself fails, assume it's not a git repo
         logger.debug('isRepo check failed, assuming not a git repo', err)
         setIsGitRepo(false)
         setIsInitialLoad(false)
       })
     }
-  }, [activeProjectPath, refreshAll, isGitRepo])
+  }, [activeProjectPath, isCurrentProjectRequest, setIsGitRepo])
 
   // ── Polling via usePolling hook ──
   // Replaces the manual setInterval + visibility + backoff logic.
