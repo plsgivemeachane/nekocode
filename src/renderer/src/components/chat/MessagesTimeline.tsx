@@ -1,6 +1,14 @@
 import React, { useCallback, useEffect, useImperativeHandle, forwardRef, useState, useRef } from 'react'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 
+// This spacer lives inside the scrollable content, so it scrolls away with
+// the conversation instead of reducing the height available for reading.
+function TimelineHeader() {
+  return <div aria-hidden="true" className="h-16 sm:h-24" />
+}
+
+const timelineComponents = { Header: TimelineHeader }
+
 /**
  * MessagesTimeline — virtualized message list powered by react-virtuoso.
  *
@@ -98,6 +106,7 @@ export const MessagesTimeline = forwardRef<MessagesTimelineHandle, MessagesTimel
       <Virtuoso
         ref={virtuosoRef}
         data={rows}
+        components={timelineComponents}
         initialTopMostItemIndex={initialIndex}
         itemContent={itemContent}
         followOutput={isStreaming ? 'smooth' : false}

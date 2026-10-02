@@ -219,15 +219,15 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
   const contentOverflow = messages.length > 0 ? 'overflow-hidden' : 'overflow-y-auto'
 
   return (
-    <div className={`bg-surface-950 text-text-primary flex flex-col h-full ${className ?? ""}`}>
+    <div className={`bg-surface-950 text-text-primary flex flex-col h-full min-h-0 min-w-0 ${className ?? ""}`}>
       {/* NavBar removed — custom TitleBar now handles window controls at the App level */}
 
       <main
-        className="flex-1 overflow-hidden relative flex"
+        className="flex-1 min-h-0 overflow-hidden relative flex"
       >
-        <div className={`flex-1 min-w-0 ${contentOverflow} px-6`}>
+        <div className={`flex-1 min-w-0 ${contentOverflow} px-3 sm:px-4 lg:px-6`}>
           {!sessionId ? (
-            <div className="flex flex-col items-center justify-center min-h-full select-none pt-16">
+            <div className="flex flex-col items-center justify-center min-h-full select-none py-6 lg:pt-16">
               {/* Logo */}
               <div className="relative mb-6">
                 <div className="w-14 h-14 rounded-xl bg-surface-900/80 border border-surface-700/50 flex items-center justify-center overflow-hidden">
@@ -248,7 +248,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
               </p>
 
               {/* Action chips */}
-              <div className="grid grid-cols-2 gap-2.5 max-w-md w-full px-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-w-md w-full px-4">
                 <div className="group flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-surface-900/80 border border-surface-800 text-left">
                   <span className="text-[#9CA3AF] shrink-0">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -268,7 +268,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
               </div>
 
               {/* Keyboard shortcuts */}
-              <div className="flex items-center gap-5 text-[#9CA3AF] mt-12">
+              <div className="flex flex-wrap justify-center items-center gap-3 text-[#9CA3AF] mt-6 lg:mt-12">
                 <div className="flex items-center gap-2">
                   <div className="flex items-center gap-1">
                     <kbd className="inline-flex items-center justify-center min-w-[1.75rem] h-7 px-2 text-[11px] leading-none font-mono text-[#C9CED6] bg-surface-800/80 border border-surface-600/50 rounded-md">Ctrl</kbd>
@@ -391,7 +391,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
       </main>
 
       {error && (
-        <div className="px-6 py-2.5 bg-error-surface/60 border-t border-error/20 text-error text-sm flex items-center gap-3 backdrop-blur-sm">
+        <div className="shrink-0 px-3 sm:px-4 lg:px-6 py-2.5 bg-error-surface/60 border-t border-error/20 text-error text-sm flex items-center gap-3 backdrop-blur-sm">
           <svg className="w-4 h-4 shrink-0 text-error" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
           </svg>
@@ -407,7 +407,7 @@ export function ChatView({ sessionId, className }: ChatViewProps) {
       )}
 
       {messages.length > 0 && (
-        <div className="px-6 pb-1">
+        <div className="shrink-0 px-3 sm:px-4 lg:px-6 pb-1">
           <div className="max-w-3xl mx-auto">
             <StatusIndicator
               isStreaming={isStreaming}

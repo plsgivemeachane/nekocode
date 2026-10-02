@@ -402,7 +402,7 @@ className='absolute top-0 bottom-0 -left-1.5 w-3 cursor-col-resize z-20 group/re
 
       {/* ═══════ Content Panel (always mounted, animated in/out) ═══════ */}
       <aside
-        className={`h-full flex flex-col shrink-0 bg-surface-950 relative ${
+        className={`h-full min-h-0 flex flex-col shrink-0 bg-surface-950 relative max-lg:absolute max-lg:right-12 max-lg:top-0 max-lg:z-30 max-lg:shadow-xl max-w-[calc(100vw-48px)] lg:max-w-[max(0px,calc(72vw-24rem-48px))] ${
           isDraggingState ? '' : 'transition-[width,opacity] duration-300 ease-out'
         } overflow-hidden ${
           activePanel ? 'opacity-100' : 'opacity-0 w-0!'

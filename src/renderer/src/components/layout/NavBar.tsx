@@ -65,7 +65,7 @@ export function NavBar() {
 
   return (
     <header
-      className="flex items-center h-12 border-b border-surface-800/50 bg-surface-900"
+      className="flex items-center h-12 min-h-12 shrink-0 min-w-0 overflow-hidden border-b border-surface-800/50 bg-surface-900"
       style={{
         // Entire bar is a native drag region for the frameless window
         WebkitAppRegion: "drag",
@@ -73,51 +73,53 @@ export function NavBar() {
     >
       {/* ─── Left: Sidebar header area (NekoCode logo) ─── */}
       {/* Matches the old TreeSidebar header width (w-60 = 15rem) */}
-      <div className="w-60 shrink-0 px-5 pt-0 pb-0 flex items-center">
-        <span className="text-2xl font-display font-semibold tracking-tight">
+      <div className="w-auto lg:w-60 shrink-0 px-2 lg:px-5 pt-0 pb-0 flex items-center">
+        <span className="text-lg lg:text-2xl font-display font-semibold tracking-tight whitespace-nowrap">
           <span className="text-pink-400">Neko</span>
           <span className="text-white">code</span>
-          <sub className="text-[9px] text-[#9CA3AF] font-normal ml-0.5">v{__APP_VERSION__}</sub>
+          <sub className="hidden lg:inline text-[9px] text-[#9CA3AF] font-normal ml-0.5">v{__APP_VERSION__}</sub>
         </span>
       </div>
 
       {/* ─── Center: YouTube-style search bar ─── */}
       <div
-        className="flex-1 flex justify-center px-4"
+        className="min-w-0 flex-1 flex justify-end lg:justify-center px-1 lg:px-4"
         style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
       >
-        <div
-          className="group flex items-center w-full max-w-[480px] h-8 rounded-full border border-surface-700/60 bg-surface-950/60 hover:bg-surface-900/80 hover:border-surface-600/80 focus-within:border-accent-400/50 focus-within:bg-surface-900/80 transition-colors cursor-text"
+        <button
+          type="button"
+          aria-label="Search commands, files, and sessions"
+          className="group flex items-center justify-start min-w-0 w-8 lg:w-full max-w-[480px] h-8 rounded-full border border-surface-700/60 bg-surface-950/60 hover:bg-surface-900/80 hover:border-surface-600/80 focus-within:border-accent-400/50 focus-within:bg-surface-900/80 transition-colors cursor-text"
           onClick={() => window.dispatchEvent(new CustomEvent('nekocode:open-search', { detail: { mode: 'all' } }))}
           title="Search commands, files, sessions… (Ctrl+P for files, Ctrl+Shift+P for commands)"
         >
           {/* Search icon */}
-          <div className="flex items-center justify-center w-10 shrink-0 text-surface-400 group-focus-within:text-accent-400/70 transition-colors">
+          <div className="flex items-center justify-center w-8 lg:w-10 shrink-0 text-surface-400 group-focus-within:text-accent-400/70 transition-colors">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.5" />
               <path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
           </div>
           {/* Placeholder text */}
-          <span className="flex-1 text-[12px] text-surface-500 select-none truncate">Search</span>
+          <span className="hidden lg:block flex-1 text-[12px] text-surface-500 select-none truncate">Search</span>
           {/* Keyboard shortcut hint */}
-          <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 mr-2 text-[10px] font-mono text-surface-500 bg-surface-800/50 rounded border border-surface-700/40">
+          <kbd className="hidden lg:inline-flex items-center gap-0.5 px-1.5 py-0.5 mr-2 text-[10px] font-mono text-surface-500 bg-surface-800/50 rounded border border-surface-700/40">
             Ctrl P
           </kbd>
-        </div>
+        </button>
       </div>
 
       {/* ─── Right: project actions + zoom controls + window controls ─── */}
-      <div className="flex items-center justify-end px-2">
+      <div className="flex shrink-0 items-center justify-end px-0 lg:px-2">
         {/* Project action buttons (add project + open in vscode) */}
         <div
-          className="flex items-center mr-2"
+          className="flex items-center shrink-0 mr-0 lg:mr-2"
           style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
         >
           {/* Add Project button */}
           <button
             onClick={handleAddProject}
-            className="px-2.5 py-2 text-text-secondary hover:text-text-primary hover:bg-surface-800/80 transition-colors rounded-lg"
+            className="px-1.5 lg:px-2.5 py-2 text-text-secondary hover:text-text-primary hover:bg-surface-800/80 transition-colors rounded-lg"
             title="Add Project"
           >
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
@@ -128,7 +130,7 @@ export function NavBar() {
           {/* Git button — same style as Open in VS Code */}
           <button
             onClick={() => setGitOverlay(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-surface-200 bg-surface-800/60 hover:bg-surface-700/60 border border-surface-600/30 hover:border-surface-500/40 shadow-sm shadow-surface-900/50 hover:shadow-md hover:shadow-surface-900/60 rounded-lg transition-all mr-2"
+            className="flex items-center gap-1.5 px-2 lg:px-3 py-1.5 text-xs font-medium text-surface-200 bg-surface-800/60 hover:bg-surface-700/60 border border-surface-600/30 hover:border-surface-500/40 shadow-sm shadow-surface-900/50 hover:shadow-md hover:shadow-surface-900/60 rounded-lg transition-all mr-1 lg:mr-2"
             title="Git"
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -136,7 +138,7 @@ export function NavBar() {
               <path d="M13 3.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               <path d="M13 12.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            <span>Git</span>
+            <span className="hidden lg:inline">Git</span>
           </button>
 
           {/* Open in VS Code split button with dropdown (Radix DropdownMenu) */}
@@ -152,11 +154,11 @@ export function NavBar() {
                     }
                   }
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-surface-200 bg-surface-800/60 hover:bg-surface-700/60 border border-surface-600/30 hover:border-surface-500/40 border-r-0 shadow-sm shadow-surface-900/50 hover:shadow-md hover:shadow-surface-900/60 rounded-l-lg rounded-r-none transition-all"
+                className="flex items-center gap-1.5 px-2 lg:px-3 py-1.5 text-xs font-medium text-surface-200 bg-surface-800/60 hover:bg-surface-700/60 border border-surface-600/30 hover:border-surface-500/40 border-r-0 shadow-sm shadow-surface-900/50 hover:shadow-md hover:shadow-surface-900/60 rounded-l-lg rounded-r-none transition-all"
                 title="Open Project in VS Code"
               >
                 <VSCodeIcon size={14} />
-                <span>Open in VS Code</span>
+                <span className="hidden lg:inline">Open in VS Code</span>
               </button>
 
               {/* Dropdown toggle: down arrow — rounded right only */}
@@ -208,11 +210,11 @@ export function NavBar() {
         </div>
 
         {/* Separator between project actions and zoom controls */}
-        <div className="w-px h-5 bg-surface-700/50 mr-1" />
+        <div className="hidden lg:block w-px h-5 bg-surface-700/50 mr-1" />
 
         {/* Zoom controls */}
         <div
-          className="flex items-center"
+          className="hidden lg:flex items-center"
           style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
         >
           <Tooltip>
@@ -220,7 +222,7 @@ export function NavBar() {
               <button
                 onClick={zoomOut}
                 disabled={zoom <= minZoom}
-                className="px-3 py-2 text-sm text-surface-300 hover:text-surface-100 hover:bg-surface-800/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-1.5 lg:px-3 py-2 text-sm text-surface-300 hover:text-surface-100 hover:bg-surface-800/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 title="Zoom out (Ctrl+-)"
               >
                 -
@@ -234,7 +236,7 @@ export function NavBar() {
             <TooltipTrigger asChild>
               <button
                 onClick={resetZoom}
-                className="px-3 py-2 text-sm text-surface-300 hover:text-surface-100 hover:bg-surface-800/50 min-w-[48px] text-center transition-colors"
+                className="px-1.5 lg:px-3 py-2 text-sm text-surface-300 hover:text-surface-100 hover:bg-surface-800/50 min-w-[36px] lg:min-w-[48px] text-center transition-colors"
                 title="Reset zoom (Ctrl+0)"
               >
                 {percentage}%
@@ -249,7 +251,7 @@ export function NavBar() {
               <button
                 onClick={zoomIn}
                 disabled={zoom >= maxZoom}
-                className="px-3 py-2 text-sm text-surface-300 hover:text-surface-100 hover:bg-surface-800/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-1.5 lg:px-3 py-2 text-sm text-surface-300 hover:text-surface-100 hover:bg-surface-800/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 title="Zoom in (Ctrl+=)"
               >
                 +
@@ -263,13 +265,13 @@ export function NavBar() {
 
         {/* Window control buttons */}
         <div
-          className="flex items-center"
+          className="flex shrink-0 items-center"
           style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
         >
           {/* Minimize */}
           <button
             onClick={handleMinimize}
-            className="px-4 py-2.5 text-surface-400 hover:text-surface-100 hover:bg-surface-800/60 transition-colors"
+            className="px-2 lg:px-4 py-2.5 text-surface-400 hover:text-surface-100 hover:bg-surface-800/60 transition-colors"
             aria-label="Minimize"
             title="Minimize"
             type="button"
@@ -282,7 +284,7 @@ export function NavBar() {
           {/* Maximize / Restore */}
           <button
             onClick={handleMaximize}
-            className="px-4 py-2.5 text-surface-400 hover:text-surface-100 hover:bg-surface-800/60 transition-colors"
+            className="px-2 lg:px-4 py-2.5 text-surface-400 hover:text-surface-100 hover:bg-surface-800/60 transition-colors"
             aria-label={isMaximized ? "Restore" : "Maximize"}
             title={isMaximized ? "Restore" : "Maximize"}
             type="button"
@@ -302,7 +304,7 @@ export function NavBar() {
           {/* Close */}
           <button
             onClick={handleClose}
-            className="px-4 py-2.5 text-surface-400 hover:text-white hover:bg-red-500 transition-colors"
+            className="px-2 lg:px-4 py-2.5 text-surface-400 hover:text-white hover:bg-red-500 transition-colors"
             aria-label="Close"
             title="Close"
             type="button"

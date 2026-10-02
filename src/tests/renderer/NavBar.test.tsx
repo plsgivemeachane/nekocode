@@ -74,6 +74,16 @@ describe("NavBar", () => {
     expect(screen.getByTitle("Reset zoom (Ctrl+0)")).toBeInTheDocument()
   })
 
+  it("keeps the title bar controls compact at narrow widths", () => {
+    render(<TooltipProvider><NavBar /></TooltipProvider>)
+
+    expect(screen.getByRole("banner")).toHaveClass("min-w-0", "overflow-hidden")
+    expect(screen.getByRole("button", { name: "Search commands, files, and sessions" })).toHaveClass("w-8", "lg:w-full")
+    expect(screen.getByText("Search")).toHaveClass("hidden", "lg:block")
+    expect(screen.getByRole("button", { name: "Search commands, files, and sessions" }).parentElement).toHaveClass("justify-end", "lg:justify-center")
+    expect(screen.getByText("Open in VS Code")).toHaveClass("hidden", "lg:inline")
+  })
+
   it("renders window control buttons", () => {
     render(<TooltipProvider><NavBar /></TooltipProvider>)
     expect(screen.getByRole("button", { name: /minimize/i })).toBeInTheDocument()

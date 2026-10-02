@@ -447,7 +447,7 @@ export function TreeSidebar() {
 
   return (
     <aside
-      className="bg-surface-900 h-full flex flex-col shrink-0 text-text-primary shadow-[inset_-1px_0_0_rgba(255,255,255,0.06)] relative"
+      className="bg-surface-900 h-full min-h-0 max-w-[28vw] flex flex-col shrink-0 text-text-primary shadow-[inset_-1px_0_0_rgba(255,255,255,0.06)] relative"
       style={{ width: sidebarWidth }}
     >
       {/* Header moved to NavBar (same row as window controls) */}

@@ -57,7 +57,7 @@ export function StatusIndicator({ isStreaming, isAgentConnecting, modelName, usa
     const hasUsage = usage.inputTokens > 0 || usage.outputTokens > 0
 
   return (
-    <div className="flex items-center gap-2 py-1 select-none font-mono text-xs">
+    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 py-1 select-none font-mono text-xs">
       {/* Model name */}
       {modelName && (
         <span className="text-accent-400 truncate max-w-[200px]" title={modelName}>
