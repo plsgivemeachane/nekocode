@@ -9,6 +9,12 @@ import { IPC_CHANNELS } from '../shared/ipc-channels'
 // loop in sendEventToRenderer with a type-safe equivalent. New handlers should
 // prefer the router; existing handlers are being migrated incrementally.
 // See: docs/abstraction-oop-audit.md Priority 3
+// MIGRATION COMPLETE: every renderer→main channel in this module is now
+// registered through the IpcRouter (router.handle/handleVoid). No raw
+// ipcMain.handle registration remains. Sender validation and the error
+// boundary are applied centrally by the router. All 44 previously
+// manually-registered channels are uniformly sender-validated (36 of them
+// had no sender validation before the migration).
 import { IpcRouter, sendToAllRenderers } from './ipc-router'
 // NOTE: validateIpcSender was removed from this import when the last raw
 // ipcMain.handle registration (git stage/unstage) migrated to IpcRouter —
@@ -49,6 +55,8 @@ export function registerIpcHandlers(
   // compile-time payload/result type checking against IpcChannelMap.
   // Session/project/git handlers still use the manual ipcMain.handle pattern
   // and are migrated incrementally.
+  // NOTE: that note is now historical — the migration is complete and every
+  // handler below is registered through the IpcRouter (see header comment).
   const router = new IpcRouter()
 
   // --- Session handlers ---
