@@ -15,13 +15,10 @@ import type {
   // NOTE: Session payload/result types (SessionCreatePayload, ChatMessageIPC, ModelInfo,
   // CommandInfo, UIResponse, ...) were removed from this import when the session
   // handlers were migrated to IpcRouter — the router infers them from IpcChannelMap.
+  // Project/workspace/update payload+result types (ProjectAddPayload, ProjectInfo,
+  // WorkspaceSetActivePayload, UpdateAvailableInfo, ...) were removed likewise when
+  // those handlers were migrated to IpcRouter.
   SessionStreamEvent,
-  ProjectAddPayload,
-  ProjectRemovePayload,
-  ProjectSessionsPayload,
-  ProjectInfo,
-  WorkspaceSetActivePayload,
-  UpdateAvailableInfo,
 } from '../shared/ipc-types'
 import { searchFiles } from './search-files'
 import type { ISessionManager, IProjectManager } from './manager-types'
@@ -106,8 +103,9 @@ export function registerIpcHandlers(
   })
 
   // --- Dialog handlers ---
+  // Migrated to IpcRouter (see note at the session handlers above).
 
-  ipcMain.handle(IPC_CHANNELS.DIALOG_OPEN_FOLDER, async (): Promise<string | null> => {
+  router.handleVoid(IPC_CHANNELS.DIALOG_OPEN_FOLDER, async () => {
     logger.debug('DIALOG_OPEN_FOLDER')
     const result = await dialog.showOpenDialog({
       properties: ['openDirectory'],
@@ -122,35 +120,28 @@ export function registerIpcHandlers(
   })
 
   // --- Project handlers ---
+  // Migrated to IpcRouter: the router's error boundary owns error logging
+  // and re-throw, so the body-level try/catch blocks were removed.
 
-  ipcMain.handle(IPC_CHANNELS.PROJECT_ADD, async (_event, payload: ProjectAddPayload): Promise<ProjectInfo> => {
+  router.handle(IPC_CHANNELS.PROJECT_ADD, async (payload) => {
     logger.info(`PROJECT_ADD path=${payload.path}`)
-    try {
-      return await projectManager.addProject(payload.path)
-    } catch (err) {
-      logger.error(`PROJECT_ADD failed path=${payload.path}`, err)
-      throw err
-    }
+    return await projectManager.addProject(payload.path)
   })
 
-  ipcMain.handle(IPC_CHANNELS.PROJECT_REMOVE, async (_event, payload: ProjectRemovePayload): Promise<boolean> => {
+  router.handle(IPC_CHANNELS.PROJECT_REMOVE, async (payload) => {
     logger.info(`PROJECT_REMOVE id=${payload.id}`)
-    try {
-      return await projectManager.removeProject(payload.id)
-    } catch (err) {
-      logger.error(`PROJECT_REMOVE failed id=${payload.id}`, err)
-      throw err
-    }
+    return await projectManager.removeProject(payload.id)
   })
 
   // --- Workspace handlers ---
+  // Migrated to IpcRouter (see note at the session handlers above).
 
-  ipcMain.handle(IPC_CHANNELS.WORKSPACE_SET_ACTIVE, async (_event, payload: WorkspaceSetActivePayload): Promise<void> => {
+  router.handle(IPC_CHANNELS.WORKSPACE_SET_ACTIVE, async (payload) => {
     logger.debug(`WORKSPACE_SET_ACTIVE sessionId=${payload.sessionId} projectPath=${payload.projectPath}`)
     await projectManager.setActiveSession(payload.sessionId, payload.projectPath)
   })
 
-  ipcMain.handle(IPC_CHANNELS.WORKSPACE_GET_ACTIVE, async (): Promise<{ sessionId: string | null; projectPath: string | null }> => {
+  router.handleVoid(IPC_CHANNELS.WORKSPACE_GET_ACTIVE, async () => {
     logger.debug('WORKSPACE_GET_ACTIVE')
     return projectManager.getActiveSession()
   })
@@ -186,44 +177,31 @@ export function registerIpcHandlers(
     sessionManager.handleUIResponse(payload)
   })
 
-  ipcMain.handle(IPC_CHANNELS.PROJECT_LIST, async (): Promise<ProjectInfo[]> => {
+  router.handleVoid(IPC_CHANNELS.PROJECT_LIST, async () => {
     logger.debug('PROJECT_LIST')
     return projectManager.listProjects()
   })
 
-  ipcMain.handle(IPC_CHANNELS.PROJECT_SESSIONS, async (_event, payload: ProjectSessionsPayload): Promise<ProjectInfo | null> => {
+  router.handle(IPC_CHANNELS.PROJECT_SESSIONS, async (payload) => {
     logger.info(`PROJECT_SESSIONS projectId=${payload.projectId}`)
-    try {
-      return await projectManager.refreshSessions(payload.projectId)
-    } catch (err) {
-      logger.error(`PROJECT_SESSIONS failed projectId=${payload.projectId}`, err)
-      throw err
-    }
+    return await projectManager.refreshSessions(payload.projectId)
   })
 
   // --- Update handlers ---
+  // Migrated to IpcRouter: the router's error boundary owns error logging
+  // and re-throw, so the body-level try/catch blocks were removed.
 
-  ipcMain.handle(IPC_CHANNELS.UPDATE_CHECK, async (): Promise<UpdateAvailableInfo | null> => {
+  router.handleVoid(IPC_CHANNELS.UPDATE_CHECK, async () => {
     logger.info('UPDATE_CHECK')
-    try {
-      return await checkForUpdate()
-    } catch (err) {
-      logger.error('UPDATE_CHECK failed', err)
-      throw err
-    }
+    return await checkForUpdate()
   })
 
-  ipcMain.handle(IPC_CHANNELS.UPDATE_DOWNLOAD, async (): Promise<void> => {
+  router.handleVoid(IPC_CHANNELS.UPDATE_DOWNLOAD, async () => {
     logger.info('UPDATE_DOWNLOAD')
-    try {
-      await downloadUpdate()
-    } catch (err) {
-      logger.error('UPDATE_DOWNLOAD failed', err)
-      throw err
-    }
+    await downloadUpdate()
   })
 
-  ipcMain.handle(IPC_CHANNELS.UPDATE_INSTALL, async (): Promise<void> => {
+  router.handleVoid(IPC_CHANNELS.UPDATE_INSTALL, async () => {
     logger.info('UPDATE_INSTALL')
     quitAndInstall()
   })

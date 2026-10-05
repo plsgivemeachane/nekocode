@@ -359,6 +359,56 @@ describe('ipc handlers integration', () => {
     ).rejects.toThrow('unknown session nope')
   })
 
+  it('routes dialog, project, workspace, and update channels through the router with valid sender', async () => {
+    mockedList.mockResolvedValue([])
+    const sessionManager = new StatefulSessionManager()
+    const projectManager = new ProjectManager()
+
+    registerIpcHandlers(
+      sessionManager as unknown as Parameters<typeof registerIpcHandlers>[0],
+      projectManager as Parameters<typeof registerIpcHandlers>[1],
+    )
+
+    const untrusted = { senderFrame: { url: 'http://attacker.example' } }
+
+    // DIALOG_OPEN_FOLDER — cancellation and selection
+    expect(await handlers.get(IPC_CHANNELS.DIALOG_OPEN_FOLDER)!({}, {})).toBeNull()
+    electronState.openDialogResult = { canceled: false, filePaths: ['/tmp/dialog-chosen'] }
+    expect(await handlers.get(IPC_CHANNELS.DIALOG_OPEN_FOLDER)!({}, {})).toBe('/tmp/dialog-chosen')
+
+    // PROJECT_ADD / PROJECT_LIST / PROJECT_SESSIONS / PROJECT_REMOVE
+    electronState.openDialogResult = { canceled: true, filePaths: [] as string[] }
+    const added = (await handlers.get(IPC_CHANNELS.PROJECT_ADD)!({}, { path: '/tmp/project' })) as { id: string }
+    expect(added.id).toBeDefined()
+    const listed = (await handlers.get(IPC_CHANNELS.PROJECT_LIST)!({}, {})) as Array<{ id: string }>
+    expect(listed.map(p => p.id)).toContain(added.id)
+    const refreshed = (await handlers.get(IPC_CHANNELS.PROJECT_SESSIONS)!({}, { projectId: added.id })) as { id: string }
+    expect(refreshed.id).toBe(added.id)
+    const removed = await handlers.get(IPC_CHANNELS.PROJECT_REMOVE)!({}, { id: added.id })
+    expect(removed).toBe(true)
+
+    // WORKSPACE_SET_ACTIVE / WORKSPACE_GET_ACTIVE
+    await handlers.get(IPC_CHANNELS.WORKSPACE_SET_ACTIVE)!({}, { sessionId: 'sess-x', projectPath: '/tmp/project' })
+    const active = (await handlers.get(IPC_CHANNELS.WORKSPACE_GET_ACTIVE)!({}, {})) as { sessionId: string | null; projectPath: string | null }
+    expect(active).toEqual({ sessionId: 'sess-x', projectPath: '/tmp/project' })
+
+    // UPDATE_CHECK / UPDATE_DOWNLOAD / UPDATE_INSTALL (mocked autoUpdater)
+    expect(await handlers.get(IPC_CHANNELS.UPDATE_CHECK)!({}, {})).toBeNull()
+    await handlers.get(IPC_CHANNELS.UPDATE_DOWNLOAD)!({}, {})
+    await handlers.get(IPC_CHANNELS.UPDATE_INSTALL)!({}, {})
+
+    // Untrusted sender is rejected on this group
+    await expect(
+      handlers.get(IPC_CHANNELS.PROJECT_ADD)!(untrusted as never, { path: '/tmp/project' }),
+    ).rejects.toThrow('Unauthorized IPC call')
+    await expect(
+      handlers.get(IPC_CHANNELS.UPDATE_CHECK)!(untrusted as never, {}),
+    ).rejects.toThrow('Unauthorized IPC call')
+    await expect(
+      handlers.get(IPC_CHANNELS.WORKSPACE_GET_ACTIVE)!(untrusted as never, {}),
+    ).rejects.toThrow('Unauthorized IPC call')
+  })
+
   it('returns selected folder from dialog handler', async () => {
     const sessionManager = new StatefulSessionManager()
     const projectManager = new ProjectManager()
