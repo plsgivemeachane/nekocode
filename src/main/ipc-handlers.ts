@@ -12,25 +12,15 @@ import { IPC_CHANNELS } from '../shared/ipc-channels'
 import { IpcRouter, sendToAllRenderers } from './ipc-router'
 import { validateIpcSender, validatePathWithinProject } from './security-utils'
 import type {
-  SessionCreatePayload,
-  SessionCreateResult,
-  SessionPromptPayload,
-  SessionAbortPayload,
-  SessionDisposePayload,
-  SessionDeletePayload,
-  SessionReconnectPayload,
-  SessionReconnectResult,
-  SessionLoadHistoryPayload,
-  SessionLoadHistoryDiskPayload,
-  ChatMessageIPC,
+  // NOTE: Session payload/result types (SessionCreatePayload, ChatMessageIPC, ModelInfo,
+  // CommandInfo, UIResponse, ...) were removed from this import when the session
+  // handlers were migrated to IpcRouter — the router infers them from IpcChannelMap.
   SessionStreamEvent,
   ProjectAddPayload,
   ProjectRemovePayload,
   ProjectSessionsPayload,
   ProjectInfo,
   WorkspaceSetActivePayload,
-  CommandInfo,
-  ModelInfo,
   UpdateAvailableInfo,
 } from '../shared/ipc-types'
 import { searchFiles } from './search-files'
@@ -60,74 +50,57 @@ export function registerIpcHandlers(
   const router = new IpcRouter()
 
   // --- Session handlers ---
+  // Migrated to IpcRouter: payloads/results are type-checked against
+  // IpcChannelMap, sender validation is applied centrally by the router, and
+  // handler errors are logged and re-thrown by the router's error boundary,
+  // so the body-level try/catch blocks were removed.
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_CREATE, async (_event, payload: SessionCreatePayload): Promise<SessionCreateResult> => {
-    validateIpcSender(_event)
+  router.handle(IPC_CHANNELS.SESSION_CREATE, async (payload) => {
     logger.info(`SESSION_CREATE cwd=${payload.cwd}`)
-    try {
-      const sessionId = await sessionManager.create(payload.cwd)
-      const extensionErrors = sessionManager.getExtensionLoadErrors(sessionId)
-      const extensionsDisabled = sessionManager.getExtensionsDisabled(sessionId)
+    const sessionId = await sessionManager.create(payload.cwd)
+    const extensionErrors = sessionManager.getExtensionLoadErrors(sessionId)
+    const extensionsDisabled = sessionManager.getExtensionsDisabled(sessionId)
 
-      return { sessionId, stableId: sessionId, extensionErrors, extensionsDisabled }
-    } catch (err) {
-      logger.error('SESSION_CREATE failed', err)
-      throw err
-    }
+    return { sessionId, stableId: sessionId, extensionErrors, extensionsDisabled }
   })
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_PROMPT, async (_event, payload: SessionPromptPayload): Promise<void> => {
-    validateIpcSender(_event)
+  router.handle(IPC_CHANNELS.SESSION_PROMPT, async (payload) => {
     // Security: Do not log user prompt text — may contain sensitive data (passwords, API keys, PII)
     // Log only the session ID and prompt length for debugging
     logger.info(`SESSION_PROMPT sessionId=${payload.sessionId} textLength=${payload.text.length}`)
-    try {
-      await sessionManager.prompt(payload.sessionId, payload.text)
-    } catch (err) {
-      logger.error(`SESSION_PROMPT failed sessionId=${payload.sessionId}`, err)
-      throw err
-    }
+    await sessionManager.prompt(payload.sessionId, payload.text)
   })
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_ABORT, async (_event, payload: SessionAbortPayload): Promise<void> => {
-    validateIpcSender(_event)
+  router.handle(IPC_CHANNELS.SESSION_ABORT, async (payload) => {
     logger.info(`SESSION_ABORT sessionId=${payload.sessionId}`)
     sessionManager.abort(payload.sessionId)
   })
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_DISPOSE, async (_event, payload: SessionDisposePayload): Promise<void> => {
-    validateIpcSender(_event)
+  router.handle(IPC_CHANNELS.SESSION_DISPOSE, async (payload) => {
     logger.info(`SESSION_DISPOSE sessionId=${payload.sessionId}`)
     sessionManager.dispose(payload.sessionId)
   })
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_DELETE, async (_event, payload: SessionDeletePayload): Promise<void> => {
-    validateIpcSender(_event)
+  router.handle(IPC_CHANNELS.SESSION_DELETE, async (payload) => {
     logger.info(`SESSION_DELETE sessionId=${payload.sessionId} cwd=${payload.cwd}`)
     await sessionManager.deleteSession(payload.sessionId, payload.cwd)
   })
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_RECONNECT, async (_event, payload: SessionReconnectPayload): Promise<SessionReconnectResult> => {
-    validateIpcSender(_event)
+  router.handle(IPC_CHANNELS.SESSION_RECONNECT, async (payload) => {
     logger.info(`SESSION_RECONNECT sessionId=${payload.sessionId} cwd=${payload.cwd}`)
-    try {
-      const history = await sessionManager.reconnect(payload.sessionId, payload.cwd)
-      const extensionErrors = sessionManager.getExtensionLoadErrors(payload.sessionId)
-      const extensionsDisabled = sessionManager.getExtensionsDisabled(payload.sessionId)
-      logger.info(`SESSION_RECONNECT OK sessionId=${payload.sessionId} history=${history.length} messages`)
-      return { sessionId: payload.sessionId, stableId: payload.sessionId, history, extensionErrors, extensionsDisabled }
-    } catch (err) {
-      logger.error(`SESSION_RECONNECT failed sessionId=${payload.sessionId}`, err)
-      throw err
-    }
+    const history = await sessionManager.reconnect(payload.sessionId, payload.cwd)
+    const extensionErrors = sessionManager.getExtensionLoadErrors(payload.sessionId)
+    const extensionsDisabled = sessionManager.getExtensionsDisabled(payload.sessionId)
+    logger.info(`SESSION_RECONNECT OK sessionId=${payload.sessionId} history=${history.length} messages`)
+    return { sessionId: payload.sessionId, stableId: payload.sessionId, history, extensionErrors, extensionsDisabled }
   })
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_LOAD_HISTORY, async (_event, payload: SessionLoadHistoryPayload): Promise<ChatMessageIPC[]> => {
+  router.handle(IPC_CHANNELS.SESSION_LOAD_HISTORY, async (payload) => {
     logger.debug(`SESSION_LOAD_HISTORY sessionId=${payload.sessionId}`)
     return await sessionManager.getHistory(payload.sessionId)
   })
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_LOAD_HISTORY_DISK, async (_event, payload: SessionLoadHistoryDiskPayload): Promise<ChatMessageIPC[]> => {
+  router.handle(IPC_CHANNELS.SESSION_LOAD_HISTORY_DISK, async (payload) => {
     logger.debug(`SESSION_LOAD_HISTORY_DISK sessionId=${payload.sessionId} cwd=${payload.cwd} limit=${payload.limit}`)
     return sessionManager.loadHistoryFromDisk(payload.sessionId, payload.cwd, payload.limit)
   })
@@ -183,30 +156,32 @@ export function registerIpcHandlers(
   })
 
   // --- Model handlers ---
+  // Migrated to IpcRouter (see note at the session handlers above).
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_GET_MODEL, async (_event, payload: { sessionId: string }): Promise<ModelInfo | null> => {
+  router.handle(IPC_CHANNELS.SESSION_GET_MODEL, async (payload) => {
     logger.debug(`SESSION_GET_MODEL sessionId=${payload.sessionId}`)
     return sessionManager.getModel(payload.sessionId)
   })
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_LIST_MODELS, async (): Promise<ModelInfo[]> => {
+  router.handleVoid(IPC_CHANNELS.SESSION_LIST_MODELS, async () => {
     logger.debug('SESSION_LIST_MODELS')
     return sessionManager.listModels()
   })
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_SET_MODEL, async (_event, payload: { sessionId: string; provider: string; modelId: string }): Promise<ModelInfo> => {
+  router.handle(IPC_CHANNELS.SESSION_SET_MODEL, async (payload) => {
     logger.debug(`SESSION_SET_MODEL sessionId=${payload.sessionId} provider=${payload.provider} modelId=${payload.modelId}`)
     return sessionManager.setModel(payload.sessionId, payload.provider, payload.modelId)
   })
 
   // --- Command discovery handlers ---
+  // Migrated to IpcRouter (see note at the session handlers above).
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_GET_COMMANDS, async (_event, payload: { sessionId: string }): Promise<CommandInfo[]> => {
+  router.handle(IPC_CHANNELS.SESSION_GET_COMMANDS, async (payload) => {
     logger.debug(`SESSION_GET_COMMANDS sessionId=${payload.sessionId}`)
     return sessionManager.getCommands(payload.sessionId)
   })
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_UI_RESPOND, async (_event, payload: import('../shared/ipc-types').UIResponse): Promise<void> => {
+  router.handle(IPC_CHANNELS.SESSION_UI_RESPOND, async (payload) => {
     logger.debug(`SESSION_UI_RESPOND requestId=${payload.requestId} sessionId=${payload.sessionId}`)
     sessionManager.handleUIResponse(payload)
   })

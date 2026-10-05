@@ -74,6 +74,24 @@ class StatefulSessionManager {
   readonly prompts: Array<{ sessionId: string; text: string }> = []
   readonly aborted: string[] = []
   readonly disposed: string[] = []
+  readonly deleted: Array<{ sessionId: string; cwd: string }> = []
+  readonly uiResponses: Array<{ requestId: string; sessionId: string }> = []
+
+  async deleteSession(sessionId: string, cwd: string): Promise<void> {
+    this.deleted.push({ sessionId, cwd })
+  }
+
+  async loadHistoryFromDisk(sessionId: string, _cwd: string, _limit?: number): Promise<ChatMessageIPC[]> {
+    return [{ id: `disk-${sessionId}`, role: 'assistant', content: 'from disk', timestamp: 0 }]
+  }
+
+  async getCommands(sessionId: string) {
+    return [{ name: `cmd-${sessionId}`, description: 'mock command' }]
+  }
+
+  handleUIResponse(payload: { requestId: string; sessionId: string }): void {
+    this.uiResponses.push({ requestId: payload.requestId, sessionId: payload.sessionId })
+  }
 
   async create(cwd: string): Promise<string> {
     void cwd
@@ -217,6 +235,128 @@ describe('ipc handlers integration', () => {
     expect(refreshed.id).toBe(added.id)
     expect(refreshed.sessions).toHaveLength(1)
     expect(active).toEqual({ sessionId: 'sess-1', projectPath: '/tmp/project' })
+  })
+
+  it('routes all 13 session channels through the router with valid sender', async () => {
+    const sessionManager = new StatefulSessionManager()
+    const projectManager = new ProjectManager()
+
+    registerIpcHandlers(
+      sessionManager as unknown as Parameters<typeof registerIpcHandlers>[0],
+      projectManager as Parameters<typeof registerIpcHandlers>[1],
+    )
+
+    // SESSION_CREATE
+    const created = (await handlers.get(IPC_CHANNELS.SESSION_CREATE)!({}, { cwd: '/tmp/project' })) as {
+      sessionId: string
+      stableId: string
+      extensionErrors: Array<{ path: string; message: string }>
+      extensionsDisabled: boolean
+    }
+    expect(created.sessionId).toBe('session-1')
+    expect(created.stableId).toBe('session-1')
+
+    // SESSION_PROMPT
+    await handlers.get(IPC_CHANNELS.SESSION_PROMPT)!({}, { sessionId: created.sessionId, text: 'session ticket prompt' })
+    expect(sessionManager.prompts).toEqual([{ sessionId: 'session-1', text: 'session ticket prompt' }])
+
+    // SESSION_ABORT / SESSION_DISPOSE / SESSION_DELETE
+    await handlers.get(IPC_CHANNELS.SESSION_ABORT)!({}, { sessionId: created.sessionId })
+    await handlers.get(IPC_CHANNELS.SESSION_DISPOSE)!({}, { sessionId: created.sessionId })
+    await handlers.get(IPC_CHANNELS.SESSION_DELETE)!({}, { sessionId: created.sessionId, cwd: '/tmp/project' })
+    expect(sessionManager.aborted).toEqual(['session-1'])
+    expect(sessionManager.disposed).toEqual(['session-1'])
+    expect(sessionManager.deleted).toEqual([{ sessionId: 'session-1', cwd: '/tmp/project' }])
+
+    // SESSION_RECONNECT
+    const reconnect = (await handlers.get(IPC_CHANNELS.SESSION_RECONNECT)!({}, { sessionId: created.sessionId, cwd: '/tmp/project' })) as {
+      history: ChatMessageIPC[]
+    }
+    expect(reconnect.history).toHaveLength(1)
+
+    // SESSION_LOAD_HISTORY
+    const history = (await handlers.get(IPC_CHANNELS.SESSION_LOAD_HISTORY)!({}, { sessionId: created.sessionId })) as ChatMessageIPC[]
+    expect(history).toHaveLength(1)
+
+    // SESSION_LOAD_HISTORY_DISK
+    const diskHistory = (await handlers.get(IPC_CHANNELS.SESSION_LOAD_HISTORY_DISK)!({}, {
+      sessionId: created.sessionId,
+      cwd: '/tmp/project',
+      limit: 50,
+    })) as ChatMessageIPC[]
+    expect(diskHistory).toEqual([{ id: 'disk-session-1', role: 'assistant', content: 'from disk', timestamp: 0 }])
+
+    // SESSION_GET_MODEL
+    const model = (await handlers.get(IPC_CHANNELS.SESSION_GET_MODEL)!({}, { sessionId: created.sessionId })) as ModelInfo
+    expect(model.id).toBe('model-1')
+
+    // SESSION_LIST_MODELS
+    const models = (await handlers.get(IPC_CHANNELS.SESSION_LIST_MODELS)!({}, {})) as ModelInfo[]
+    expect(models).toEqual([{ id: 'model-1', name: 'Model 1', provider: 'mock' }])
+
+    // SESSION_SET_MODEL
+    const switched = (await handlers.get(IPC_CHANNELS.SESSION_SET_MODEL)!({}, {
+      sessionId: created.sessionId,
+      provider: 'acme',
+      modelId: 'acme-1',
+    })) as ModelInfo
+    expect(switched).toEqual({ id: 'acme-1', name: 'ACME-1', provider: 'acme' })
+
+    // SESSION_GET_COMMANDS
+    const commands = (await handlers.get(IPC_CHANNELS.SESSION_GET_COMMANDS)!({}, { sessionId: created.sessionId })) as Array<{ name: string }>
+    expect(commands).toEqual([{ name: 'cmd-session-1', description: 'mock command' }])
+
+    // SESSION_UI_RESPOND
+    await handlers.get(IPC_CHANNELS.SESSION_UI_RESPOND)!({}, { requestId: 'req-1', sessionId: created.sessionId, confirmed: true })
+    expect(sessionManager.uiResponses).toEqual([{ requestId: 'req-1', sessionId: 'session-1' }])
+  })
+
+  it('rejects session handlers called from an untrusted sender', async () => {
+    const sessionManager = new StatefulSessionManager()
+    const projectManager = new ProjectManager()
+
+    registerIpcHandlers(
+      sessionManager as unknown as Parameters<typeof registerIpcHandlers>[0],
+      projectManager as Parameters<typeof registerIpcHandlers>[1],
+    )
+
+    const untrusted = { senderFrame: { url: 'http://attacker.example' } }
+
+    // Sender from a foreign origin must be rejected on every session channel
+    await expect(
+      handlers.get(IPC_CHANNELS.SESSION_CREATE)!(untrusted as never, { cwd: '/tmp/project' }),
+    ).rejects.toThrow('Unauthorized IPC call')
+    await expect(
+      handlers.get(IPC_CHANNELS.SESSION_GET_MODEL)!(untrusted as never, { sessionId: 'session-1' }),
+    ).rejects.toThrow('Unauthorized IPC call')
+    await expect(
+      handlers.get(IPC_CHANNELS.SESSION_LIST_MODELS)!(untrusted as never, {}),
+    ).rejects.toThrow('Unauthorized IPC call')
+    await expect(
+      handlers.get(IPC_CHANNELS.SESSION_GET_COMMANDS)!(untrusted as never, { sessionId: 'session-1' }),
+    ).rejects.toThrow('Unauthorized IPC call')
+    await expect(
+      handlers.get(IPC_CHANNELS.SESSION_LOAD_HISTORY_DISK)!(untrusted as never, { sessionId: 'session-1', cwd: '/tmp/project' }),
+    ).rejects.toThrow('Unauthorized IPC call')
+    // No manager delegation happened for the blocked calls
+    expect(sessionManager.deleted).toHaveLength(0)
+    expect(sessionManager.uiResponses).toHaveLength(0)
+  })
+
+  it('propagates session manager errors to the IPC caller', async () => {
+    const sessionManager = new StatefulSessionManager()
+    const projectManager = new ProjectManager()
+
+    registerIpcHandlers(
+      sessionManager as unknown as Parameters<typeof registerIpcHandlers>[0],
+      projectManager as Parameters<typeof registerIpcHandlers>[1],
+    )
+
+    // prompt() throws for unknown sessions — the router error boundary must
+    // surface the rejection to the caller instead of resolving silently
+    await expect(
+      handlers.get(IPC_CHANNELS.SESSION_PROMPT)!({}, { sessionId: 'nope', text: 'x' }),
+    ).rejects.toThrow('unknown session nope')
   })
 
   it('returns selected folder from dialog handler', async () => {
