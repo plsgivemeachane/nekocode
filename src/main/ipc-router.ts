@@ -19,7 +19,7 @@
  */
 
 import { ipcMain, IpcMainInvokeEvent, BrowserWindow } from 'electron'
-import { IPC_CHANNELS } from '../shared/ipc-channels'
+import { IPC_CHANNELS, type IpcChannel } from '../shared/ipc-channels'
 import { validateIpcSender } from './security-utils'
 import { createLogger } from './logger'
 
@@ -257,6 +257,28 @@ export interface RendererChannelMap {
   // matching notification-service.sendPlaySound() and the preload onPlaySound callback.
   [IPC_CHANNELS.NOTIFICATION_PLAY_SOUND]: NotificationPayload
 }
+
+// ============================================================================
+// Compile-time channel-map coverage assertion
+// ============================================================================
+
+/**
+ * Compile-time coverage assertion: every value of the shared channel-name
+ * constant (IPC_CHANNELS) must be a key of IpcChannelMap (renderer→main
+ * request/response channels) or of RendererChannelMap (main→renderer push
+ * events).
+ *
+ * This check is compile-time only: it produces no meaningful runtime code
+ * and is verified by the project type-check step, not by runtime tests.
+ * A developer who adds a new channel to IPC_CHANNELS without a corresponding
+ * entry in either map gets a type-check failure instead of a silently
+ * untyped channel.
+ */
+type ChannelCoverageCheck = IpcChannel extends keyof IpcChannelMap | keyof RendererChannelMap ? true : false
+
+/** Assignment target of the coverage assertion above; fails type-check if any channel is uncovered. */
+type AssertCoverage<T extends true> = T
+const _assertAllChannelsCovered: AssertCoverage<ChannelCoverageCheck> = true
 
 /**
  * Extract the payload type for a given renderer channel.
