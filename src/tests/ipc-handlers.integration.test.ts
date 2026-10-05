@@ -64,6 +64,40 @@ vi.mock('@earendil-works/pi-coding-agent', () => ({
   },
 }))
 
+// Git operations are mocked at the manager level: each method returns a
+// distinct sentinel so tests can assert both delegation (called with the
+// right args) and result propagation.
+vi.mock('../main/git-operations-manager', () => ({
+  gitOperationsManager: {
+    getBranch: vi.fn(async () => 'mock-branch'),
+    getStatus: vi.fn(async () => ({ isRepo: true, staged: [] as string[], files: [] as Array<{ path: string }> })),
+    getLog: vi.fn(async () => ({ all: [] as Array<{ hash: string; message: string }>, latest: undefined })),
+    getDiff: vi.fn(async () => ({ diff: 'mock-diff' })),
+    getDiffSummary: vi.fn(async () => ({ files: [] as Array<{ path: string; insertions: number; deletions: number }>, totalInsertions: 0, totalDeletions: 0 })),
+    stage: vi.fn(async () => undefined),
+    unstage: vi.fn(async () => undefined),
+    stageAll: vi.fn(async () => undefined),
+    unstageAll: vi.fn(async () => undefined),
+    commit: vi.fn(async () => ({ hash: 'mock-hash', summary: 'mock commit' })),
+    push: vi.fn(async () => undefined),
+    pull: vi.fn(async () => ({ summary: 'mock pull', changes: 0 })),
+    fetch: vi.fn(async () => undefined),
+    branchList: vi.fn(async () => ({ all: ['mock-branch'], current: 'mock-branch' })),
+    branchCreate: vi.fn(async () => undefined),
+    branchSwitch: vi.fn(async () => undefined),
+    stash: vi.fn(async () => undefined),
+    stashPop: vi.fn(async () => undefined),
+    stashList: vi.fn(async () => ({ stashes: [] as string[], total: 0 })),
+    getRemoteUrl: vi.fn(async () => 'https://mock.example/repo.git'),
+    isGitRepo: vi.fn(async () => true),
+  },
+}))
+
+import { gitOperationsManager } from '../main/git-operations-manager'
+
+type MockFn = ReturnType<typeof vi.fn>
+const mockGit = gitOperationsManager as unknown as Record<string, MockFn>
+
 class StatefulSessionManager {
   private nextId = 1
   private histories = new Map<string, ChatMessageIPC[]>()
@@ -160,6 +194,9 @@ describe('ipc handlers integration', () => {
     fsState.readError = null
     mockedList.mockReset()
     mockedList.mockResolvedValue([])
+    for (const fn of Object.values(mockGit)) {
+      fn.mockReset()
+    }
   })
 
   it('bridges session lifecycle behavior through IPC handlers', async () => {
@@ -407,6 +444,139 @@ describe('ipc handlers integration', () => {
     await expect(
       handlers.get(IPC_CHANNELS.WORKSPACE_GET_ACTIVE)!(untrusted as never, {}),
     ).rejects.toThrow('Unauthorized IPC call')
+  })
+
+  it('routes all 21 git channels through the router with valid sender', async () => {
+    const sessionManager = new StatefulSessionManager()
+    const projectManager = new ProjectManager()
+
+    registerIpcHandlers(
+      sessionManager as unknown as Parameters<typeof registerIpcHandlers>[0],
+      projectManager as Parameters<typeof registerIpcHandlers>[1],
+    )
+
+    // Read-only channels — assert delegation and result propagation
+    expect(await handlers.get(IPC_CHANNELS.GIT_GET_BRANCH)!({}, { cwd: '/tmp/repo' })).toBe('mock-branch')
+    expect(mockGit.getBranch).toHaveBeenCalledWith('/tmp/repo')
+
+    expect(await handlers.get(IPC_CHANNELS.GIT_STATUS)!({}, { cwd: '/tmp/repo' })).toEqual({ isRepo: true, staged: [], files: [] })
+    expect(mockGit.getStatus).toHaveBeenCalledWith('/tmp/repo')
+
+    expect(await handlers.get(IPC_CHANNELS.GIT_LOG)!({}, { cwd: '/tmp/repo', maxCount: 5 })).toEqual({ all: [], latest: undefined })
+    expect(mockGit.getLog).toHaveBeenCalledWith('/tmp/repo', 5)
+
+    expect(await handlers.get(IPC_CHANNELS.GIT_DIFF)!({}, { cwd: '/tmp/repo', filePath: 'a.ts', staged: true })).toEqual({ diff: 'mock-diff' })
+    expect(mockGit.getDiff).toHaveBeenCalledWith('/tmp/repo', 'a.ts', true)
+
+    expect(await handlers.get(IPC_CHANNELS.GIT_DIFF_SUMMARY)!({}, { cwd: '/tmp/repo', staged: false })).toEqual({
+      files: [],
+      totalInsertions: 0,
+      totalDeletions: 0,
+    })
+    expect(mockGit.getDiffSummary).toHaveBeenCalledWith('/tmp/repo', false)
+
+    expect(await handlers.get(IPC_CHANNELS.GIT_BRANCH_LIST)!({}, { cwd: '/tmp/repo' })).toEqual({ all: ['mock-branch'], current: 'mock-branch' })
+    expect(mockGit.branchList).toHaveBeenCalledWith('/tmp/repo')
+
+    expect(await handlers.get(IPC_CHANNELS.GIT_STASH_LIST)!({}, { cwd: '/tmp/repo' })).toEqual({ stashes: [], total: 0 })
+    expect(mockGit.stashList).toHaveBeenCalledWith('/tmp/repo')
+
+    expect(await handlers.get(IPC_CHANNELS.GIT_REMOTE_URL)!({}, { cwd: '/tmp/repo', remote: 'origin' })).toBe('https://mock.example/repo.git')
+    expect(mockGit.getRemoteUrl).toHaveBeenCalledWith('/tmp/repo', 'origin')
+
+    expect(await handlers.get(IPC_CHANNELS.GIT_IS_REPO)!({}, { cwd: '/tmp/repo' })).toBe(true)
+    expect(mockGit.isGitRepo).toHaveBeenCalledWith('/tmp/repo')
+
+    expect(await handlers.get(IPC_CHANNELS.GIT_COMMIT)!({}, { cwd: '/tmp/repo', message: 'mock commit' })).toEqual({
+      hash: 'mock-hash',
+      summary: 'mock commit',
+    })
+    expect(mockGit.commit).toHaveBeenCalledWith('/tmp/repo', 'mock commit')
+
+    expect(await handlers.get(IPC_CHANNELS.GIT_PULL)!({}, { cwd: '/tmp/repo', remote: 'origin', branch: 'main' })).toEqual({
+      summary: 'mock pull',
+      changes: 0,
+    })
+    expect(mockGit.pull).toHaveBeenCalledWith('/tmp/repo', 'origin', 'main')
+
+    // Write channels (void results) — assert delegation
+    await handlers.get(IPC_CHANNELS.GIT_STAGE)!({}, { cwd: '/tmp/repo', filePath: 'a.ts' })
+    expect(mockGit.stage).toHaveBeenCalledWith('/tmp/repo', 'a.ts')
+
+    await handlers.get(IPC_CHANNELS.GIT_UNSTAGE)!({}, { cwd: '/tmp/repo', filePath: 'a.ts' })
+    expect(mockGit.unstage).toHaveBeenCalledWith('/tmp/repo', 'a.ts')
+
+    await handlers.get(IPC_CHANNELS.GIT_STAGE_ALL)!({}, { cwd: '/tmp/repo' })
+    expect(mockGit.stageAll).toHaveBeenCalledWith('/tmp/repo')
+
+    await handlers.get(IPC_CHANNELS.GIT_UNSTAGE_ALL)!({}, { cwd: '/tmp/repo' })
+    expect(mockGit.unstageAll).toHaveBeenCalledWith('/tmp/repo')
+
+    await handlers.get(IPC_CHANNELS.GIT_PUSH)!({}, { cwd: '/tmp/repo', remote: 'origin', branch: 'main' })
+    expect(mockGit.push).toHaveBeenCalledWith('/tmp/repo', 'origin', 'main')
+
+    await handlers.get(IPC_CHANNELS.GIT_FETCH)!({}, { cwd: '/tmp/repo', remote: 'origin' })
+    expect(mockGit.fetch).toHaveBeenCalledWith('/tmp/repo', 'origin')
+
+    await handlers.get(IPC_CHANNELS.GIT_BRANCH_CREATE)!({}, { cwd: '/tmp/repo', name: 'feat-x', checkout: true })
+    expect(mockGit.branchCreate).toHaveBeenCalledWith('/tmp/repo', 'feat-x', true)
+
+    await handlers.get(IPC_CHANNELS.GIT_BRANCH_SWITCH)!({}, { cwd: '/tmp/repo', name: 'feat-x' })
+    expect(mockGit.branchSwitch).toHaveBeenCalledWith('/tmp/repo', 'feat-x')
+
+    await handlers.get(IPC_CHANNELS.GIT_STASH)!({}, { cwd: '/tmp/repo', message: 'wip' })
+    expect(mockGit.stash).toHaveBeenCalledWith('/tmp/repo', 'wip')
+
+    await handlers.get(IPC_CHANNELS.GIT_STASH_POP)!({}, { cwd: '/tmp/repo' })
+    expect(mockGit.stashPop).toHaveBeenCalledWith('/tmp/repo')
+  })
+
+  it('rejects git handlers called from an untrusted sender', async () => {
+    const sessionManager = new StatefulSessionManager()
+    const projectManager = new ProjectManager()
+
+    registerIpcHandlers(
+      sessionManager as unknown as Parameters<typeof registerIpcHandlers>[0],
+      projectManager as Parameters<typeof registerIpcHandlers>[1],
+    )
+
+    const untrusted = { senderFrame: { url: 'http://attacker.example' } }
+
+    await expect(
+      handlers.get(IPC_CHANNELS.GIT_STATUS)!(untrusted as never, { cwd: '/tmp/repo' }),
+    ).rejects.toThrow('Unauthorized IPC call')
+    await expect(
+      handlers.get(IPC_CHANNELS.GIT_PUSH)!(untrusted as never, { cwd: '/tmp/repo' }),
+    ).rejects.toThrow('Unauthorized IPC call')
+    await expect(
+      handlers.get(IPC_CHANNELS.GIT_STAGE)!(untrusted as never, { cwd: '/tmp/repo', filePath: 'a.ts' }),
+    ).rejects.toThrow('Unauthorized IPC call')
+    // No git delegation happened for the blocked calls
+    expect(mockGit.getStatus).not.toHaveBeenCalled()
+    expect(mockGit.push).not.toHaveBeenCalled()
+    expect(mockGit.stage).not.toHaveBeenCalled()
+  })
+
+  it('rejects stage/unstage paths that escape the project directory', async () => {
+    const sessionManager = new StatefulSessionManager()
+    const projectManager = new ProjectManager()
+
+    registerIpcHandlers(
+      sessionManager as unknown as Parameters<typeof registerIpcHandlers>[0],
+      projectManager as Parameters<typeof registerIpcHandlers>[1],
+    )
+
+    // The path-within-project validation must run after sender validation
+    // and before git delegation
+    await expect(
+      handlers.get(IPC_CHANNELS.GIT_STAGE)!({}, { cwd: '/tmp/repo', filePath: '../../etc/passwd' }),
+    ).rejects.toThrow('Path traversal detected')
+    expect(mockGit.stage).not.toHaveBeenCalled()
+
+    await expect(
+      handlers.get(IPC_CHANNELS.GIT_UNSTAGE)!({}, { cwd: '/tmp/repo', filePath: '/tmp/repo/../sibling' }),
+    ).rejects.toThrow('Path traversal detected')
+    expect(mockGit.unstage).not.toHaveBeenCalled()
   })
 
   it('returns selected folder from dialog handler', async () => {
