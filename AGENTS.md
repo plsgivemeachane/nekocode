@@ -153,4 +153,20 @@ For EVERY bug fix, you MUST write a full detailed description of the bug and how
 | "the worker" | Pi's background worker process |
 | "pi-package" | The distributable package in `workers/pi-package/` |
 
+---
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in GitHub Issues for this repo, using the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical triage labels are used as-is: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
 
