@@ -13,6 +13,19 @@ export interface DiffStats {
 }
 
 /**
+ * Type guard for a single entry in the `edits` array of an edit tool call.
+ *
+ * Tool-call args come from the model as `unknown`, so an entry can be null,
+ * undefined, a primitive (number/string/boolean), or an array. Only plain
+ * objects are valid edits. Skipping the rest prevents the unsafe pattern
+ * `edit as Record<string, unknown>` followed by a property read from throwing
+ * `TypeError: Cannot read properties of null` on null/undefined entries.
+ */
+function isPlainEditObject(edit: unknown): edit is Record<string, unknown> {
+  return typeof edit === 'object' && edit !== null && !Array.isArray(edit)
+}
+
+/**
  * Extract diff stats from a tool call's args and result.
  *
  * For write/edit tools:
@@ -26,7 +39,10 @@ export interface DiffStats {
  */
 export function extractDiffStats(toolName: string, args: unknown, result: unknown): DiffStats | null {
   const short = toolName.replace(/^toolcall_/, '')
-  const argsObj = args as Record<string, unknown> | null | undefined
+  // Guard the top-level args cast too: `args` is `unknown`, so it may be null,
+  // undefined, a primitive, or an array. Treat anything that is not a plain
+  // object as "no args" instead of reading properties off an unsafe value.
+  const argsObj = isPlainEditObject(args) ? args : null
   const resultObj = result as Record<string, unknown> | null | undefined
 
   if (!argsObj) return null
@@ -69,6 +85,10 @@ export function extractDiffStats(toolName: string, args: unknown, result: unknow
     let combinedOld = ''
     let combinedNew = ''
     for (const edit of edits) {
+      // Guard against null/undefined/primitive/array entries in the untrusted
+      // tool args. Only plain objects are valid edits; skipping everything else
+      // prevents reading a property from null (which throws TypeError).
+      if (!isPlainEditObject(edit)) continue
       const e = edit as Record<string, unknown>
       const oldText = typeof e.oldText === 'string' ? e.oldText : ''
       const newText = typeof e.newText === 'string' ? e.newText : ''

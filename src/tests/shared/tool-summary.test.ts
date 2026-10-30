@@ -130,15 +130,77 @@ describe('extractDiffStats — Contract Violations', () => {
   })
 
   describe('Argument Boundary: edit tool with hostile edits arrays', () => {
-    it('edit with edits containing null items — CRASHES on property access (BUG)', () => {
+    it('edit with edits containing null items — no longer crashes (bug fixed)', () => {
       // edits: [null] — each edit is cast to Record<string, unknown>
       // But null cannot have properties accessed on it.
       // The code does `edit as Record<string, unknown>` then `e.oldText`
       // which throws TypeError: Cannot read properties of null
       // BUG: extractDiffStats crashes when edits array contains null/undefined items.
       // The contract says args is `unknown` — there is no validation of edits contents.
-      expect(() => extractDiffStats('edit', { path: '/f', edits: [null as any] }, null)).toThrow()
+      // FIXED: non-object entries are now skipped by the isPlainEditObject guard.
+      // With only a null entry, there are no usable edits, so the result is null
+      // instead of a TypeError being thrown.
+      expect(extractDiffStats('edit', { path: '/f', edits: [null as any] }, null)).toBeNull()
       // This is a REAL BUG: the function crashes instead of gracefully handling invalid edits.
+    })
+
+    it('edit with mixed valid and null entries — stats count only the valid edits', () => {
+      // FIXED: null entries are skipped, so only the two valid edits contribute
+      // their old/new text. Old lines: ['a', 'c']; new lines: ['b', 'd'].
+      // No common lines → 2 added, 2 removed.
+      const result = extractDiffStats('edit', {
+        path: '/f',
+        edits: [
+          { oldText: 'a', newText: 'b' },
+          null as any,
+          { oldText: 'c', newText: 'd' },
+        ],
+      }, null)
+      expect(result).toEqual({ added: 2, removed: 2 })
+    })
+
+    it('edit with edits containing undefined, number, string, and array entries — all skipped', () => {
+      // FIXED: every non-plain-object entry is ignored. With no valid edits,
+      // the combined text stays empty and the function returns null.
+      const result = extractDiffStats('edit', {
+        path: '/f',
+        edits: [undefined as any, 42 as any, 'not-an-edit' as any, [] as any],
+      }, null)
+      expect(result).toBeNull()
+    })
+
+    it('edit with a single valid edit surrounded by invalid entries — only the valid edit counts', () => {
+      // FIXED: the invalid entries (null, number, array) are skipped and the one
+      // valid edit still produces the same stats it would produce alone.
+      const result = extractDiffStats('edit', {
+        path: '/f',
+        edits: [null as any, 7 as any, { oldText: 'a\nb', newText: 'a\nc' }, [] as any],
+      }, null)
+      expect(result).toEqual({ added: 1, removed: 1 })
+    })
+
+    it('edit with a non-array edits value — treated as no edits, no crash', () => {
+      // FIXED: Array.isArray guards the value before iterating. A string, an
+      // object, and null are all treated as "no edits" and return null.
+      expect(extractDiffStats('edit', { path: '/f', edits: 'not-an-array' }, null)).toBeNull()
+      expect(extractDiffStats('edit', { path: '/f', edits: { oldText: 'a', newText: 'b' } }, null)).toBeNull()
+      expect(extractDiffStats('edit', { path: '/f', edits: null }, null)).toBeNull()
+    })
+
+    it('edit with all-valid edits gives the same result as before the guard', () => {
+      // Regression guard: valid input must behave exactly as it did before.
+      const result = extractDiffStats('edit', {
+        path: '/f',
+        edits: [{ oldText: 'a\nb', newText: 'a\nc' }],
+      }, null)
+      expect(result).toEqual({ added: 1, removed: 1 })
+    })
+
+    it('edit with null/undefined args — treated as no args, no crash', () => {
+      // FIXED: the top-level args cast is guarded as well, so a null or
+      // undefined args value returns null instead of throwing.
+      expect(extractDiffStats('edit', null, null)).toBeNull()
+      expect(extractDiffStats('edit', undefined, null)).toBeNull()
     })
 
     it('edit with edits containing undefined oldText/newText — now returns null (no phantom stats)', () => {
