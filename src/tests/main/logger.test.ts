@@ -1,6 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-require-imports */
-import { describe, it, expect, beforeEach, afterEach } from "vitest"
-import { createLogger, type Logger } from "@/main/logger"
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { createLogger, SimpleConsoleLogger, type Logger } from "@/main/logger"
 
 // ── Tests ──────────────────────────────────────────────────────────
 
@@ -260,5 +263,150 @@ describe("logger", () => {
       current = current.child({ label: `nested-${i}` })
     }
     expect(() => current.info("deeply nested")).not.toThrow()
+  })
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Size-based rotation (SimpleConsoleLogger used by worker threads)
+  // ═══════════════════════════════════════════════════════════════════
+
+  describe("size-based rotation", () => {
+    let logDir: string
+    let spies: Array<ReturnType<typeof vi.spyOn>>
+
+    // worker-YYYY-MM-DD.log and its numbered backups share this prefix
+    const baseName = (): string =>
+      `worker-${new Date().toISOString().split("T")[0]}`
+
+    // Snapshot every file in the temp log dir so a test can assert on all
+    // rotation targets at once
+    const readLogDir = (): Record<string, string> => {
+      const files: Record<string, string> = {}
+      for (const entry of readdirSync(logDir)) {
+        files[entry] = readFileSync(join(logDir, entry), "utf8")
+      }
+      return files
+    }
+
+    beforeEach(() => {
+      logDir = mkdtempSync(join(tmpdir(), "nekocode-logger-rotation-"))
+      // These tests force file logging on while NODE_ENV=test, so silence the
+      // console fan-out to keep vitest output clean (and to inspect errors)
+      spies = [
+        vi.spyOn(console, "log").mockImplementation(() => {}),
+        vi.spyOn(console, "warn").mockImplementation(() => {}),
+        vi.spyOn(console, "error").mockImplementation(() => {}),
+      ]
+    })
+
+    afterEach(() => {
+      for (const spy of spies) spy.mockRestore()
+      rmSync(logDir, { recursive: true, force: true })
+    })
+
+    it("rotates the active file when the limit is passed and preserves every line", async () => {
+      const rotationLogger = new SimpleConsoleLogger("rotation-test", {
+        logDir,
+        silent: false,
+        // Every line is larger than this, so each write after the first
+        // triggers a rotation without writing megabytes in the test
+        maxSizeBytes: 1,
+        maxBackups: 3,
+      })
+
+      rotationLogger.info("line-one")
+      rotationLogger.info("line-two")
+      rotationLogger.info("line-three")
+      await rotationLogger.close()
+
+      const base = baseName()
+      const files = readLogDir()
+
+      // Active file plus two numbered backups, each holding one line
+      expect(Object.keys(files).sort()).toEqual(
+        [`${base}.log`, `${base}.1.log`, `${base}.2.log`].sort(),
+      )
+      expect(files[`${base}.log`]).toContain("line-three")
+      expect(files[`${base}.1.log`]).toContain("line-two")
+      expect(files[`${base}.2.log`]).toContain("line-one")
+
+      // No line vanished during the rotation
+      const combined = Object.values(files).join("\n")
+      for (const line of ["line-one", "line-two", "line-three"]) {
+        expect(combined).toContain(line)
+      }
+    })
+
+    it("keeps only maxBackups files and deletes the oldest backup", async () => {
+      const rotationLogger = new SimpleConsoleLogger("rotation-cap-test", {
+        logDir,
+        silent: false,
+        maxSizeBytes: 1,
+        maxBackups: 2,
+      })
+
+      rotationLogger.info("line-one")
+      rotationLogger.info("line-two")
+      rotationLogger.info("line-three")
+      rotationLogger.info("line-four")
+      rotationLogger.info("line-five")
+      await rotationLogger.close()
+
+      const base = baseName()
+      const files = readLogDir()
+
+      // Active + exactly two backups; no .3 backup is created
+      expect(Object.keys(files).sort()).toEqual(
+        [`${base}.log`, `${base}.1.log`, `${base}.2.log`].sort(),
+      )
+      expect(files[`${base}.log`]).toContain("line-five")
+      expect(files[`${base}.1.log`]).toContain("line-four")
+      expect(files[`${base}.2.log`]).toContain("line-three")
+
+      // The two oldest lines were dropped with the deleted backup
+      const combined = Object.values(files).join("\n")
+      expect(combined).not.toContain("line-one")
+      expect(combined).not.toContain("line-two")
+    })
+
+    it("does not rotate while the active file stays under the limit", async () => {
+      const rotationLogger = new SimpleConsoleLogger("no-rotation-test", {
+        logDir,
+        silent: false,
+        maxSizeBytes: 10 * 1024 * 1024,
+        maxBackups: 3,
+      })
+
+      rotationLogger.info("small-one")
+      rotationLogger.info("small-two")
+      await rotationLogger.close()
+
+      const files = readLogDir()
+      expect(Object.keys(files)).toEqual([`${baseName()}.log`])
+      expect(files[`${baseName()}.log`]).toContain("small-one")
+      expect(files[`${baseName()}.log`]).toContain("small-two")
+    })
+
+    it("cleanup deletes expired daily files and their numbered backups", async () => {
+      const base = baseName()
+      const expiredDate = "2000-01-01"
+      // An expired plain daily file, an expired numbered backup and a recent
+      // backup for today: only the expired ones should be removed
+      writeFileSync(join(logDir, `worker-${expiredDate}.log`), "expired\n")
+      writeFileSync(join(logDir, `worker-${expiredDate}.2.log`), "expired backup\n")
+      writeFileSync(join(logDir, `${base}.1.log`), "recent backup\n")
+
+      const cleanupLogger = new SimpleConsoleLogger("cleanup-test", {
+        logDir,
+        silent: false,
+        maxSizeBytes: 10 * 1024 * 1024,
+        maxBackups: 3,
+      })
+      await cleanupLogger.close()
+
+      const files = readdirSync(logDir)
+      expect(files).not.toContain(`worker-${expiredDate}.log`)
+      expect(files).not.toContain(`worker-${expiredDate}.2.log`)
+      expect(files).toContain(`${base}.1.log`)
+    })
   })
 })
