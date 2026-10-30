@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { useProjectStore, type SessionStatus } from '../../stores/project-store'
+import { useProjectStore, type SessionStatus, type ActiveView } from '../../stores/project-store'
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -144,6 +144,169 @@ function SessionList({
     </div>
   )
 }
+
+/**
+ * Memoized sidebar body — Add Folder header, project/session list, Settings
+ * button and toast. Extracted from TreeSidebar so that resize dragging only
+ * re-renders the thin shell (the <aside> width + resize handle) instead of
+ * the whole Radix ContextMenu/ScrollArea tree on every mousemove. Without
+ * this boundary, each mousemove during a drag re-rendered every project and
+ * session row's ContextMenu, pushing per-frame commit time above the 16.7ms
+ * frame budget and making the left sidebar feel stuttery next to the
+ * (virtualized, light) right sidebar.
+ *
+ * All props are reference-stable across width drags: store state is a
+ * useReducer value (no dispatch until mouseup), callbacks are stable
+ * useCallbacks, and the remaining props are primitives. So the memo skips
+ * re-rendering the body for width-only changes.
+ */
+// Shell-related actions (handleShellOpen, vscodeAvailable, shellOpening) and
+// session-mutation actions (refreshSessions, refreshSessionMessages,
+// setActiveSession) intentionally stay out of this memoized boundary — they
+// are consumed by renderProjectMenu / renderSessionMenu, which are built in
+// TreeSidebar and passed in as render props.
+const SidebarBody = React.memo(function SidebarBody({
+  state,
+  expanded,
+  activeSessionId,
+  toast,
+  toggleExpand,
+  handleAddProject,
+  renderProjectMenu,
+  renderSessionMenu,
+  createSession,
+  reconnectSession,
+  preloadSession,
+  setActiveView,
+}: {
+  state: ReturnType<typeof useProjectStore>['state']
+  expanded: Set<string>
+  activeSessionId: string | null
+  toast: { message: string; type: 'error' | 'success' } | null
+  toggleExpand: (projectId: string) => void
+  handleAddProject: () => void
+  renderProjectMenu: (project: { id: string; path: string }) => React.ReactNode
+  renderSessionMenu: (sessionId: string, projectPath: string, projectId: string) => React.ReactNode
+  createSession: (projectPath: string) => void
+  reconnectSession: (sessionId: string, projectPath: string) => void
+  preloadSession: (sessionId: string, projectPath: string) => void
+  setActiveView: (view: ActiveView) => void
+}) {
+  return (<>
+      {/* Header moved to NavBar (same row as window controls) */}
+
+      {/* Top: Add Folder button (fixed, does not scroll) */}
+      <div className="px-2 pt-2 pb-1 border-b border-surface-800/50">
+        <button
+          onClick={handleAddProject}
+          className="flex items-center gap-2 px-2.5 py-1.5 mx-1 mt-1 mb-1 w-[calc(100%-8px)] text-left text-[12px] text-text-tertiary/80 hover:text-text-primary hover:bg-surface-800/70 rounded-lg border border-dashed border-surface-700/50 transition-colors duration-150"
+        >
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" className="shrink-0">
+            <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          </svg>
+          <span>Add Folder</span>
+        </button>
+      </div>
+
+      {/* Middle: Scrollable project/session list */}
+      <ScrollArea className="flex-1 min-h-0 px-2">
+        {state.projects.length === 0 && (
+          <p className="text-[11px] text-text-tertiary/80 px-3 py-10 text-center leading-relaxed">
+            No projects yet.
+            <br />
+            Click &ldquo;Add Folder&rdquo; above to add one.
+          </p>
+        )}
+
+        {state.projects.map(project => {
+          const isExpanded = expanded.has(project.id)
+          const isActive = state.activeProjectPath === project.path
+
+          return (
+            <div key={project.id} className="mb-1">
+              {/* Project row */}
+              <ContextMenu>
+                <ContextMenuTrigger asChild>
+                  <div
+                    className={`group flex items-center gap-2 px-2.5 py-[7px] cursor-pointer rounded-lg transition-colors duration-150 ${
+                      isActive ? 'bg-surface-800/80' : 'hover:bg-surface-800/60'
+                    }`}
+                    onClick={() => toggleExpand(project.id)}
+                  >
+                    <svg
+                      width="11"
+                      height="11"
+                      viewBox="0 0 12 12"
+                      fill="none"
+                      className={`text-text-tertiary shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
+                    >
+                      <path d="M4.5 2.5L8 6L4.5 9.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+
+                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" className="text-text-tertiary/80 shrink-0">
+                      <path d="M2 3.5C2 2.67 2.67 2 3.5 2h3L8 3.5h4.5c.83 0 1.5.67 1.5 1.5v8c0 .83-.67 1.5-1.5 1.5h-9c-.83 0-1.5-.67-1.5-1.5v-9.5z" stroke="currentColor" strokeWidth="1" />
+                    </svg>
+
+                    <span className={`text-[13px] truncate flex-1 font-medium ${isActive ? 'text-text-primary' : 'text-text-secondary/90'}`}>
+                      {folderName(project.path)}
+                    </span>
+                  </div>
+                </ContextMenuTrigger>
+                <ContextMenuContent className="min-w-[180px] bg-surface-900/95 backdrop-blur-md border-surface-700/60 shadow-xl shadow-black/40">
+                  {renderProjectMenu(project)}
+                </ContextMenuContent>
+              </ContextMenu>
+
+              {/* Sessions */}
+              {isExpanded && (
+                <SessionList
+                  sessions={project.sessions}
+                  activeSessionId={activeSessionId}
+                  sessionStatuses={state.sessionStatuses}
+                  sessionErrorMessages={state.sessionErrorMessages}
+                  onReconnect={(sessionId) => reconnectSession(sessionId, project.path)}
+                  onHoverSession={(sessionId) => preloadSession(sessionId, project.path)}
+                  renderSessionMenu={(sessionId) => renderSessionMenu(sessionId, project.path, project.id)}
+                  onCreateSession={() => createSession(project.path)}
+
+                  isAgentConnecting={!state.agentReady && activeSessionId != null}
+                />
+              )}
+            </div>
+          )
+        })}
+      </ScrollArea>
+
+      {/* Settings button at sidebar bottom */}
+      <div className="px-3 py-3 border-t border-surface-800/50">
+        {/* Settings button */}
+        <button
+          onClick={() => setActiveView('settings')}
+          className={`w-full flex items-center gap-2 px-2.5 py-[7px] ${state.activeView === 'settings' ? 'text-accent bg-accent/10' : 'text-text-secondary hover:text-text-primary hover:bg-surface-800/80'} rounded-lg transition-colors duration-200`}
+          title="Settings"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 01-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1.73-1.73V4a2 2 0 00-2-2z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+          <span className="text-[13px] font-medium">Settings</span>
+        </button>
+      </div>
+
+      {/* Toast notification for shell operation failures */}
+      {toast && (
+        <div className={`absolute bottom-4 left-3 right-3 px-3 py-2 rounded-lg text-[12px] font-medium transition-all duration-300 ${
+          toast.type === 'error'
+            ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+            : 'bg-green-500/20 text-green-400 border border-green-500/30'
+        }`}>
+          {toast.message}
+        </div>
+      )}
+
+      {/* NotificationSettingsPanel moved to central Settings page */}
+    </>)
+})
 
 export function TreeSidebar() {
   const { state, addProject, removeProject, reconnectSession, createSession, refreshSessions, refreshSessionMessages, preloadSession, setActiveSession, setActiveView, setLeftSidebarWidth } =
@@ -334,7 +497,9 @@ export function TreeSidebar() {
     }
   }, [addProject])
 
-  const toggleExpand = (projectId: string) => {
+  // useCallback so SidebarBody's memo keeps skipping re-renders during drags
+  // (a fresh function identity every render would break the memo boundary).
+  const toggleExpand = useCallback((projectId: string) => {
     setExpanded(prev => {
       const next = new Set(prev)
       if (next.has(projectId)) {
@@ -344,7 +509,7 @@ export function TreeSidebar() {
       }
       return next
     })
-  }
+  }, [])
 
   // NotificationSettingsPanel moved to central Settings page
 
@@ -450,118 +615,22 @@ export function TreeSidebar() {
       className="bg-surface-900 h-full min-h-0 max-w-[28vw] flex flex-col shrink-0 text-text-primary shadow-[inset_-1px_0_0_rgba(255,255,255,0.06)] relative"
       style={{ width: sidebarWidth }}
     >
-      {/* Header moved to NavBar (same row as window controls) */}
-
-      {/* Top: Add Folder button (fixed, does not scroll) */}
-      <div className="px-2 pt-2 pb-1 border-b border-surface-800/50">
-        <button
-          onClick={handleAddProject}
-          className="flex items-center gap-2 px-2.5 py-1.5 mx-1 mt-1 mb-1 w-[calc(100%-8px)] text-left text-[12px] text-text-tertiary/80 hover:text-text-primary hover:bg-surface-800/70 rounded-lg border border-dashed border-surface-700/50 transition-colors duration-150"
-        >
-          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" className="shrink-0">
-            <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-          </svg>
-          <span>Add Folder</span>
-        </button>
-      </div>
-
-      {/* Middle: Scrollable project/session list */}
-      <ScrollArea className="flex-1 min-h-0 px-2">
-        {state.projects.length === 0 && (
-          <p className="text-[11px] text-text-tertiary/80 px-3 py-10 text-center leading-relaxed">
-            No projects yet.
-            <br />
-            Click &ldquo;Add Folder&rdquo; above to add one.
-          </p>
-        )}
-
-        {state.projects.map(project => {
-          const isExpanded = expanded.has(project.id)
-          const isActive = state.activeProjectPath === project.path
-
-          return (
-            <div key={project.id} className="mb-1">
-              {/* Project row */}
-              <ContextMenu>
-                <ContextMenuTrigger asChild>
-                  <div
-                    className={`group flex items-center gap-2 px-2.5 py-[7px] cursor-pointer rounded-lg transition-colors duration-150 ${
-                      isActive ? 'bg-surface-800/80' : 'hover:bg-surface-800/60'
-                    }`}
-                    onClick={() => toggleExpand(project.id)}
-                  >
-                    <svg
-                      width="11"
-                      height="11"
-                      viewBox="0 0 12 12"
-                      fill="none"
-                      className={`text-text-tertiary shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
-                    >
-                      <path d="M4.5 2.5L8 6L4.5 9.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-
-                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" className="text-text-tertiary/80 shrink-0">
-                      <path d="M2 3.5C2 2.67 2.67 2 3.5 2h3L8 3.5h4.5c.83 0 1.5.67 1.5 1.5v8c0 .83-.67 1.5-1.5 1.5h-9c-.83 0-1.5-.67-1.5-1.5v-9.5z" stroke="currentColor" strokeWidth="1" />
-                    </svg>
-
-                    <span className={`text-[13px] truncate flex-1 font-medium ${isActive ? 'text-text-primary' : 'text-text-secondary/90'}`}>
-                      {folderName(project.path)}
-                    </span>
-                  </div>
-                </ContextMenuTrigger>
-                <ContextMenuContent className="min-w-[180px] bg-surface-900/95 backdrop-blur-md border-surface-700/60 shadow-xl shadow-black/40">
-                  {renderProjectMenu(project)}
-                </ContextMenuContent>
-              </ContextMenu>
-
-              {/* Sessions */}
-              {isExpanded && (
-                <SessionList
-                  sessions={project.sessions}
-                  activeSessionId={state.activeSessionId}
-                  sessionStatuses={state.sessionStatuses}
-                  sessionErrorMessages={state.sessionErrorMessages}
-                  onReconnect={(sessionId) => reconnectSession(sessionId, project.path)}
-                  onHoverSession={(sessionId) => preloadSession(sessionId, project.path)}
-                  renderSessionMenu={(sessionId) => renderSessionMenu(sessionId, project.path, project.id)}
-                  onCreateSession={() => createSession(project.path)}
-
-                  isAgentConnecting={!state.agentReady && state.activeSessionId != null}
-                />
-              )}
-            </div>
-          )
-        })}
-      </ScrollArea>
-
-      {/* Settings button at sidebar bottom */}
-      <div className="px-3 py-3 border-t border-surface-800/50">
-        {/* Settings button */}
-        <button
-          onClick={() => setActiveView('settings')}
-          className={`w-full flex items-center gap-2 px-2.5 py-[7px] ${state.activeView === 'settings' ? 'text-accent bg-accent/10' : 'text-text-secondary hover:text-text-primary hover:bg-surface-800/80'} rounded-lg transition-colors duration-200`}
-          title="Settings"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 00-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1-1.73V4a2 2 0 00-2-2z" />
-            <circle cx="12" cy="12" r="3" />
-          </svg>
-          <span className="text-[13px] font-medium">Settings</span>
-        </button>
-      </div>
-
-      {/* Toast notification for shell operation failures */}
-      {toast && (
-        <div className={`absolute bottom-4 left-3 right-3 px-3 py-2 rounded-lg text-[12px] font-medium transition-all duration-300 ${
-          toast.type === 'error'
-            ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-            : 'bg-green-500/20 text-green-400 border border-green-500/30'
-        }`}>
-          {toast.message}
-        </div>
-      )}
-
-      {/* NotificationSettingsPanel moved to central Settings page */}
+      {/* Sidebar content — memoized so resize drags only re-render this shell,
+          not the whole project/session Radix tree (see SidebarBody) */}
+      <SidebarBody
+        state={state}
+        expanded={expanded}
+        activeSessionId={activeSessionId}
+        toast={toast}
+        toggleExpand={toggleExpand}
+        handleAddProject={handleAddProject}
+        renderProjectMenu={renderProjectMenu}
+        renderSessionMenu={renderSessionMenu}
+        createSession={createSession}
+        reconnectSession={reconnectSession}
+        preloadSession={preloadSession}
+        setActiveView={setActiveView}
+      />
 
       {/* ── Vertical resize handle (right edge) ── */}
       <div

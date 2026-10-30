@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, dialog, shell } from 'electron'
+import { BrowserWindow, dialog, shell } from 'electron'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { gitOperationsManager } from './git-operations-manager'
@@ -9,29 +9,27 @@ import { IPC_CHANNELS } from '../shared/ipc-channels'
 // loop in sendEventToRenderer with a type-safe equivalent. New handlers should
 // prefer the router; existing handlers are being migrated incrementally.
 // See: docs/abstraction-oop-audit.md Priority 3
+// MIGRATION COMPLETE: every renderer→main channel in this module is now
+// registered through the IpcRouter (router.handle/handleVoid). No raw
+// ipcMain.handle registration remains. Sender validation and the error
+// boundary are applied centrally by the router. All 44 previously
+// manually-registered channels are uniformly sender-validated (36 of them
+// had no sender validation before the migration).
 import { IpcRouter, sendToAllRenderers } from './ipc-router'
-import { validateIpcSender, validatePathWithinProject } from './security-utils'
+// NOTE: validateIpcSender was removed from this import when the last raw
+// ipcMain.handle registration (git stage/unstage) migrated to IpcRouter —
+// the router applies sender validation centrally. validatePathWithinProject
+// stays because GIT_STAGE/GIT_UNSTAGE keep path-within-project validation
+// in their handler bodies.
+import { validatePathWithinProject } from './security-utils'
 import type {
-  SessionCreatePayload,
-  SessionCreateResult,
-  SessionPromptPayload,
-  SessionAbortPayload,
-  SessionDisposePayload,
-  SessionDeletePayload,
-  SessionReconnectPayload,
-  SessionReconnectResult,
-  SessionLoadHistoryPayload,
-  SessionLoadHistoryDiskPayload,
-  ChatMessageIPC,
+  // NOTE: Session payload/result types (SessionCreatePayload, ChatMessageIPC, ModelInfo,
+  // CommandInfo, UIResponse, ...) were removed from this import when the session
+  // handlers were migrated to IpcRouter — the router infers them from IpcChannelMap.
+  // Project/workspace/update payload+result types (ProjectAddPayload, ProjectInfo,
+  // WorkspaceSetActivePayload, UpdateAvailableInfo, ...) were removed likewise when
+  // those handlers were migrated to IpcRouter.
   SessionStreamEvent,
-  ProjectAddPayload,
-  ProjectRemovePayload,
-  ProjectSessionsPayload,
-  ProjectInfo,
-  WorkspaceSetActivePayload,
-  CommandInfo,
-  ModelInfo,
-  UpdateAvailableInfo,
 } from '../shared/ipc-types'
 import { searchFiles } from './search-files'
 import type { ISessionManager, IProjectManager } from './manager-types'
@@ -57,84 +55,70 @@ export function registerIpcHandlers(
   // compile-time payload/result type checking against IpcChannelMap.
   // Session/project/git handlers still use the manual ipcMain.handle pattern
   // and are migrated incrementally.
+  // NOTE: that note is now historical — the migration is complete and every
+  // handler below is registered through the IpcRouter (see header comment).
   const router = new IpcRouter()
 
   // --- Session handlers ---
+  // Migrated to IpcRouter: payloads/results are type-checked against
+  // IpcChannelMap, sender validation is applied centrally by the router, and
+  // handler errors are logged and re-thrown by the router's error boundary,
+  // so the body-level try/catch blocks were removed.
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_CREATE, async (_event, payload: SessionCreatePayload): Promise<SessionCreateResult> => {
-    validateIpcSender(_event)
+  router.handle(IPC_CHANNELS.SESSION_CREATE, async (payload) => {
     logger.info(`SESSION_CREATE cwd=${payload.cwd}`)
-    try {
-      const sessionId = await sessionManager.create(payload.cwd)
-      const extensionErrors = sessionManager.getExtensionLoadErrors(sessionId)
-      const extensionsDisabled = sessionManager.getExtensionsDisabled(sessionId)
+    const sessionId = await sessionManager.create(payload.cwd)
+    const extensionErrors = sessionManager.getExtensionLoadErrors(sessionId)
+    const extensionsDisabled = sessionManager.getExtensionsDisabled(sessionId)
 
-      return { sessionId, stableId: sessionId, extensionErrors, extensionsDisabled }
-    } catch (err) {
-      logger.error('SESSION_CREATE failed', err)
-      throw err
-    }
+    return { sessionId, stableId: sessionId, extensionErrors, extensionsDisabled }
   })
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_PROMPT, async (_event, payload: SessionPromptPayload): Promise<void> => {
-    validateIpcSender(_event)
+  router.handle(IPC_CHANNELS.SESSION_PROMPT, async (payload) => {
     // Security: Do not log user prompt text — may contain sensitive data (passwords, API keys, PII)
     // Log only the session ID and prompt length for debugging
     logger.info(`SESSION_PROMPT sessionId=${payload.sessionId} textLength=${payload.text.length}`)
-    try {
-      await sessionManager.prompt(payload.sessionId, payload.text)
-    } catch (err) {
-      logger.error(`SESSION_PROMPT failed sessionId=${payload.sessionId}`, err)
-      throw err
-    }
+    await sessionManager.prompt(payload.sessionId, payload.text)
   })
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_ABORT, async (_event, payload: SessionAbortPayload): Promise<void> => {
-    validateIpcSender(_event)
+  router.handle(IPC_CHANNELS.SESSION_ABORT, async (payload) => {
     logger.info(`SESSION_ABORT sessionId=${payload.sessionId}`)
     sessionManager.abort(payload.sessionId)
   })
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_DISPOSE, async (_event, payload: SessionDisposePayload): Promise<void> => {
-    validateIpcSender(_event)
+  router.handle(IPC_CHANNELS.SESSION_DISPOSE, async (payload) => {
     logger.info(`SESSION_DISPOSE sessionId=${payload.sessionId}`)
     sessionManager.dispose(payload.sessionId)
   })
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_DELETE, async (_event, payload: SessionDeletePayload): Promise<void> => {
-    validateIpcSender(_event)
+  router.handle(IPC_CHANNELS.SESSION_DELETE, async (payload) => {
     logger.info(`SESSION_DELETE sessionId=${payload.sessionId} cwd=${payload.cwd}`)
     await sessionManager.deleteSession(payload.sessionId, payload.cwd)
   })
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_RECONNECT, async (_event, payload: SessionReconnectPayload): Promise<SessionReconnectResult> => {
-    validateIpcSender(_event)
+  router.handle(IPC_CHANNELS.SESSION_RECONNECT, async (payload) => {
     logger.info(`SESSION_RECONNECT sessionId=${payload.sessionId} cwd=${payload.cwd}`)
-    try {
-      const history = await sessionManager.reconnect(payload.sessionId, payload.cwd)
-      const extensionErrors = sessionManager.getExtensionLoadErrors(payload.sessionId)
-      const extensionsDisabled = sessionManager.getExtensionsDisabled(payload.sessionId)
-      logger.info(`SESSION_RECONNECT OK sessionId=${payload.sessionId} history=${history.length} messages`)
-      return { sessionId: payload.sessionId, stableId: payload.sessionId, history, extensionErrors, extensionsDisabled }
-    } catch (err) {
-      logger.error(`SESSION_RECONNECT failed sessionId=${payload.sessionId}`, err)
-      throw err
-    }
+    const history = await sessionManager.reconnect(payload.sessionId, payload.cwd)
+    const extensionErrors = sessionManager.getExtensionLoadErrors(payload.sessionId)
+    const extensionsDisabled = sessionManager.getExtensionsDisabled(payload.sessionId)
+    logger.info(`SESSION_RECONNECT OK sessionId=${payload.sessionId} history=${history.length} messages`)
+    return { sessionId: payload.sessionId, stableId: payload.sessionId, history, extensionErrors, extensionsDisabled }
   })
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_LOAD_HISTORY, async (_event, payload: SessionLoadHistoryPayload): Promise<ChatMessageIPC[]> => {
+  router.handle(IPC_CHANNELS.SESSION_LOAD_HISTORY, async (payload) => {
     logger.debug(`SESSION_LOAD_HISTORY sessionId=${payload.sessionId}`)
     return await sessionManager.getHistory(payload.sessionId)
   })
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_LOAD_HISTORY_DISK, async (_event, payload: SessionLoadHistoryDiskPayload): Promise<ChatMessageIPC[]> => {
+  router.handle(IPC_CHANNELS.SESSION_LOAD_HISTORY_DISK, async (payload) => {
     logger.debug(`SESSION_LOAD_HISTORY_DISK sessionId=${payload.sessionId} cwd=${payload.cwd} limit=${payload.limit}`)
     return sessionManager.loadHistoryFromDisk(payload.sessionId, payload.cwd, payload.limit)
   })
 
   // --- Dialog handlers ---
+  // Migrated to IpcRouter (see note at the session handlers above).
 
-  ipcMain.handle(IPC_CHANNELS.DIALOG_OPEN_FOLDER, async (): Promise<string | null> => {
+  router.handleVoid(IPC_CHANNELS.DIALOG_OPEN_FOLDER, async () => {
     logger.debug('DIALOG_OPEN_FOLDER')
     const result = await dialog.showOpenDialog({
       properties: ['openDirectory'],
@@ -149,106 +133,88 @@ export function registerIpcHandlers(
   })
 
   // --- Project handlers ---
+  // Migrated to IpcRouter: the router's error boundary owns error logging
+  // and re-throw, so the body-level try/catch blocks were removed.
 
-  ipcMain.handle(IPC_CHANNELS.PROJECT_ADD, async (_event, payload: ProjectAddPayload): Promise<ProjectInfo> => {
+  router.handle(IPC_CHANNELS.PROJECT_ADD, async (payload) => {
     logger.info(`PROJECT_ADD path=${payload.path}`)
-    try {
-      return await projectManager.addProject(payload.path)
-    } catch (err) {
-      logger.error(`PROJECT_ADD failed path=${payload.path}`, err)
-      throw err
-    }
+    return await projectManager.addProject(payload.path)
   })
 
-  ipcMain.handle(IPC_CHANNELS.PROJECT_REMOVE, async (_event, payload: ProjectRemovePayload): Promise<boolean> => {
+  router.handle(IPC_CHANNELS.PROJECT_REMOVE, async (payload) => {
     logger.info(`PROJECT_REMOVE id=${payload.id}`)
-    try {
-      return await projectManager.removeProject(payload.id)
-    } catch (err) {
-      logger.error(`PROJECT_REMOVE failed id=${payload.id}`, err)
-      throw err
-    }
+    return await projectManager.removeProject(payload.id)
   })
 
   // --- Workspace handlers ---
+  // Migrated to IpcRouter (see note at the session handlers above).
 
-  ipcMain.handle(IPC_CHANNELS.WORKSPACE_SET_ACTIVE, async (_event, payload: WorkspaceSetActivePayload): Promise<void> => {
+  router.handle(IPC_CHANNELS.WORKSPACE_SET_ACTIVE, async (payload) => {
     logger.debug(`WORKSPACE_SET_ACTIVE sessionId=${payload.sessionId} projectPath=${payload.projectPath}`)
     await projectManager.setActiveSession(payload.sessionId, payload.projectPath)
   })
 
-  ipcMain.handle(IPC_CHANNELS.WORKSPACE_GET_ACTIVE, async (): Promise<{ sessionId: string | null; projectPath: string | null }> => {
+  router.handleVoid(IPC_CHANNELS.WORKSPACE_GET_ACTIVE, async () => {
     logger.debug('WORKSPACE_GET_ACTIVE')
     return projectManager.getActiveSession()
   })
 
   // --- Model handlers ---
+  // Migrated to IpcRouter (see note at the session handlers above).
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_GET_MODEL, async (_event, payload: { sessionId: string }): Promise<ModelInfo | null> => {
+  router.handle(IPC_CHANNELS.SESSION_GET_MODEL, async (payload) => {
     logger.debug(`SESSION_GET_MODEL sessionId=${payload.sessionId}`)
     return sessionManager.getModel(payload.sessionId)
   })
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_LIST_MODELS, async (): Promise<ModelInfo[]> => {
+  router.handleVoid(IPC_CHANNELS.SESSION_LIST_MODELS, async () => {
     logger.debug('SESSION_LIST_MODELS')
     return sessionManager.listModels()
   })
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_SET_MODEL, async (_event, payload: { sessionId: string; provider: string; modelId: string }): Promise<ModelInfo> => {
+  router.handle(IPC_CHANNELS.SESSION_SET_MODEL, async (payload) => {
     logger.debug(`SESSION_SET_MODEL sessionId=${payload.sessionId} provider=${payload.provider} modelId=${payload.modelId}`)
     return sessionManager.setModel(payload.sessionId, payload.provider, payload.modelId)
   })
 
   // --- Command discovery handlers ---
+  // Migrated to IpcRouter (see note at the session handlers above).
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_GET_COMMANDS, async (_event, payload: { sessionId: string }): Promise<CommandInfo[]> => {
+  router.handle(IPC_CHANNELS.SESSION_GET_COMMANDS, async (payload) => {
     logger.debug(`SESSION_GET_COMMANDS sessionId=${payload.sessionId}`)
     return sessionManager.getCommands(payload.sessionId)
   })
 
-  ipcMain.handle(IPC_CHANNELS.SESSION_UI_RESPOND, async (_event, payload: import('../shared/ipc-types').UIResponse): Promise<void> => {
+  router.handle(IPC_CHANNELS.SESSION_UI_RESPOND, async (payload) => {
     logger.debug(`SESSION_UI_RESPOND requestId=${payload.requestId} sessionId=${payload.sessionId}`)
     sessionManager.handleUIResponse(payload)
   })
 
-  ipcMain.handle(IPC_CHANNELS.PROJECT_LIST, async (): Promise<ProjectInfo[]> => {
+  router.handleVoid(IPC_CHANNELS.PROJECT_LIST, async () => {
     logger.debug('PROJECT_LIST')
     return projectManager.listProjects()
   })
 
-  ipcMain.handle(IPC_CHANNELS.PROJECT_SESSIONS, async (_event, payload: ProjectSessionsPayload): Promise<ProjectInfo | null> => {
+  router.handle(IPC_CHANNELS.PROJECT_SESSIONS, async (payload) => {
     logger.info(`PROJECT_SESSIONS projectId=${payload.projectId}`)
-    try {
-      return await projectManager.refreshSessions(payload.projectId)
-    } catch (err) {
-      logger.error(`PROJECT_SESSIONS failed projectId=${payload.projectId}`, err)
-      throw err
-    }
+    return await projectManager.refreshSessions(payload.projectId)
   })
 
   // --- Update handlers ---
+  // Migrated to IpcRouter: the router's error boundary owns error logging
+  // and re-throw, so the body-level try/catch blocks were removed.
 
-  ipcMain.handle(IPC_CHANNELS.UPDATE_CHECK, async (): Promise<UpdateAvailableInfo | null> => {
+  router.handleVoid(IPC_CHANNELS.UPDATE_CHECK, async () => {
     logger.info('UPDATE_CHECK')
-    try {
-      return await checkForUpdate()
-    } catch (err) {
-      logger.error('UPDATE_CHECK failed', err)
-      throw err
-    }
+    return await checkForUpdate()
   })
 
-  ipcMain.handle(IPC_CHANNELS.UPDATE_DOWNLOAD, async (): Promise<void> => {
+  router.handleVoid(IPC_CHANNELS.UPDATE_DOWNLOAD, async () => {
     logger.info('UPDATE_DOWNLOAD')
-    try {
-      await downloadUpdate()
-    } catch (err) {
-      logger.error('UPDATE_DOWNLOAD failed', err)
-      throw err
-    }
+    await downloadUpdate()
   })
 
-  ipcMain.handle(IPC_CHANNELS.UPDATE_INSTALL, async (): Promise<void> => {
+  router.handleVoid(IPC_CHANNELS.UPDATE_INSTALL, async () => {
     logger.info('UPDATE_INSTALL')
     quitAndInstall()
   })
@@ -256,114 +222,116 @@ export function registerIpcHandlers(
   // --- Git handlers ---
   // Note: All Git operations are delegated to GitOperationsManager (simple-git based)
   // The old execFile-based GIT_GET_BRANCH is replaced by gitOperationsManager.getBranch
+  // Migrated to IpcRouter: sender validation is applied centrally by the router,
+  // and the router's error boundary owns error logging and re-throw.
+  // The path-within-project validation on GIT_STAGE/GIT_UNSTAGE stays in the
+  // handler bodies, applied after the router's sender validation.
 
-  ipcMain.handle(IPC_CHANNELS.GIT_GET_BRANCH, async (_event, payload: { cwd: string }): Promise<string | null> => {
+  router.handle(IPC_CHANNELS.GIT_GET_BRANCH, async (payload) => {
     logger.debug(`GIT_GET_BRANCH cwd=${payload.cwd}`)
     return gitOperationsManager.getBranch(payload.cwd)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_STATUS, async (_event, payload: { cwd: string }): Promise<import('../shared/ipc-types').GitStatusResult> => {
+  router.handle(IPC_CHANNELS.GIT_STATUS, async (payload) => {
     logger.debug(`GIT_STATUS cwd=${payload.cwd}`)
     return gitOperationsManager.getStatus(payload.cwd)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_LOG, async (_event, payload: { cwd: string; maxCount?: number }): Promise<import('../shared/ipc-types').GitLogResult> => {
+  router.handle(IPC_CHANNELS.GIT_LOG, async (payload) => {
     logger.debug(`GIT_LOG cwd=${payload.cwd} maxCount=${payload.maxCount}`)
     return gitOperationsManager.getLog(payload.cwd, payload.maxCount)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_DIFF, async (_event, payload: { cwd: string; filePath?: string; staged?: boolean }): Promise<import('../shared/ipc-types').GitDiffResult> => {
+  router.handle(IPC_CHANNELS.GIT_DIFF, async (payload) => {
     logger.debug(`GIT_DIFF cwd=${payload.cwd} file=${payload.filePath} staged=${payload.staged}`)
     return gitOperationsManager.getDiff(payload.cwd, payload.filePath, payload.staged)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_DIFF_SUMMARY, async (_event, payload: { cwd: string; staged?: boolean }): Promise<import('../shared/ipc-types').GitDiffSummaryResult> => {
+  router.handle(IPC_CHANNELS.GIT_DIFF_SUMMARY, async (payload) => {
     logger.debug(`GIT_DIFF_SUMMARY cwd=${payload.cwd} staged=${payload.staged}`)
     return gitOperationsManager.getDiffSummary(payload.cwd, payload.staged)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_STAGE, async (_event, payload: { cwd: string; filePath: string }): Promise<void> => {
-    validateIpcSender(_event)
+  router.handle(IPC_CHANNELS.GIT_STAGE, async (payload) => {
     // Security: Validate that filePath stays within the project directory
     validatePathWithinProject(payload.filePath, payload.cwd)
     logger.debug(`GIT_STAGE cwd=${payload.cwd} file=${payload.filePath}`)
     return gitOperationsManager.stage(payload.cwd, payload.filePath)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_UNSTAGE, async (_event, payload: { cwd: string; filePath: string }): Promise<void> => {
-    validateIpcSender(_event)
+  router.handle(IPC_CHANNELS.GIT_UNSTAGE, async (payload) => {
     // Security: Validate that filePath stays within the project directory
     validatePathWithinProject(payload.filePath, payload.cwd)
     logger.debug(`GIT_UNSTAGE cwd=${payload.cwd} file=${payload.filePath}`)
     return gitOperationsManager.unstage(payload.cwd, payload.filePath)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_STAGE_ALL, async (_event, payload: { cwd: string }): Promise<void> => {
+  router.handle(IPC_CHANNELS.GIT_STAGE_ALL, async (payload) => {
     logger.debug(`GIT_STAGE_ALL cwd=${payload.cwd}`)
     return gitOperationsManager.stageAll(payload.cwd)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_UNSTAGE_ALL, async (_event, payload: { cwd: string }): Promise<void> => {
+  router.handle(IPC_CHANNELS.GIT_UNSTAGE_ALL, async (payload) => {
     logger.debug(`GIT_UNSTAGE_ALL cwd=${payload.cwd}`)
     return gitOperationsManager.unstageAll(payload.cwd)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_COMMIT, async (_event, payload: { cwd: string; message: string }): Promise<import('../shared/ipc-types').GitCommitResult> => {
+  router.handle(IPC_CHANNELS.GIT_COMMIT, async (payload) => {
     logger.debug(`GIT_COMMIT cwd=${payload.cwd}`)
     return gitOperationsManager.commit(payload.cwd, payload.message)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_PUSH, async (_event, payload: { cwd: string; remote?: string; branch?: string }): Promise<void> => {
+  router.handle(IPC_CHANNELS.GIT_PUSH, async (payload) => {
     logger.debug(`GIT_PUSH cwd=${payload.cwd}`)
     return gitOperationsManager.push(payload.cwd, payload.remote, payload.branch)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_PULL, async (_event, payload: { cwd: string; remote?: string; branch?: string }): Promise<import('../shared/ipc-types').GitPullResult> => {
+  router.handle(IPC_CHANNELS.GIT_PULL, async (payload) => {
     logger.debug(`GIT_PULL cwd=${payload.cwd}`)
     return gitOperationsManager.pull(payload.cwd, payload.remote, payload.branch)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_FETCH, async (_event, payload: { cwd: string; remote?: string }): Promise<void> => {
+  router.handle(IPC_CHANNELS.GIT_FETCH, async (payload) => {
     logger.debug(`GIT_FETCH cwd=${payload.cwd}`)
     return gitOperationsManager.fetch(payload.cwd, payload.remote)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_BRANCH_LIST, async (_event, payload: { cwd: string }): Promise<import('../shared/ipc-types').GitBranchListResult> => {
+  router.handle(IPC_CHANNELS.GIT_BRANCH_LIST, async (payload) => {
     logger.debug(`GIT_BRANCH_LIST cwd=${payload.cwd}`)
     return gitOperationsManager.branchList(payload.cwd)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_BRANCH_CREATE, async (_event, payload: { cwd: string; name: string; checkout?: boolean }): Promise<void> => {
+  router.handle(IPC_CHANNELS.GIT_BRANCH_CREATE, async (payload) => {
     logger.debug(`GIT_BRANCH_CREATE cwd=${payload.cwd} name=${payload.name}`)
     return gitOperationsManager.branchCreate(payload.cwd, payload.name, payload.checkout)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_BRANCH_SWITCH, async (_event, payload: { cwd: string; name: string }): Promise<void> => {
+  router.handle(IPC_CHANNELS.GIT_BRANCH_SWITCH, async (payload) => {
     logger.debug(`GIT_BRANCH_SWITCH cwd=${payload.cwd} name=${payload.name}`)
     return gitOperationsManager.branchSwitch(payload.cwd, payload.name)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_STASH, async (_event, payload: { cwd: string; message?: string }): Promise<void> => {
+  router.handle(IPC_CHANNELS.GIT_STASH, async (payload) => {
     logger.debug(`GIT_STASH cwd=${payload.cwd}`)
     return gitOperationsManager.stash(payload.cwd, payload.message)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_STASH_POP, async (_event, payload: { cwd: string }): Promise<void> => {
+  router.handle(IPC_CHANNELS.GIT_STASH_POP, async (payload) => {
     logger.debug(`GIT_STASH_POP cwd=${payload.cwd}`)
     return gitOperationsManager.stashPop(payload.cwd)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_STASH_LIST, async (_event, payload: { cwd: string }): Promise<import('../shared/ipc-types').GitStashListResult> => {
+  router.handle(IPC_CHANNELS.GIT_STASH_LIST, async (payload) => {
     logger.debug(`GIT_STASH_LIST cwd=${payload.cwd}`)
     return gitOperationsManager.stashList(payload.cwd)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_REMOTE_URL, async (_event, payload: { cwd: string; remote?: string }): Promise<string | null> => {
+  router.handle(IPC_CHANNELS.GIT_REMOTE_URL, async (payload) => {
     logger.debug(`GIT_REMOTE_URL cwd=${payload.cwd}`)
     return gitOperationsManager.getRemoteUrl(payload.cwd, payload.remote)
   })
 
-  ipcMain.handle(IPC_CHANNELS.GIT_IS_REPO, async (_event, payload: { cwd: string }): Promise<boolean> => {
+  router.handle(IPC_CHANNELS.GIT_IS_REPO, async (payload) => {
     logger.debug(`GIT_IS_REPO cwd=${payload.cwd}`)
     return gitOperationsManager.isGitRepo(payload.cwd)
   })
